@@ -1,1 +1,1 @@
-2048 瓶邪   For QiuQiu
+2048 瓶邪  For qiuqiu
