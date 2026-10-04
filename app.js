@@ -1070,21 +1070,26 @@ function renderPlacement() {
 
 /** 顶上那行操作提示，按当前选中状态变 */
 function placeHint() {
+  var key = function (k) { return '<kbd>' + k + '</kbd>' }
   if (place.pending) {
     var a = (place.assign[place.pending.from] || []).join(' / ')
     var b = (place.assign[place.pending.to] || []).join(' / ')
     return '把 <b>' + esc(a) + '</b> 和 <b>' + esc(b) + '</b> 怎么处理？' +
-      '<button class="btn btn-sm" data-act="swap">交换</button>' +
-      '<button class="btn btn-sm" data-act="merge">合并到一格</button>' +
-      '<button class="btn btn-sm" data-act="cancel">取消</button>'
+      '<button class="btn btn-sm" data-act="swap">交换 ' + key('E') + '</button>' +
+      '<button class="btn btn-sm" data-act="merge">合并到一格 ' + key('W') + '</button>' +
+      '<button class="btn btn-sm" data-act="cancel">取消 ' + key('Esc') + '</button>' +
+      '<span class="muted">两人一格的不能再合</span>'
   }
   if (place.sel) {
     var names = place.assign[place.sel] || []
     return '已选中 <b>' + esc(names.join(' / ')) + '</b>：再点一个格子——空格就挪过去，有人就问你换还是合。' +
-      (names.length > 1 ? '<button class="btn btn-sm" data-act="split">拆成两格</button>' : '') +
-      '<button class="btn btn-sm" data-act="cancel">取消</button>'
+      (names.length > 1
+        ? '<button class="btn btn-sm" data-act="split">拆成两格 ' + key('S') + '</button>'
+        : '') +
+      '<button class="btn btn-sm" data-act="cancel">取消 ' + key('Esc') + '</button>'
   }
-  return '点一个有人的格子，再点另一个格子即可<b>移动 / 交换 / 合并</b>；两个人一格的可以<b>拆开</b>。'
+  return '点一个有人的格子，再点另一个格子即可<b>移动 / 交换 / 合并</b>；两个人一格的可以<b>拆开</b>。' +
+    '<span class="muted">快捷键：' + key('E') + ' 交换 · ' + key('W') + ' 合并 · ' + key('S') + ' 拆开 · ' + key('Esc') + ' 取消</span>'
 }
 
 /** 画菱形：每格一个旋转 45° 的方块，名字正着写 */
@@ -1172,24 +1177,54 @@ function bindPlacement() {
 
   // 操作条上的按钮
   Array.prototype.forEach.call(document.querySelectorAll('[data-act]'), function (btn) {
-    btn.onclick = function () {
-      var act = btn.getAttribute('data-act')
-      if (act === 'cancel') { place.sel = ''; place.pending = null }
-      else if (act === 'split') {
-        var r = Placement.split(place.grid.order, place.assign, place.sel)
-        place.assign = r.assign
-        if (r.toTray) { place.tray = place.tray.concat([r.toTray]); place.msg = '没有空格了，' + r.toTray + ' 放进了待分配' }
-        else place.msg = '已拆开'
-        place.sel = ''
-      } else if (place.pending) {
-        var res = Placement.drop(place.assign, place.pending.from, place.pending.to, act)
-        if (res.error) place.msg = res.error
-        else { place.assign = res.assign; place.msg = act === 'merge' ? '已合并到一格' : '已交换' }
-        place.pending = null
-      }
-      renderPlacement()
-    }
+    btn.onclick = function () { placeAct(btn.getAttribute('data-act')) }
   })
+}
+
+/** 交换 / 合并 / 拆开 / 取消：按钮和快捷键共用这一处 */
+function placeAct(act) {
+  if (!place.grid) return
+  if (act === 'cancel') {
+    place.sel = ''
+    place.pending = null
+  } else if (act === 'split') {
+    if (!place.sel || (place.assign[place.sel] || []).length < 2) return
+    var r = Placement.split(place.grid.order, place.assign, place.sel)
+    place.assign = r.assign
+    if (r.toTray) {
+      place.tray = place.tray.concat([r.toTray])
+      place.msg = '没有空格了，' + r.toTray + ' 放进了待分配'
+    } else {
+      place.msg = '已拆开'
+    }
+    place.sel = ''
+  } else if (place.pending && (act === 'swap' || act === 'merge')) {
+    var res = Placement.drop(place.assign, place.pending.from, place.pending.to, act)
+    if (res.error) place.msg = res.error
+    else {
+      place.assign = res.assign
+      place.msg = act === 'merge' ? '已合并到一格' : '已交换'
+    }
+    place.pending = null
+  } else {
+    return
+  }
+  renderPlacement()
+}
+
+/**
+ * 黑土落位的快捷键：E 交换、W 合并、S 拆开、Esc 取消。
+ * 只在落位那一屏生效，而且在输入框里打字时不抢键。
+ */
+function onKey(e) {
+  if (state.view !== 'placement') return
+  var t = e.target || {}
+  var tag = String(t.tagName || '').toUpperCase()
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+  var act = { e: 'swap', w: 'merge', s: 'split', escape: 'cancel' }[String(e.key || '').toLowerCase()]
+  if (!act) return
+  e.preventDefault()
+  placeAct(act)
 }
 
 /** SVG 转 PNG：画到 canvas 再导出，不用额外依赖 */
@@ -1393,6 +1428,8 @@ Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
     render()
   }
 })
+
+document.onkeydown = onKey
 
 $('refreshQr').onclick = newTicket
 $('reload').onclick = load

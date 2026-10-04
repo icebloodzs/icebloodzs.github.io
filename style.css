@@ -298,3 +298,17 @@ td.seat-empty { color: #c9ccd1; }
 .cellbox { cursor: pointer; }
 .map text { pointer-events: none; }
 .map .cellbox text { pointer-events: auto; }
+
+kbd {
+  display: inline-block;
+  min-width: 18px;
+  padding: 1px 6px;
+  margin-left: 2px;
+  border: 1px solid #d7d3f5;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: #fff;
+  font: 600 11px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  color: #6c5ce7;
+}
+.btn kbd { border-color: #ded9fa; }
