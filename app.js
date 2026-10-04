@@ -16,6 +16,9 @@ try { token = localStorage.getItem(TOKEN_KEY) || '' } catch (e) { token = '' }
 
 var state = { me: null, members: [], season: null, view: 'roster', sort: { key: 'power', desc: true }, keyword: '' }
 
+/** 导入名单那一屏的状态；文本留在内存里，切走再切回来不丢 */
+var imp = { text: '', markMissingOut: true, busy: false, summary: null, error: '', done: '' }
+
 // ---------------- 调接口 ----------------
 
 function call(action, data) {
@@ -375,6 +378,7 @@ function rowsForView() {
 }
 
 function render() {
+  if (state.view === 'import') return renderImport()
   var v = VIEWS[state.view]
   $('viewTitle').textContent = v.title
 
@@ -464,6 +468,167 @@ function exportCsv(rows) {
   URL.revokeObjectURL(a.href)
 }
 
+// ---------------- 导入名单 ----------------
+
+/**
+ * 粘游戏里导出的成员列表，先预演再正式导入。
+ * 认人、改名、离队、归队这些判断全在云函数里做（和小程序走的是同一个 roster.import），
+ * 这边只负责把结果摆出来给人看。
+ */
+function renderImport() {
+  $('viewTitle').textContent = '导入名单'
+  var sum = imp.summary
+
+  var html = '<div class="card"><h4>导入同盟名单</h4>' +
+    '<p class="desc">在游戏同盟里导出成员列表（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），' +
+    '复制后整段粘到下面，<b>保留表头那一行</b>。先点「解析预览」核对，没问题再「确认导入」。</p>' +
+    '<textarea id="impText" class="paste" placeholder="每行一名成员，列之间用 Tab 分隔&#10;例如：&#10;1\t无名胜士\t4\t宫阙2级\t240600401\t0\t11299034200\t36960\t133281933">' + esc(imp.text) + '</textarea>' +
+    '<div class="bar" style="margin-top:14px">' +
+    '<label class="chk"><input type="checkbox" id="impMark"' + (imp.markMissingOut ? ' checked' : '') + ' />把名单里消失的人标记为已离队</label>' +
+    '<span class="sp"></span>' +
+    '<button class="btn" id="impPreview"' + (imp.busy ? ' disabled' : '') + '>' + (imp.busy ? '处理中…' : '🔍 解析预览') + '</button>' +
+    '<button class="btn btn-primary" id="impRun"' + (imp.busy || !sum ? ' disabled' : '') + '>💾 确认导入</button>' +
+    '</div>'
+
+  if (imp.error) html += '<div class="note note-bad">' + esc(imp.error) + '</div>'
+  if (imp.done) html += '<div class="note note-ok">' + esc(imp.done) + '</div>'
+  html += '</div>'
+
+  if (sum) html += renderSummary(sum)
+  $('body').innerHTML = html
+  bindImport()
+}
+
+function renderSummary(s) {
+  var cells = [
+    ['共', s.total, ''], ['新增', s.created, 'ok'], ['更新', s.updated, ''],
+    ['认出改名', s.renamed, 'num'], ['归队', s.returned, 'ok'],
+    ['不在名单', s.missing, 'warn'], ['疑似改名', s.suspects, 'danger'],
+    ['名字易主', s.handover, 'danger'], ['重复', s.duplicates, 'warn']
+  ]
+  var html = '<div class="card"><h4>' + (s.dryRun ? '预览结果（还没写库）' : '导入完成') + '</h4>' +
+    '<div class="stats">' + cells.map(function (c) {
+      return '<div class="stat"><div class="n ' + (c[2] || '') + '">' + c[1] + '</div><div class="l">' + c[0] + '</div></div>'
+    }).join('') + '</div>'
+
+  if (s.nameOnly) html += '<div class="note">这份只有名字，没有数值列：只会更新在册状态，不动战力功勋这些数据。</div>'
+  if (s.truncated) html += '<div class="note note-bad">有 ' + s.truncated + ' 行列数不全（多半是粘贴被截断），已跳过没写进去。</div>'
+  if (s.bulkLower) html += '<div class="note note-bad">有 ' + s.dropped + ' 人的总功勋比库里小，这份名单可能是旧的或者赛季重置了。确认导入时会再问你一次。</div>'
+
+  // 疑似改名：拿不准的，给个「合并」按钮让人工定夺
+  if (s.suspectList && s.suspectList.length) {
+    html += '<div class="note note-bad"><b>疑似改名 ' + s.suspects + ' 人</b>（火炉、实力、战力都相近，但总功勋对不上）。' +
+      '确认是同一个人就点「合并」，老记录的绑定和资料会保留；不是同一个人就不用管，' + (s.dryRun ? '正式导入后新名字会作为新人加进去。' : '新名字已经作为新人加进去了。') + '</div>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>老名字</th><th>新名字</th><th>火炉</th><th>实力（老 → 新）</th><th>绑定</th><th>操作</th></tr></thead><tbody>' +
+      s.suspectList.map(function (x, i) {
+        return '<tr><td class="name">' + esc(x.from) + '</td><td class="name">' + esc(x.to) + '</td>' +
+          '<td>' + esc(x.furnace || '—') + '</td>' +
+          '<td class="muted">' + esc(x.fromStrength) + ' → ' + esc(x.toStrength) + '</td>' +
+          '<td>' + (x.bound ? '<span class="ok">已绑</span>' : '<span class="muted">未绑</span>') + '</td>' +
+          '<td>' + (x.intoId
+            ? '<button class="btn" data-merge="' + i + '">合并成同一人</button>'
+            : '<span class="muted">导入后可合并</span>') + '</td></tr>'
+      }).join('') + '</tbody></table></div>'
+  }
+
+  if (s.renamedList && s.renamedList.length) {
+    html += '<div class="note note-ok"><b>认出改名 ' + s.renamed + ' 人</b>，绑定和资料都保留：<br>' +
+      s.renamedList.map(function (x) {
+        return esc(x.from) + ' → ' + esc(x.to) + '（' + esc(x.how) + (x.bound ? '，已绑定' : '') + '）'
+      }).join('<br>') + '</div>'
+  }
+
+  if (s.handoverList && s.handoverList.length) {
+    html += '<div class="note note-bad"><b>名字换人了 ' + s.handover + ' 个</b>（同名但总功勋对不上，多半是老号退了新号用了同一个名字）：<br>' +
+      s.handoverList.map(function (x) {
+        return esc(x.name) + '：总功勋 ' + esc(x.fromTotal) + ' → ' + esc(x.toTotal) + (x.bound ? '（老号已绑定微信，要手动处理）' : '')
+      }).join('<br>') + '</div>'
+  }
+
+  if (s.returnedNames && s.returnedNames.length) {
+    html += '<div class="note note-ok"><b>归队 ' + s.returned + ' 人</b>（之前标过离队，这次又在名单里）：' + esc(s.returnedNames.join('、')) + '</div>'
+  }
+  if (s.createdNames && s.createdNames.length) {
+    html += '<div class="note"><b>新增 ' + s.created + ' 人</b>：' + esc(s.createdNames.join('、')) + '</div>'
+  }
+  if (s.missingNames && s.missingNames.length) {
+    html += '<div class="note note-warn"><b>不在这份名单里的 ' + s.missing + ' 人</b>' +
+      (s.markMissingOut ? '（会标记为已离队，资料和绑定都留着）' : '（本次不标记，保持原样）') + '：' +
+      esc(s.missingNames.join('、')) + '</div>'
+  }
+  if (s.duplicateNames && s.duplicateNames.length) {
+    html += '<div class="note note-warn"><b>名单里重复 ' + s.duplicates + ' 个</b>，只取了第一条：' + esc(s.duplicateNames.join('、')) + '</div>'
+  }
+
+  return html + '</div>'
+}
+
+function bindImport() {
+  var ta = $('impText')
+  if (ta) ta.oninput = function () { imp.text = ta.value }
+  var mark = $('impMark')
+  if (mark) mark.onchange = function () { imp.markMissingOut = mark.checked }
+  var prev = $('impPreview')
+  if (prev) prev.onclick = function () { runImport(true) }
+  var run = $('impRun')
+  if (run) run.onclick = function () { runImport(false) }
+
+  Array.prototype.forEach.call(document.querySelectorAll('button[data-merge]'), function (btn) {
+    btn.onclick = function () {
+      var x = imp.summary.suspectList[Number(btn.getAttribute('data-merge'))]
+      if (!x || !x.intoId) return
+      if (!confirm('确认「' + x.from + '」和「' + x.to + '」是同一个人？\n合并后保留老记录的绑定和资料，名字和名单数据用新的。')) return
+      btn.disabled = true
+      call('admin.mergeMembers', { fromId: x.memberId, intoId: x.intoId })
+        .then(function () {
+          x.intoId = null
+          imp.done = '已合并「' + x.from + '」→「' + x.to + '」'
+          renderImport()
+          load()
+        })
+        .catch(function (e) {
+          btn.disabled = false
+          alert(e.message)
+        })
+    }
+  })
+}
+
+function runImport(dryRun) {
+  if (imp.busy) return
+  if (!imp.text.trim()) { imp.error = '先把名单粘进来'; return renderImport() }
+
+  var payload = { text: imp.text, markMissingOut: imp.markMissingOut, dryRun: dryRun }
+  // 大面积功勋变小时云函数会拦一次，预览过了再让用户点头
+  if (!dryRun && imp.summary && imp.summary.bulkLower) {
+    if (!confirm('有 ' + imp.summary.dropped + ' 人的总功勋比库里小，这份名单可能是旧的或者赛季重置了。\n确定要用它覆盖吗？')) return
+    payload.acceptLower = true
+  }
+  if (!dryRun && !confirm('确认把这份名单写进库？' + (imp.markMissingOut ? '\n名单里没有的人会被标记为已离队。' : ''))) return
+
+  imp.busy = true
+  imp.error = ''
+  imp.done = ''
+  renderImport()
+  call('roster.import', payload)
+    .then(function (res) {
+      imp.summary = res
+      imp.busy = false
+      if (!dryRun) {
+        imp.done = '导入完成：新增 ' + res.created + ' · 更新 ' + res.updated + ' · 改名 ' + res.renamed + ' · 离队 ' + (res.markMissingOut ? res.missing : 0)
+        imp.text = ''
+        load()
+      }
+      renderImport()
+    })
+    .catch(function (e) {
+      imp.busy = false
+      imp.summary = null
+      imp.error = e.message
+      renderImport()
+    })
+}
+
 // ---------------- 绑事件 ----------------
 
 Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
@@ -472,6 +637,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
     el.classList.add('on')
     state.view = el.getAttribute('data-view')
     state.keyword = ''
+    if (state.view === 'import') return render()
     state.sort = state.view === 'season'
       ? { key: 'seasonScore', desc: true }
       : state.view === 'bonus' ? { key: 'maxBonus', desc: true } : { key: 'power', desc: true }
