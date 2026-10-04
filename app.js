@@ -136,6 +136,7 @@ function poll(ticket) {
       if (res.status !== 'confirmed') return
       stopLogin()
       token = res.token
+      $('loginWhy').textContent = ''
       var kept = store.write(token)
       $('loginTip').textContent = kept ? '登录成功，正在进入…' : '登录成功（这台浏览器存不住登录态，刷新后要重扫）'
       boot()
@@ -181,16 +182,21 @@ function boot() {
         $('app').classList.remove('on')
         $('qr').innerHTML = '<div class="qr-mask">连不上服务器<br>点下面重试</div>'
         $('loginTip').textContent = (e.message || '网络不太好') + '（登录态还在，重试就行）'
+        $('loginWhy').textContent = '（登录态没动，网络好了点重试就能进）'
         $('refreshQr').textContent = '重试'
         $('refreshQr').onclick = function () { $('refreshQr').textContent = '刷新二维码'; boot() }
         return
       }
+      // 把服务端给的原因原样显示出来，不然只看到「重新扫码」没法判断是哪一步出的问题
+      var dead_token = token
       token = ''
       store.clear()
       $('login').style.display = 'flex'
       $('app').classList.remove('on')
       newTicket()
       $('loginTip').textContent = e.message || '登录已失效，请重新扫码'
+      $('loginWhy').textContent = '（上次的登录态被服务器拒了：' + (e.errCode || '未知') +
+        '，token ' + dead_token.slice(0, 8) + '…，存在' + (store.how === 'cookie' ? ' cookie' : ' localStorage') + '，已清掉）'
     })
 }
 

@@ -185,3 +185,5 @@ table.plan tbody tr:nth-child(even) { background: none; }
 
 .map-wrap { overflow: auto; text-align: center; }
 .map { max-width: 100%; height: auto; }
+
+.login-why { margin-top: 10px; font-size: 11px; color: #b0b4ba; line-height: 1.6; word-break: break-all; }
