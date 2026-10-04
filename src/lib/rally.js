@@ -349,7 +349,7 @@ function layoutToSheet(layout) {
   return { aoa, merges, cols, rows, styles, cellStyles }
 }
 
-module.exports = {
+export {
   buildLayout,
   layoutToSheet,
   GROUP_NAMES,

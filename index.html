@@ -4,79 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=1200" />
   <title>三冰小帮手 · 电脑版</title>
-  <link rel="stylesheet" href="./style.css?v=10050048" />
 </head>
 <body>
-  <div class="topbar" id="topbar"></div>
-  <!-- 开机先显示这块：带着 token 刷新时要等 whoami 回来才知道去登录页还是进应用，
-       这期间不能让登录页先闪出来（看着就像"刷新又被踢回去了"） -->
-  <div class="boot" id="boot">
-    <div class="spin"></div>
-    <div class="boot-t">正在进入…</div>
-  </div>
-
-  <!-- 登录：电脑出码，管理员用小程序扫 -->
-  <div class="login" id="login" style="display:none">
-    <div class="login-box">
-      <h1>同盟管理 · 电脑版</h1>
-      <div class="sub">宽屏看统计，和小程序同一份数据</div>
-      <div id="qr"><div class="qr-mask">正在生成二维码…</div></div>
-      <div class="login-step">
-        1. 微信打开小程序 → <b>管理</b> → <b>登录电脑版</b><br />
-        2. 扫上面这个码，点确认<br />
-        3. 这里会自动进去，七天内不用再扫
-      </div>
-      <div class="login-tip" id="loginTip"></div>
-      <button class="btn" id="refreshQr" style="margin-top:14px">刷新二维码</button>
-      <div class="login-why" id="loginWhy"></div>
-    </div>
-  </div>
-
-  <!-- 主体 -->
-  <div class="app" id="app">
-    <aside class="side">
-      <h2 id="allyName">同盟</h2>
-      <div class="sub" id="allySub">—</div>
-      <div class="group">我的</div>
-      <div class="nav on" data-view="mine">👤 我的信息</div>
-      <div class="group">成员数据</div>
-      <div class="nav" data-view="roster">📋 同盟名单</div>
-      <div class="nav" data-view="import">📥 导入名单</div>
-      <div class="nav" data-view="bonus">⚡ 成员加成</div>
-      <div class="nav" data-view="attrs">📊 属性排名</div>
-      <div class="nav" data-view="missing">🔍 遗漏排查</div>
-      <div class="nav" data-view="season">🏅 赛季评分</div>
-      <div class="group">指挥工具</div>
-      <div class="nav" data-view="rally">🚩 集结分配</div>
-      <div class="nav" data-view="placement">🗺️ 黑土落位</div>
-      <div class="group">账号</div>
-      <div class="nav" data-view="users">👥 绑定情况</div>
-    </aside>
-
-    <div class="main">
-      <div class="top">
-        <h3 id="viewTitle">我的信息</h3>
-        <div class="who">
-          <span><span class="dot"></span><span id="whoName">—</span></span>
-          <button class="btn" id="reload">刷新数据</button>
-          <button class="btn" id="logout">退出</button>
-        </div>
-      </div>
-      <div class="body" id="body"></div>
-    </div>
-  </div>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!--
-    集结分配和黑土落位的算法直接用小程序里那两个文件（utils/rally.js、utils/placement.js），
-    一个字没改，所以两端排出来的结果完全一样。它们用的是 CommonJS 的 module.exports，
-    这里给个空壳接一下就能在浏览器里跑。改了小程序那边记得把文件重新拷过来。
-  -->
-  <script>var module = { exports: {} };</script>
-  <script src="./lib/rally.js?v=10050048"></script>
-  <script>var Rally = module.exports; module = { exports: {} };</script>
-  <script src="./lib/placement.js?v=10050048"></script>
-  <script>var Placement = module.exports; module = { exports: {} };</script>
-  <script src="./app.js?v=10050048"></script>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

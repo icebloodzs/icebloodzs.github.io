@@ -279,7 +279,7 @@ function hitCell(x, y, size, D) {
   return cellId(r, c)
 }
 
-module.exports = {
+export {
   PRESETS,
   BLACK_COLORS,
   WHITE_COLOR,

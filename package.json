@@ -1,0 +1,21 @@
+{
+  "name": "sanbing-pc",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "naive-ui": "^2.45.3",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/server-renderer": "^3.5.43",
+    "jsdom": "^29.1.1",
+    "vite": "^8.3.2"
+  }
+}
