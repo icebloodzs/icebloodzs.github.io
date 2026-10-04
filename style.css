@@ -40,13 +40,22 @@ a { color: inherit; text-decoration: none; }
 /* ---------- 框架 ---------- */
 .app { display: none; min-height: 100vh; }
 .app.on { display: flex; }
+/* 菜单钉住：右边内容再长也不跟着滚 */
 .side {
   width: 200px;
   flex: none;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
   background: linear-gradient(180deg, #8b7cf0, #7a68e8);
   color: #fff;
   padding: 22px 0 40px;
 }
+/* 菜单自己要滚时，滚动条别太扎眼 */
+.side::-webkit-scrollbar { width: 6px; }
+.side::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 3px; }
 .side h2 { margin: 0 20px 2px; font-size: 20px; }
 .side .sub { margin: 0 20px 26px; font-size: 12px; opacity: 0.75; }
 .side .group { margin: 18px 20px 8px; font-size: 12px; opacity: 0.7; }

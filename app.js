@@ -843,8 +843,9 @@ function sel(id, value, options) {
   }).join('') + '</select>'
 }
 
+/** 数字框统一按 1 加减；只有「单人出征数量」按一万一档（见 renderMine） */
 function numInput(id, value, min, max) {
-  return '<input type="number" id="' + id + '" value="' + value + '" min="' + min + '" max="' + max + '" style="width:72px" />'
+  return '<input type="number" step="1" id="' + id + '" value="' + value + '" min="' + min + '" max="' + max + '" style="width:72px" />'
 }
 
 function renderRally() {
@@ -1330,21 +1331,21 @@ function renderMine() {
     '<p class="desc">这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，' +
     '以及这一队能带多少兵。兵力按兵营等级分两档填，只有一种就只填那一行。</p>' +
     '<div class="form">' +
-    '<label>最高集结值 <input type="number" step="0.01" id="fBonus" value="' + esc(f.maxBonus) + '" style="width:110px" />%</label>' +
-    '<label>单人出征数量 <input type="number" id="fMarch" value="' + esc(f.maxMarch) + '" style="width:130px" placeholder="如 143510" /></label>' +
+    '<label>最高集结值 <input type="number" step="1" id="fBonus" value="' + esc(f.maxBonus) + '" style="width:110px" />%</label>' +
+    '<label>单人出征数量 <input type="number" step="10000" id="fMarch" value="' + esc(f.maxMarch) + '" style="width:130px" placeholder="如 143510" /></label>' +
     '</div>' +
     '<div class="tbl-wrap" style="margin-top:14px"><table class="troops"><thead><tr>' +
     '<th></th>' + TROOP_ARMS.map(function (a) { return '<th>' + a[1] + '</th>' }).join('') + '<th>小计</th></tr></thead><tbody>' +
     TROOP_LEVELS.map(function (lv) {
       return '<tr><td class="lv">宫' + lv + '</td>' +
         TROOP_ARMS.map(function (a) {
-          return '<td><input type="number" step="0.1" class="tin" data-lv="' + lv + '" data-arm="' + a[0] + '" value="' + esc(f.troops[lv][a[0]]) + '" placeholder="-" /></td>'
+          return '<td><input type="number" step="1" class="tin" data-lv="' + lv + '" data-arm="' + a[0] + '" value="' + esc(f.troops[lv][a[0]]) + '" placeholder="-" /></td>'
         }).join('') +
         '<td class="num">' + fmtSum(levelSum(f, lv)) + '</td></tr>'
     }).join('') +
     '</tbody></table></div>' +
     '<div class="sum-bar"><span>两档合计 <b class="num">' + fmtSum(allSum(f)) + '</b> 万</span>' +
-    '<span class="muted">单位：万，可以填小数</span></div>' +
+    '<span class="muted">单位：万，小数直接打进去也认（箭头是按 1 加减）</span></div>' +
     '<div class="bar" style="margin-top:14px"><span class="sp"></span>' +
     '<button class="btn btn-primary" id="fSave"' + (mine.saving ? ' disabled' : '') + '>' + (mine.saving ? '保存中…' : '保存') + '</button></div>' +
     '</div>'
