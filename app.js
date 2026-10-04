@@ -49,7 +49,7 @@ var store = {
 
 var token = store.read()
 
-var state = { me: null, members: [], season: null, view: 'roster', sort: { key: 'power', desc: true }, keyword: '' }
+var state = { me: null, members: [], season: null, view: 'mine', sort: { key: 'power', desc: true }, keyword: '' }
 
 /** 集结分配：表单参数 + 生成出来的方案，切走再切回来不丢 */
 var rally = {
@@ -70,7 +70,17 @@ var imp = { text: '', markMissingOut: true, busy: false, summary: null, error: '
 
 // ---------------- 调接口 ----------------
 
+var inflight = 0
+
+/** 顶部那条细进度条：只要还有请求没回来就一直显示 */
+function busy(delta) {
+  inflight = Math.max(0, inflight + delta)
+  var bar = $('topbar')
+  if (bar) bar.className = inflight > 0 ? 'topbar on' : 'topbar'
+}
+
 function call(action, data) {
+  busy(1)
   return fetch(API, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -78,16 +88,28 @@ function call(action, data) {
   })
     .then(function (r) { return r.json() })
     .then(function (r) {
+      busy(-1)
       if (!r || r.code !== 0) {
         var err = new Error((r && r.message) || '请求失败')
         err.errCode = r && r.errCode
         throw err
       }
       return r.data
+    }, function (e) {
+      busy(-1)
+      throw e
     })
 }
 
 function $(id) { return document.getElementById(id) }
+
+/** 同一时间只显示一屏：boot(开机转圈) / login(扫码) / app(主体) */
+function screen(which) {
+  $('boot').style.display = which === 'boot' ? 'flex' : 'none'
+  $('login').style.display = which === 'login' ? 'flex' : 'none'
+  if (which === 'app') $('app').classList.add('on')
+  else $('app').classList.remove('on')
+}
 
 /** 这种错是「这个登录态确实不能用了」，要清掉重扫 */
 function fatal(msg) {
@@ -140,6 +162,7 @@ function poll(ticket) {
       stopLogin()
       token = res.token
       $('loginWhy').textContent = ''
+      screen('boot')
       var kept = store.write(token)
       $('loginTip').textContent = kept ? '登录成功，正在进入…' : '登录成功（这台浏览器存不住登录态，刷新后要重扫）'
       boot()
@@ -158,18 +181,18 @@ function logout() {
 
 function boot() {
   if (!token) {
-    $('login').style.display = 'flex'
-    $('app').classList.remove('on')
+    screen('login')
     newTicket()
     return
   }
+  // 有 token 就先转圈，别让登录页先闪一下
+  screen('boot')
   call('identity.whoami')
     .then(function (me) {
       if (!me.alliance || !me.alliance.active) throw fatal('这个账号还没加入已激活的同盟')
       if (me.role !== 'admin' && me.role !== 'super') throw fatal('只有管理员能用电脑版')
       state.me = me
-      $('login').style.display = 'none'
-      $('app').classList.add('on')
+      screen('app')
       $('allyName').textContent = me.alliance.name
       $('allySub').textContent = me.alliance.serverNo + ' 区 · ' + me.alliance.season
       $('whoName').textContent = (me.nickname || '管理员') + (me.role === 'super' ? '（超管）' : '') +
@@ -181,8 +204,7 @@ function boot() {
       // 网络抖一下、接口 500 这种不该把人踢回登录页，给个重试就行
       var dead = e.errCode === 'WEB_UNAUTHED' || e.errCode === 'FORBIDDEN' || e.fatal
       if (!dead) {
-        $('login').style.display = 'flex'
-        $('app').classList.remove('on')
+        screen('login')
         $('qr').innerHTML = '<div class="qr-mask">连不上服务器<br>点下面重试</div>'
         $('loginTip').textContent = (e.message || '网络不太好') + '（登录态还在，重试就行）'
         $('loginWhy').textContent = '（登录态没动，网络好了点重试就能进）'
@@ -194,8 +216,7 @@ function boot() {
       var dead_token = token
       token = ''
       store.clear()
-      $('login').style.display = 'flex'
-      $('app').classList.remove('on')
+      screen('login')
       newTicket()
       $('loginTip').textContent = e.message || '登录已失效，请重新扫码'
       $('loginWhy').textContent = '（上次的登录态被服务器拒了：' + (e.errCode || '未知') +
