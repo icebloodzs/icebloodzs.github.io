@@ -283,8 +283,52 @@ select:focus, input:focus, textarea:focus {
 }
 input[type="checkbox"] { accent-color: #6c5ce7; width: 15px; height: 15px; cursor: pointer; }
 input[type="number"] { text-align: center; }
+/* 原生上下箭头又小又丑，藏掉，改用两边的 ± 按钮 */
 input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button { opacity: 1; }
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; }
+
+/* 带 ± 的数字框 */
+.stp {
+  display: inline-flex;
+  align-items: stretch;
+  height: 34px;
+  border: 1px solid #dfe2e6;
+  border-radius: 9px;
+  background: #fff;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  vertical-align: middle;
+}
+.stp:hover { border-color: #b9b2f0; }
+.stp:focus-within { border-color: #6c5ce7; box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.14); }
+.stp input {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  border-radius: 0;
+  padding: 0 2px;
+  text-align: center;
+  background: transparent;
+}
+.stp input:focus { box-shadow: none !important; }
+.stp-b {
+  flex: none;
+  width: 30px;
+  border: none;
+  background: #f7f6ff;
+  color: #6c5ce7;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+.stp-b:hover { background: #ebe7ff; }
+.stp-b:active { background: #ddd6ff; }
+.stp-b:first-child { border-right: 1px solid #f0edff; }
+.stp-b:last-child { border-left: 1px solid #f0edff; }
+table.troops .stp { height: 32px; }
 .form label { background: #faf9ff; border: 1px solid #f0edff; border-radius: 10px; padding: 7px 12px; }
 
 /* ---------- 手动调整 ---------- */

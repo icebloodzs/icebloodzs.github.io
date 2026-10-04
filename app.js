@@ -573,6 +573,7 @@ function render() {
     '</div>'
 
   bindBody(rows)
+  bindSteppers()
 }
 
 function statCards() {
@@ -702,6 +703,7 @@ function renderImport() {
   if (sum) html += renderSummary(sum)
   $('body').innerHTML = html
   bindImport()
+  bindSteppers()
 }
 
 function renderSummary(s) {
@@ -843,9 +845,50 @@ function sel(id, value, options) {
   }).join('') + '</select>'
 }
 
+/**
+ * 带「−」「＋」的数字框。
+ * 原生的上下小箭头又小又丑，这里把它藏了（见 style.css），两边各放一个按钮，
+ * 点一下按 step 加减；step 自己带在 input 上，所以一处改全局生效。
+ */
+function stepper(opt) {
+  var attrs = 'type="number" id="' + opt.id + '" value="' + esc(opt.value) + '" step="' + (opt.step || 1) + '"' +
+    (opt.min === undefined ? '' : ' min="' + opt.min + '"') +
+    (opt.max === undefined ? '' : ' max="' + opt.max + '"') +
+    (opt.cls ? ' class="' + opt.cls + '"' : '') +
+    (opt.placeholder ? ' placeholder="' + esc(opt.placeholder) + '"' : '') +
+    (opt.data || '')
+  return '<span class="stp" style="width:' + (opt.width || 120) + 'px">' +
+    '<button type="button" class="stp-b" data-stp="-1" data-for="' + opt.id + '">−</button>' +
+    '<input ' + attrs + ' />' +
+    '<button type="button" class="stp-b" data-stp="1" data-for="' + opt.id + '">＋</button>' +
+    '</span>'
+}
+
+/** 把所有 ± 按钮接上；加减完要把 input 原本的 oninput / onchange 也触发一遍 */
+function bindSteppers() {
+  Array.prototype.forEach.call(document.querySelectorAll('[data-stp]'), function (btn) {
+    btn.onclick = function () {
+      var input = $(btn.getAttribute('data-for'))
+      if (!input) return
+      var step = Number(input.getAttribute('step')) || 1
+      var cur = Number(String(input.value || '').replace(/[,\s]/g, ''))
+      if (!isFinite(cur)) cur = 0
+      var next = cur + Number(btn.getAttribute('data-stp')) * step
+      var min = input.getAttribute('min')
+      var max = input.getAttribute('max')
+      if (min !== null && min !== undefined && min !== '' && next < Number(min)) next = Number(min)
+      if (max !== null && max !== undefined && max !== '' && next > Number(max)) next = Number(max)
+      // 小数相加会出 0.30000000000000004 这种，收一下
+      input.value = String(Math.round(next * 100) / 100)
+      if (input.oninput) input.oninput()
+      if (input.onchange) input.onchange()
+    }
+  })
+}
+
 /** 数字框统一按 1 加减；只有「单人出征数量」按一万一档（见 renderMine） */
 function numInput(id, value, min, max) {
-  return '<input type="number" step="1" id="' + id + '" value="' + value + '" min="' + min + '" max="' + max + '" style="width:72px" />'
+  return stepper({ id: id, value: value, min: min, max: max, step: 1, width: 104 })
 }
 
 function renderRally() {
@@ -876,6 +919,7 @@ function renderRally() {
   if (rally.plan) html += renderPlanTable()
   $('body').innerHTML = html
   bindRally()
+  bindSteppers()
 }
 
 /**
@@ -1331,15 +1375,18 @@ function renderMine() {
     '<p class="desc">这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，' +
     '以及这一队能带多少兵。兵力按兵营等级分两档填，只有一种就只填那一行。</p>' +
     '<div class="form">' +
-    '<label>最高集结值 <input type="number" step="1" id="fBonus" value="' + esc(f.maxBonus) + '" style="width:110px" />%</label>' +
-    '<label>单人出征数量 <input type="number" step="10000" id="fMarch" value="' + esc(f.maxMarch) + '" style="width:130px" placeholder="如 143510" /></label>' +
+    '<label>最高集结值 ' + stepper({ id: 'fBonus', value: f.maxBonus, step: 1, min: 0, width: 132 }) + '%</label>' +
+    '<label>单人出征数量 ' + stepper({ id: 'fMarch', value: f.maxMarch, step: 10000, min: 0, placeholder: '如 143510', width: 160 }) + '</label>' +
     '</div>' +
     '<div class="tbl-wrap" style="margin-top:14px"><table class="troops"><thead><tr>' +
     '<th></th>' + TROOP_ARMS.map(function (a) { return '<th>' + a[1] + '</th>' }).join('') + '<th>小计</th></tr></thead><tbody>' +
     TROOP_LEVELS.map(function (lv) {
       return '<tr><td class="lv">宫' + lv + '</td>' +
         TROOP_ARMS.map(function (a) {
-          return '<td><input type="number" step="1" class="tin" data-lv="' + lv + '" data-arm="' + a[0] + '" value="' + esc(f.troops[lv][a[0]]) + '" placeholder="-" /></td>'
+          return '<td>' + stepper({
+            id: 't-' + lv + '-' + a[0], value: f.troops[lv][a[0]], step: 1, min: 0, cls: 'tin', width: 118,
+            placeholder: '-', data: ' data-lv="' + lv + '" data-arm="' + a[0] + '"'
+          }) + '</td>'
         }).join('') +
         '<td class="num">' + fmtSum(levelSum(f, lv)) + '</td></tr>'
     }).join('') +
@@ -1356,6 +1403,7 @@ function renderMine() {
 
   $('body').innerHTML = html
   bindMine()
+  bindSteppers()
 }
 
 /** 传完之后对比一下这次和上次的差值 */
