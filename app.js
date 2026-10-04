@@ -238,6 +238,14 @@ function num(v, digits) {
   return isFinite(n) ? n.toFixed(digits || 0) : '—'
 }
 
+/** 具体时间，精确到分钟 */
+function when(iso) {
+  if (!iso) return ''
+  var d = new Date(iso)
+  var p2 = function (n) { return (n < 10 ? '0' : '') + n }
+  return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes())
+}
+
 /** 多久没更新了：越久颜色越重 */
 function ago(iso) {
   if (!iso) return '<span class="danger">从未</span>'
@@ -262,7 +270,17 @@ function sortRows(rows, key, desc) {
     heroPower: function (m) { return m.heroPower },
     seasonScore: function (m) { return m.seasonScore },
     attrsUpdatedAt: function (m) { return m.attrsUpdatedAt ? new Date(m.attrsUpdatedAt).getTime() : 0 }
-  }[key] || function (m) { return m.power }
+  }[key]
+
+  // attr.infDef 这种：按六维里的某一项排
+  if (!get && key.indexOf('attr.') === 0) {
+    var field = key.slice(5)
+    get = function (m) {
+      var v = m.attrs && m.attrs[field]
+      return v === undefined ? null : v
+    }
+  }
+  if (!get) get = function (m) { return m.power }
 
   return rows.slice().sort(function (a, b) {
     var x = get(a)
@@ -358,6 +376,33 @@ var VIEWS = {
         '<td class="muted">宫' + (b.inf || '-') + ' ' + num(t.inf) + ' / 宫' + (b.cav || '-') + ' ' + num(t.cav) + ' / 宫' + (b.arc || '-') + ' ' + num(t.arc) + '</td>' +
         '<td>' + num(m.attrsSum, 2) + '</td>' +
         '<td>' + ago(m.attrsUpdatedAt) + '</td></tr>'
+    }
+  },
+
+  attrs: {
+    title: '属性排名',
+    desc: '六维来自成员自己传的「属性加成」截图，服务端识别后入库，填不了也改不了。' +
+      '点表头可以按单项排序，最后一列是这份属性是什么时候传的。',
+    cols: [
+      { key: '', label: '#' }, { key: 'name', label: '成员' },
+      { key: 'attr.infDef', label: '步防' }, { key: 'attr.infHp', label: '步生' },
+      { key: 'attr.cavAtk', label: '骑攻' }, { key: 'attr.cavBreak', label: '骑破' },
+      { key: 'attr.arcAtk', label: '弓攻' }, { key: 'attr.arcBreak', label: '弓破' },
+      { key: 'attrsSum', label: '六维总和' }, { key: 'attrsUpdatedAt', label: '最后更新' }
+    ],
+    row: function (m, i) {
+      var a = m.attrs || {}
+      var cell = function (k) {
+        var v = a[k]
+        return '<td>' + (v === null || v === undefined ? '<span class="muted">—</span>' : num(v, 2)) + '</td>'
+      }
+      return '<tr><td>' + (i + 1) + '</td>' +
+        '<td class="name">' + esc(m.name) + '</td>' +
+        cell('infDef') + cell('infHp') + cell('cavAtk') + cell('cavBreak') + cell('arcAtk') + cell('arcBreak') +
+        '<td class="num">' + num(m.attrsSum, 2) + '</td>' +
+        '<td>' + (m.attrsUpdatedAt
+          ? '<span class="when">' + when(m.attrsUpdatedAt) + '</span><br>' + ago(m.attrsUpdatedAt)
+          : '<span class="danger">从未上传</span>') + '</td></tr>'
     }
   },
 
@@ -961,7 +1006,9 @@ Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
     if (state.view === 'import' || state.view === 'rally' || state.view === 'placement') return render()
     state.sort = state.view === 'season'
       ? { key: 'seasonScore', desc: true }
-      : state.view === 'bonus' ? { key: 'maxBonus', desc: true } : { key: 'power', desc: true }
+      : state.view === 'bonus' ? { key: 'maxBonus', desc: true }
+        : state.view === 'attrs' ? { key: 'attrsSum', desc: true }
+          : { key: 'power', desc: true }
     render()
   }
 })
