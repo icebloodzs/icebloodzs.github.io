@@ -272,7 +272,8 @@ function sortRows(rows, key, desc) {
     troops: function (m) { return troopSum(m) },
     heroPower: function (m) { return m.heroPower },
     seasonScore: function (m) { return m.seasonScore },
-    attrsUpdatedAt: function (m) { return m.attrsUpdatedAt ? new Date(m.attrsUpdatedAt).getTime() : 0 }
+    attrsUpdatedAt: function (m) { return m.attrsUpdatedAt ? new Date(m.attrsUpdatedAt).getTime() : 0 },
+    heroPowerUpdatedAt: function (m) { return m.heroPowerUpdatedAt ? new Date(m.heroPowerUpdatedAt).getTime() : null }
   }[key]
 
   // attr.infDef 这种：按六维里的某一项排
@@ -433,20 +434,24 @@ var VIEWS = {
 
   season: {
     title: '赛季评分',
-    desc: '评分 = 成员实力 − 武将战力。武将战力只能由成员自己上传截图识别，填不了也改不了。',
+    desc: '评分 = 成员实力 − 武将战力。武将战力只能由成员自己上传截图识别，填不了也改不了。' +
+      '最后一列是这次战力是什么时候录的，按它排序能看出谁的分是老数据。',
     cols: [
-      { key: '', label: '#' }, { key: 'name', label: '成员' }, { key: 'strength', label: '成员实力' },
+      { key: 'name', label: '成员' }, { key: 'strength', label: '成员实力' },
       { key: 'heroPower', label: '武将战力' }, { key: 'seasonScore', label: '赛季评分' },
-      { key: '', label: '定位' }, { key: '', label: '录入人' }
+      { key: '', label: '定位' }, { key: '', label: '录入人' },
+      { key: 'heroPowerUpdatedAt', label: '更新时间' }
     ],
-    row: function (m, i) {
-      return '<tr><td>' + (i + 1) + '</td>' +
-        '<td class="name">' + esc(m.name) + '</td>' +
+    row: function (m) {
+      return '<tr><td class="name">' + esc(m.name) + '</td>' +
         '<td>' + big(m.strength) + '</td>' +
         '<td class="num">' + (m.heroPower == null ? '<span class="muted">未录入</span>' : big(m.heroPower)) + '</td>' +
         '<td class="num">' + big(m.seasonScore) + '</td>' +
         '<td>' + positionOf(m.seasonScore) + '</td>' +
-        '<td class="muted">' + esc(m.heroPowerBy || '—') + '</td></tr>'
+        '<td class="muted">' + esc(m.heroPowerBy || '—') + '</td>' +
+        '<td>' + (m.heroPowerUpdatedAt
+          ? '<span class="when">' + when(m.heroPowerUpdatedAt) + '</span><br>' + ago(m.heroPowerUpdatedAt)
+          : '<span class="danger">从未录入</span>') + '</td></tr>'
     }
   },
 
