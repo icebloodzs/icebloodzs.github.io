@@ -495,7 +495,7 @@ function renderImport() {
   var html = '<div class="card"><h4>导入同盟名单</h4>' +
     '<p class="desc">在游戏同盟里导出成员列表（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），' +
     '复制后整段粘到下面，<b>保留表头那一行</b>。先点「解析预览」核对，没问题再「确认导入」。</p>' +
-    '<textarea id="impText" class="paste" placeholder="每行一名成员，列之间用 Tab 分隔&#10;例如：&#10;1\t无名胜士\t4\t宫阙2级\t240600401\t0\t11299034200\t36960\t133281933">' + esc(imp.text) + '</textarea>' +
+    '<textarea id="impText" class="paste" placeholder="每行一名成员，列之间用 Tab 分隔&#10;例如：&#10;1\t草莓招了\t4\t宫阙3级\t999999999\t0\t999999999\t99999\t999999999">' + esc(imp.text) + '</textarea>' +
     '<div class="bar" style="margin-top:14px">' +
     '<label class="chk"><input type="checkbox" id="impMark"' + (imp.markMissingOut ? ' checked' : '') + ' />把名单里消失的人标记为已离队</label>' +
     '<span class="sp"></span>' +
