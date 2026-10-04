@@ -59,6 +59,9 @@ var rally = {
   plan: null, opts: null, busy: false
 }
 
+/** 我的属性：传完截图后拿变化前的值做对比 */
+var mine = { before: null, busy: '', msg: '', err: '' }
+
 /** 黑土落位：预设 + 排好的格子 */
 var place = { preset: 'lv7', battle: false, grid: null, assign: null, tray: [], busy: false }
 
@@ -327,7 +330,7 @@ function toolbar(extra) {
     (extra || '') +
     '<span class="sp"></span>' +
     '<input type="search" id="kw" placeholder="搜成员名" value="' + esc(state.keyword) + '" />' +
-    '<button class="btn" id="csv">导出 CSV</button>' +
+    '<button class="btn" id="xlsx">导出 Excel</button>' +
     '</div>'
 }
 
@@ -498,6 +501,7 @@ function render() {
   if (state.view === 'import') return renderImport()
   if (state.view === 'rally') return renderRally()
   if (state.view === 'placement') return renderPlacement()
+  if (state.view === 'mine') return renderMine()
   var v = VIEWS[state.view]
   $('viewTitle').textContent = v.title
 
@@ -546,8 +550,8 @@ function bindBody(rows) {
       if (el) { el.focus(); el.setSelectionRange(pos, pos) }
     }
   }
-  var csv = $('csv')
-  if (csv) csv.onclick = function () { exportCsv(rows) }
+  var xlsx = $('xlsx')
+  if (xlsx) xlsx.onclick = function () { exportTableExcel(rows) }
 
   Array.prototype.forEach.call(document.querySelectorAll('th[data-sort]'), function (th) {
     var key = th.getAttribute('data-sort')
@@ -567,185 +571,55 @@ function bindBody(rows) {
   })
 }
 
-function exportCsv(rows) {
+/**
+ * 当前这屏导成 Excel。
+ * 表格里看到什么就导什么：把那一行的 HTML 去掉标签当单元格，再交给云函数生成带样式的 xlsx。
+ */
+function exportTableExcel(rows) {
   var v = VIEWS[state.view]
-  var head = v.cols.map(function (c) { return c.label })
-  var lines = [head.join(',')]
+  var aoa = [v.cols.map(function (c) { return c.label })]
   rows.forEach(function (m, i) {
-    // 直接把那一行的 HTML 去掉标签，表格里看到什么就导出什么
     var html = v.row(m, i)
     var cells = html.replace(/<\/tr>\s*$/, '').split(/<td[^>]*>/).slice(1).map(function (c) {
-      return '"' + c.replace(/<\/td>.*$/s, '').replace(/<[^>]+>/g, '').replace(/"/g, '""').trim() + '"'
+      return c.replace(/<\/td>[\s\S]*$/, '').replace(/<br\s*\/?>/g, ' ').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
     })
-    lines.push(cells.join(','))
+    // 纯数字的单元格转成数字，Excel 里才能直接排序求和
+    aoa.push(cells.map(function (x) {
+      return /^-?\d+(\.\d+)?$/.test(x) ? Number(x) : x
+    }))
   })
-  var blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
-  var a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = v.title + '-' + new Date().toISOString().slice(0, 10) + '.csv'
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
 
-// ---------------- 导入名单 ----------------
-
-/**
- * 粘游戏里导出的成员列表，先预演再正式导入。
- * 认人、改名、离队、归队这些判断全在云函数里做（和小程序走的是同一个 roster.import），
- * 这边只负责把结果摆出来给人看。
- */
-function renderImport() {
-  $('viewTitle').textContent = '导入名单'
-  var sum = imp.summary
-
-  var html = '<div class="card"><h4>导入同盟名单</h4>' +
-    '<p class="desc">在游戏同盟里导出成员列表（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），' +
-    '复制后整段粘到下面，<b>保留表头那一行</b>。先点「解析预览」核对，没问题再「确认导入」。</p>' +
-    '<textarea id="impText" class="paste" placeholder="每行一名成员，列之间用 Tab 分隔&#10;例如：&#10;1\t草莓招了\t4\t宫阙3级\t999999999\t0\t999999999\t99999\t999999999">' + esc(imp.text) + '</textarea>' +
-    '<div class="bar" style="margin-top:14px">' +
-    '<label class="chk"><input type="checkbox" id="impMark"' + (imp.markMissingOut ? ' checked' : '') + ' />把名单里消失的人标记为已离队</label>' +
-    '<span class="sp"></span>' +
-    '<button class="btn" id="impPreview"' + (imp.busy ? ' disabled' : '') + '>' + (imp.busy ? '处理中…' : '🔍 解析预览') + '</button>' +
-    '<button class="btn btn-primary" id="impRun"' + (imp.busy || !sum ? ' disabled' : '') + '>💾 确认导入</button>' +
-    '</div>'
-
-  if (imp.error) html += '<div class="note note-bad">' + esc(imp.error) + '</div>'
-  if (imp.done) html += '<div class="note note-ok">' + esc(imp.done) + '</div>'
-  html += '</div>'
-
-  if (sum) html += renderSummary(sum)
-  $('body').innerHTML = html
-  bindImport()
-}
-
-function renderSummary(s) {
-  var cells = [
-    ['共', s.total, ''], ['新增', s.created, 'ok'], ['更新', s.updated, ''],
-    ['认出改名', s.renamed, 'num'], ['归队', s.returned, 'ok'],
-    ['不在名单', s.missing, 'warn'], ['疑似改名', s.suspects, 'danger'],
-    ['名字易主', s.handover, 'danger'], ['重复', s.duplicates, 'warn']
-  ]
-  var html = '<div class="card"><h4>' + (s.dryRun ? '预览结果（还没写库）' : '导入完成') + '</h4>' +
-    '<div class="stats">' + cells.map(function (c) {
-      return '<div class="stat"><div class="n ' + (c[2] || '') + '">' + c[1] + '</div><div class="l">' + c[0] + '</div></div>'
-    }).join('') + '</div>'
-
-  if (s.nameOnly) html += '<div class="note">这份只有名字，没有数值列：只会更新在册状态，不动战力功勋这些数据。</div>'
-  if (s.truncated) html += '<div class="note note-bad">有 ' + s.truncated + ' 行列数不全（多半是粘贴被截断），已跳过没写进去。</div>'
-  if (s.bulkLower) html += '<div class="note note-bad">有 ' + s.dropped + ' 人的总功勋比库里小，这份名单可能是旧的或者赛季重置了。确认导入时会再问你一次。</div>'
-
-  // 疑似改名：拿不准的，给个「合并」按钮让人工定夺
-  if (s.suspectList && s.suspectList.length) {
-    html += '<div class="note note-bad"><b>疑似改名 ' + s.suspects + ' 人</b>（火炉、实力、战力都相近，但总功勋对不上）。' +
-      '确认是同一个人就点「合并」，老记录的绑定和资料会保留；不是同一个人就不用管，' + (s.dryRun ? '正式导入后新名字会作为新人加进去。' : '新名字已经作为新人加进去了。') + '</div>' +
-      '<div class="tbl-wrap"><table><thead><tr><th>老名字</th><th>新名字</th><th>火炉</th><th>实力（老 → 新）</th><th>绑定</th><th>操作</th></tr></thead><tbody>' +
-      s.suspectList.map(function (x, i) {
-        return '<tr><td class="name">' + esc(x.from) + '</td><td class="name">' + esc(x.to) + '</td>' +
-          '<td>' + esc(x.furnace || '—') + '</td>' +
-          '<td class="muted">' + esc(x.fromStrength) + ' → ' + esc(x.toStrength) + '</td>' +
-          '<td>' + (x.bound ? '<span class="ok">已绑</span>' : '<span class="muted">未绑</span>') + '</td>' +
-          '<td>' + (x.intoId
-            ? '<button class="btn" data-merge="' + i + '">合并成同一人</button>'
-            : '<span class="muted">导入后可合并</span>') + '</td></tr>'
-      }).join('') + '</tbody></table></div>'
-  }
-
-  if (s.renamedList && s.renamedList.length) {
-    html += '<div class="note note-ok"><b>认出改名 ' + s.renamed + ' 人</b>，绑定和资料都保留：<br>' +
-      s.renamedList.map(function (x) {
-        return esc(x.from) + ' → ' + esc(x.to) + '（' + esc(x.how) + (x.bound ? '，已绑定' : '') + '）'
-      }).join('<br>') + '</div>'
-  }
-
-  if (s.handoverList && s.handoverList.length) {
-    html += '<div class="note note-bad"><b>名字换人了 ' + s.handover + ' 个</b>（同名但总功勋对不上，多半是老号退了新号用了同一个名字）：<br>' +
-      s.handoverList.map(function (x) {
-        return esc(x.name) + '：总功勋 ' + esc(x.fromTotal) + ' → ' + esc(x.toTotal) + (x.bound ? '（老号已绑定微信，要手动处理）' : '')
-      }).join('<br>') + '</div>'
-  }
-
-  if (s.returnedNames && s.returnedNames.length) {
-    html += '<div class="note note-ok"><b>归队 ' + s.returned + ' 人</b>（之前标过离队，这次又在名单里）：' + esc(s.returnedNames.join('、')) + '</div>'
-  }
-  if (s.createdNames && s.createdNames.length) {
-    html += '<div class="note"><b>新增 ' + s.created + ' 人</b>：' + esc(s.createdNames.join('、')) + '</div>'
-  }
-  if (s.missingNames && s.missingNames.length) {
-    html += '<div class="note note-warn"><b>不在这份名单里的 ' + s.missing + ' 人</b>' +
-      (s.markMissingOut ? '（会标记为已离队，资料和绑定都留着）' : '（本次不标记，保持原样）') + '：' +
-      esc(s.missingNames.join('、')) + '</div>'
-  }
-  if (s.duplicateNames && s.duplicateNames.length) {
-    html += '<div class="note note-warn"><b>名单里重复 ' + s.duplicates + ' 个</b>，只取了第一条：' + esc(s.duplicateNames.join('、')) + '</div>'
-  }
-
-  return html + '</div>'
-}
-
-function bindImport() {
-  var ta = $('impText')
-  if (ta) ta.oninput = function () { imp.text = ta.value }
-  var mark = $('impMark')
-  if (mark) mark.onchange = function () { imp.markMissingOut = mark.checked }
-  var prev = $('impPreview')
-  if (prev) prev.onclick = function () { runImport(true) }
-  var run = $('impRun')
-  if (run) run.onclick = function () { runImport(false) }
-
-  Array.prototype.forEach.call(document.querySelectorAll('button[data-merge]'), function (btn) {
-    btn.onclick = function () {
-      var x = imp.summary.suspectList[Number(btn.getAttribute('data-merge'))]
-      if (!x || !x.intoId) return
-      if (!confirm('确认「' + x.from + '」和「' + x.to + '」是同一个人？\n合并后保留老记录的绑定和资料，名字和名单数据用新的。')) return
-      btn.disabled = true
-      call('admin.mergeMembers', { fromId: x.memberId, intoId: x.intoId })
-        .then(function () {
-          x.intoId = null
-          imp.done = '已合并「' + x.from + '」→「' + x.to + '」'
-          renderImport()
-          load()
-        })
-        .catch(function (e) {
-          btn.disabled = false
-          alert(e.message)
-        })
-    }
+  var head = aoa[0].map(function () { return 0 })
+  var body = aoa[0].map(function () { return 1 })
+  var btn = $('xlsx')
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…' }
+  call('files.buildExcel', {
+    aoa: aoa,
+    cols: aoa[0].map(function (label) { return { wch: Math.max(8, visual(label) + 4) } }),
+    styles: [
+      { fill: '6C5CE7', color: 'FFFFFF', bold: true, size: 11 },
+      { color: '222222', size: 11 }
+    ],
+    cellStyles: [head].concat(aoa.slice(1).map(function () { return body })),
+    sheetName: v.title
+  }).then(function (res) {
+    var bin = atob(res.base64)
+    var buf = new Uint8Array(bin.length)
+    for (var i = 0; i < bin.length; i += 1) buf[i] = bin.charCodeAt(i)
+    download(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      v.title + '-' + new Date().toISOString().slice(0, 10) + '.xlsx')
+  }).catch(function (e) {
+    alert(e.message)
+  }).then(function () {
+    if (btn) { btn.disabled = false; btn.textContent = '导出 Excel' }
   })
 }
 
-function runImport(dryRun) {
-  if (imp.busy) return
-  if (!imp.text.trim()) { imp.error = '先把名单粘进来'; return renderImport() }
-
-  var payload = { text: imp.text, markMissingOut: imp.markMissingOut, dryRun: dryRun }
-  // 大面积功勋变小时云函数会拦一次，预览过了再让用户点头
-  if (!dryRun && imp.summary && imp.summary.bulkLower) {
-    if (!confirm('有 ' + imp.summary.dropped + ' 人的总功勋比库里小，这份名单可能是旧的或者赛季重置了。\n确定要用它覆盖吗？')) return
-    payload.acceptLower = true
-  }
-  if (!dryRun && !confirm('确认把这份名单写进库？' + (imp.markMissingOut ? '\n名单里没有的人会被标记为已离队。' : ''))) return
-
-  imp.busy = true
-  imp.error = ''
-  imp.done = ''
-  renderImport()
-  call('roster.import', payload)
-    .then(function (res) {
-      imp.summary = res
-      imp.busy = false
-      if (!dryRun) {
-        imp.done = '导入完成：新增 ' + res.created + ' · 更新 ' + res.updated + ' · 改名 ' + res.renamed + ' · 离队 ' + (res.markMissingOut ? res.missing : 0)
-        imp.text = ''
-        load()
-      }
-      renderImport()
-    })
-    .catch(function (e) {
-      imp.busy = false
-      imp.summary = null
-      imp.error = e.message
-      renderImport()
-    })
+/** 中文按两个字符宽算，列宽才不至于挤成一团 */
+function visual(s) {
+  var n = 0
+  String(s).split('').forEach(function (c) { n += c.charCodeAt(0) > 255 ? 2 : 1 })
+  return n
 }
 
 // ---------------- 集结分配 ----------------
@@ -995,6 +869,169 @@ function downloadPlacementPng() {
   img.src = url
 }
 
+// ---------------- 我的属性 ----------------
+
+/** 库里只存这六项（属性面板 13 行里挑出来的），按兵种分组显示 */
+var MY_ATTRS = [
+  { arm: '步兵', items: [['infDef', '防御力'], ['infHp', '生命值']] },
+  { arm: '骑兵', items: [['cavAtk', '攻击力'], ['cavBreak', '破坏力']] },
+  { arm: '弓兵', items: [['arcAtk', '攻击力'], ['arcBreak', '破坏力']] }
+]
+
+function renderMine() {
+  $('viewTitle').textContent = '我的属性'
+  var me = state.me || {}
+  var m = me.member
+
+  if (!m) {
+    $('body').innerHTML = '<div class="card"><h4>我的属性</h4>' +
+      '<p class="desc">你的微信还没绑定名单里的成员账号，先在小程序里「去绑定」，绑完这里就能传截图了。</p></div>'
+    return
+  }
+
+  var a = m.attrs || {}
+  var html = '<div class="card"><h4>我的属性 · ' + esc(m.name) + '</h4>' +
+    '<p class="desc">数值只认截图识别的结果，这里也填不了、改不了。传一张游戏里的「属性加成」面板截图就会自动识别入库，' +
+    '和在小程序里传是同一回事。</p>' +
+    '<div class="arms">' +
+    MY_ATTRS.map(function (g) {
+      return '<div class="arm"><div class="arm-t">' + g.arm + '</div>' +
+        g.items.map(function (it) {
+          var v = a[it[0]]
+          return '<div class="arm-row"><span>' + it[1] + '</span><b>' +
+            (v === null || v === undefined ? '<span class="muted">未录入</span>' : num(v, 2) + '%') + '</b></div>'
+        }).join('') + '</div>'
+    }).join('') +
+    '</div>' +
+    '<div class="sum-bar"><span>六维总和 <b class="num">' + num(m.attrsSum, 2) + '</b></span>' +
+    '<span>最后更新 <b>' + (m.attrsUpdatedAt ? when(m.attrsUpdatedAt) : '从未上传') + '</b></span></div>' +
+    '<div class="bar" style="margin-top:16px"><span class="sp"></span>' +
+    '<label class="btn btn-primary' + (mine.busy ? ' disabled' : '') + '">' +
+    (mine.busy === 'attrs' ? '识别中…' : '上传属性截图') +
+    '<input type="file" accept="image/*" id="shotAttrs" hidden /></label></div>' +
+    '</div>'
+
+  // 赛季评分
+  var season = state.season || {}
+  html += '<div class="card"><h4>赛季评分 · ' + esc(season.label || '') + '</h4>' +
+    '<p class="desc">评分 = 成员实力 − 武将战力。武将战力同样只能靠截图识别，传战力面板截图即可。</p>' +
+    '<div class="sum-bar">' +
+    '<span>成员实力 <b>' + big(m.strength) + '</b></span>' +
+    '<span>武将战力 <b class="num">' + (m.heroPower == null ? '未录入' : big(m.heroPower)) + '</b></span>' +
+    '<span>赛季评分 <b class="num">' + big(m.seasonScore) + '</b></span>' +
+    '<span>定位 ' + positionOf(m.seasonScore) + '</span>' +
+    '<span>最后更新 <b>' + (m.heroPowerUpdatedAt ? when(m.heroPowerUpdatedAt) : '从未上传') + '</b></span>' +
+    '</div>' +
+    '<div class="bar" style="margin-top:16px"><span class="sp"></span>' +
+    '<label class="btn btn-primary' + (mine.busy ? ' disabled' : '') + '">' +
+    (mine.busy === 'hero' ? '识别中…' : '上传战力截图') +
+    '<input type="file" accept="image/*" id="shotHero" hidden /></label></div>' +
+    '</div>'
+
+  if (mine.err) html += '<div class="card"><div class="note note-bad">' + esc(mine.err) + '</div></div>'
+  if (mine.msg) html += '<div class="card"><div class="note note-ok">' + esc(mine.msg) + '</div></div>'
+  if (mine.before) html += renderDiff(mine.before, m)
+
+  $('body').innerHTML = html
+  bindMine()
+}
+
+/** 传完之后对比一下这次和上次的差值 */
+function renderDiff(before, now) {
+  var oldA = before.attrs || {}
+  var newA = now.attrs || {}
+  var rows = MY_ATTRS.map(function (g) {
+    return '<div class="arm arm-diff"><div class="arm-t">' + g.arm + '</div>' +
+      g.items.map(function (it) {
+        var o = oldA[it[0]]
+        var n = newA[it[0]]
+        if (o === null || o === undefined || n === null || n === undefined) {
+          return '<div class="arm-row"><span>' + it[1] + '</span><b>' + (n == null ? '—' : num(n, 2) + '%') + '</b></div>'
+        }
+        var d = Number(n) - Number(o)
+        var cls = d > 0 ? 'ok' : d < 0 ? 'danger' : 'muted'
+        return '<div class="arm-row"><span>' + it[1] + '</span>' +
+          '<b><span class="muted">' + num(o, 2) + '%</span> → ' + num(n, 2) + '%' +
+          ' <span class="' + cls + '">(' + (d > 0 ? '+' : '') + d.toFixed(2) + ')</span></b></div>'
+      }).join('') + '</div>'
+  }).join('')
+
+  var od = before.attrsSum
+  var nd = now.attrsSum
+  var ds = (od != null && nd != null) ? (Number(nd) - Number(od)) : null
+  return '<div class="card"><h4>和上次比</h4><div class="arms">' + rows + '</div>' +
+    (ds === null ? '' : '<div class="sum-bar"><span>六维总和 <span class="muted">' + num(od, 2) + '</span> → <b class="num">' + num(nd, 2) + '</b> ' +
+      '<span class="' + (ds > 0 ? 'ok' : ds < 0 ? 'danger' : 'muted') + '">(' + (ds > 0 ? '+' : '') + ds.toFixed(2) + ')</span></span></div>') +
+    '</div>'
+}
+
+function bindMine() {
+  var hook = function (id, kind) {
+    var el = $(id)
+    if (!el) return
+    el.onchange = function () {
+      var f = el.files && el.files[0]
+      if (f) uploadShot(f, kind)
+      el.value = ''
+    }
+  }
+  hook('shotAttrs', 'attrs')
+  hook('shotHero', 'hero')
+}
+
+/**
+ * 传截图：先在浏览器里压一道再发。
+ * 原图动辄三五兆，压到长边 1280、质量 0.75 之后一般两三百 K，走 HTTP 接口稳当得多。
+ */
+function uploadShot(file, kind) {
+  if (mine.busy) return
+  mine.busy = kind
+  mine.err = ''
+  mine.msg = ''
+  mine.before = state.me.member
+  renderMine()
+
+  compress(file).then(function (dataUrl) {
+    return call('web.uploadShot', { kind: kind, base64: dataUrl, ext: 'jpg' })
+  }).then(function (res) {
+    state.me.member = res.member
+    mine.msg = kind === 'attrs'
+      ? '识别到 ' + res.recognized.count + '/6 项并已保存' +
+        (res.recognized.missing && res.recognized.missing.length ? '（有 ' + res.recognized.missing.length + ' 项没读出来，可以换张更清楚的重传）' : '')
+      : '读到武将战力 ' + res.heroPowerText + '，已保存'
+    if (kind === 'hero') mine.before = null
+    load()
+  }).catch(function (e) {
+    mine.err = e.message || '上传失败'
+    mine.before = null
+  }).then(function () {
+    mine.busy = ''
+    renderMine()
+  })
+}
+
+function compress(file) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader()
+    reader.onerror = function () { reject(new Error('读不了这个文件')) }
+    reader.onload = function () {
+      var img = new Image()
+      img.onerror = function () { reject(new Error('这不是一张图片')) }
+      img.onload = function () {
+        var max = 1280
+        var scale = Math.min(1, max / Math.max(img.width, img.height))
+        var canvas = document.createElement('canvas')
+        canvas.width = Math.round(img.width * scale)
+        canvas.height = Math.round(img.height * scale)
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.75))
+      }
+      img.src = reader.result
+    }
+    reader.readAsDataURL(file)
+  })
+}
+
 // ---------------- 绑事件 ----------------
 
 Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
@@ -1003,7 +1040,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
     el.classList.add('on')
     state.view = el.getAttribute('data-view')
     state.keyword = ''
-    if (state.view === 'import' || state.view === 'rally' || state.view === 'placement') return render()
+    if (state.view === 'import' || state.view === 'rally' || state.view === 'placement' || state.view === 'mine') return render()
     state.sort = state.view === 'season'
       ? { key: 'seasonScore', desc: true }
       : state.view === 'bonus' ? { key: 'maxBonus', desc: true }
