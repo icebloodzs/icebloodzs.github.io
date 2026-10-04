@@ -34,6 +34,9 @@
       <div class="nav" data-view="bonus">⚡ 成员加成</div>
       <div class="nav" data-view="missing">🔍 遗漏排查</div>
       <div class="nav" data-view="season">🏅 赛季评分</div>
+      <div class="group">指挥工具</div>
+      <div class="nav" data-view="rally">🚩 集结分配</div>
+      <div class="nav" data-view="placement">🗺️ 黑土落位</div>
       <div class="group">账号</div>
       <div class="nav" data-view="users">👥 绑定情况</div>
     </aside>
@@ -52,6 +55,16 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!--
+    集结分配和黑土落位的算法直接用小程序里那两个文件（utils/rally.js、utils/placement.js），
+    一个字没改，所以两端排出来的结果完全一样。它们用的是 CommonJS 的 module.exports，
+    这里给个空壳接一下就能在浏览器里跑。改了小程序那边记得把文件重新拷过来。
+  -->
+  <script>var module = { exports: {} };</script>
+  <script src="./lib/rally.js"></script>
+  <script>var Rally = module.exports; module = { exports: {} };</script>
+  <script src="./lib/placement.js"></script>
+  <script>var Placement = module.exports; module = { exports: {} };</script>
   <script src="./app.js"></script>
 </body>
 </html>

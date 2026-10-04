@@ -168,3 +168,20 @@ td.name { font-weight: 600; }
 .stat .n.warn { color: #d97706; }
 .stat .n.danger { color: #dc2626; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- 集结分配 / 黑土落位 ---------- */
+.form { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; font-size: 13px; color: #4b5563; }
+.form label { display: inline-flex; align-items: center; gap: 7px; }
+code { background: #f1f2f6; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+table.plan td { border: 1px solid #e9ebee; padding: 7px 9px; font-size: 12px; }
+table.plan .cell-title { color: #fff; font-weight: 700; text-align: left; }
+table.plan .cell-title .cell-val { float: right; font-weight: 400; opacity: 0.9; }
+table.plan .cell-head { color: #e0203a; font-weight: 700; }
+table.plan .cell-label { color: #8a6d3b; font-size: 11px; }
+table.plan .cell-empty { color: #c9ccd1; }
+table.plan tbody tr:hover { background: none; }
+table.plan tbody tr:nth-child(even) { background: none; }
+
+.map-wrap { overflow: auto; text-align: center; }
+.map { max-width: 100%; height: auto; }

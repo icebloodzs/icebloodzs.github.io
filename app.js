@@ -16,6 +16,17 @@ try { token = localStorage.getItem(TOKEN_KEY) || '' } catch (e) { token = '' }
 
 var state = { me: null, members: [], season: null, view: 'roster', sort: { key: 'power', desc: true }, keyword: '' }
 
+/** 集结分配：表单参数 + 生成出来的方案，切走再切回来不丢 */
+var rally = {
+  mode: 'attack', groups: 4, subs: 1, mainBody: 5, subBody: 5, firstBody: 5,
+  mainRatio: '5:2:3', subRatio: '5:2:3', probability: 0,
+  headBy: 'rally', bodyBy: 'rally', title: '', note: '',
+  plan: null, opts: null, busy: false
+}
+
+/** 黑土落位：预设 + 排好的格子 */
+var place = { preset: 'lv7', battle: false, grid: null, assign: null, tray: [], busy: false }
+
 /** 导入名单那一屏的状态；文本留在内存里，切走再切回来不丢 */
 var imp = { text: '', markMissingOut: true, busy: false, summary: null, error: '', done: '' }
 
@@ -379,6 +390,8 @@ function rowsForView() {
 
 function render() {
   if (state.view === 'import') return renderImport()
+  if (state.view === 'rally') return renderRally()
+  if (state.view === 'placement') return renderPlacement()
   var v = VIEWS[state.view]
   $('viewTitle').textContent = v.title
 
@@ -629,6 +642,253 @@ function runImport(dryRun) {
     })
 }
 
+// ---------------- 集结分配 ----------------
+
+/** 下拉框，省得每个表单项都写一遍 */
+function sel(id, value, options) {
+  return '<select id="' + id + '">' + options.map(function (o) {
+    return '<option value="' + o[0] + '"' + (String(o[0]) === String(value) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'
+  }).join('') + '</select>'
+}
+
+function numInput(id, value, min, max) {
+  return '<input type="number" id="' + id + '" value="' + value + '" min="' + min + '" max="' + max + '" style="width:72px" />'
+}
+
+function renderRally() {
+  $('viewTitle').textContent = '集结分配'
+  var attack = rally.mode === 'attack'
+  var html = '<div class="card"><h4>集结分配</h4>' +
+    '<p class="desc">车头按集结值（或六维）从高到低挑，车身按你选的排法依次填。' +
+    '算的是和小程序同一套逻辑（<code>utils/rally.js</code> 原样拿过来的），两边结果一致。</p>' +
+    '<div class="form">' +
+    '<label>模式 ' + sel('rMode', rally.mode, [['attack', '攻城'], ['defense', '守城']]) + '</label>' +
+    '<label>组数 ' + numInput('rGroups', rally.groups, 1, 8) + '</label>' +
+    (attack
+      ? '<label>每组副车 ' + numInput('rSubs', rally.subs, 0, 5) + '</label>' +
+        '<label>主车车身 ' + numInput('rMainBody', rally.mainBody, 0, 20) + '</label>' +
+        '<label>副车车身 ' + numInput('rSubBody', rally.subBody, 0, 20) + '</label>' +
+        '<label>概率车 ' + numInput('rProb', rally.probability, 0, 8) + '</label>'
+      : '<label>第一组车身 ' + numInput('rFirstBody', rally.firstBody, 0, 30) + '</label>') +
+    '<label>车头依据 ' + sel('rHeadBy', rally.headBy, [['rally', '集结值'], ['attrs', '六维总和']]) + '</label>' +
+    '<label>车身排法 ' + sel('rBodyBy', rally.bodyBy, Rally.BODY_MODES.map(function (m) { return [m.key, m.label] })) + '</label>' +
+    '<label>标题 <input type="text" id="rTitle" value="' + esc(rally.title) + '" placeholder="' + (attack ? '攻城集结分配' : '守城集结分配') + '" style="width:180px" /></label>' +
+    '</div>' +
+    '<div class="bar" style="margin-top:14px">' +
+    '<span class="muted">参与人数 ' + state.members.length + '（在册成员）</span><span class="sp"></span>' +
+    '<button class="btn btn-primary" id="rGo">生成</button>' +
+    (rally.plan ? '<button class="btn" id="rXlsx"' + (rally.busy ? ' disabled' : '') + '>' + (rally.busy ? '生成中…' : '导出 Excel') + '</button>' : '') +
+    '</div></div>'
+
+  if (rally.plan) html += renderPlanTable()
+  $('body').innerHTML = html
+  bindRally()
+}
+
+function renderPlanTable() {
+  var layout = Rally.buildLayout(rally.plan, rally.opts)
+  var height = Math.max.apply(null, layout.columns.map(function (c) { return c.rows.length }))
+  var head = layout.columns.map(function (c, i) {
+    return '<th colspan="2" style="background:' + c.color.main + '">' + Rally.GROUP_NAMES[i] + '组</th>'
+  }).join('')
+  var body = ''
+  for (var r = 0; r < height; r += 1) {
+    body += '<tr>' + layout.columns.map(function (c) {
+      var row = c.rows[r]
+      if (!row) return '<td colspan="2"></td>'
+      if (row.kind === 'title') {
+        return '<td colspan="2" class="cell-title" style="background:' + (row.prob ? '#f08a24' : c.color.main) + '">' +
+          esc(row.text) + '<span class="cell-val">' + esc(row.value) + '</span></td>'
+      }
+      var cls = row.kind === 'head' ? 'cell-head' : row.kind === 'label' ? 'cell-label' : row.kind === 'empty' ? 'cell-empty' : 'cell-body'
+      return '<td class="' + cls + '" style="background:' + (row.kind === 'empty' ? '#fafafa' : c.color.light) + '">' + esc(row.text) + '</td>' +
+        '<td class="' + cls + '" style="background:' + (row.kind === 'empty' ? '#fafafa' : c.color.light) + '">' + esc(row.value) + '</td>'
+    }).join('') + '</tr>'
+  }
+  return '<div class="card"><h4>' + esc(layout.title) + '</h4>' +
+    (layout.note ? '<p class="desc">' + esc(layout.note) + '</p>' : '') +
+    '<div class="tbl-wrap"><table class="plan"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>'
+}
+
+function rallyOpts() {
+  return {
+    groups: rally.groups, subs: rally.subs, mainBody: rally.mainBody, subBody: rally.subBody,
+    mainRatio: rally.mainRatio, subRatio: rally.subRatio, probability: rally.probability,
+    firstBody: rally.firstBody, headBy: rally.headBy, bodyBy: rally.bodyBy,
+    title: rally.title || (rally.mode === 'attack' ? '攻城集结分配' : '守城集结分配'),
+    note: rally.note
+  }
+}
+
+function bindRally() {
+  var bind = function (id, key, isNum) {
+    var el = $(id)
+    if (!el) return
+    el.onchange = function () {
+      rally[key] = isNum ? Math.max(0, Number(el.value) || 0) : el.value
+      renderRally()
+    }
+  }
+  bind('rMode', 'mode'); bind('rHeadBy', 'headBy'); bind('rBodyBy', 'bodyBy')
+  bind('rGroups', 'groups', true); bind('rSubs', 'subs', true); bind('rMainBody', 'mainBody', true)
+  bind('rSubBody', 'subBody', true); bind('rFirstBody', 'firstBody', true); bind('rProb', 'probability', true)
+  var t = $('rTitle')
+  if (t) t.oninput = function () { rally.title = t.value }
+
+  var go = $('rGo')
+  if (go) go.onclick = function () {
+    var opts = rallyOpts()
+    rally.opts = opts
+    rally.plan = rally.mode === 'attack'
+      ? Rally.generateAttack(state.members, opts)
+      : Rally.generateDefense(state.members, opts)
+    renderRally()
+  }
+
+  var xlsx = $('rXlsx')
+  if (xlsx) xlsx.onclick = exportRallyExcel
+}
+
+/** Excel 由云函数生成（带颜色），回来的是 base64，这边转成文件下载 */
+function exportRallyExcel() {
+  if (rally.busy || !rally.plan) return
+  rally.busy = true
+  renderRally()
+  var layout = Rally.buildLayout(rally.plan, rally.opts)
+  var sheet = Rally.layoutToSheet(layout)
+  call('files.buildExcel', {
+    aoa: sheet.aoa, merges: sheet.merges, cols: sheet.cols, rows: sheet.rows,
+    styles: sheet.styles, cellStyles: sheet.cellStyles,
+    sheetName: rally.mode === 'attack' ? '攻城表' : '守城表'
+  }).then(function (res) {
+    var bin = atob(res.base64)
+    var buf = new Uint8Array(bin.length)
+    for (var i = 0; i < bin.length; i += 1) buf[i] = bin.charCodeAt(i)
+    download(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      (layout.title || '集结分配').replace(/[\\/:*?"<>|【】\s]/g, '') + '.xlsx')
+  }).catch(function (e) {
+    alert(e.message)
+  }).then(function () {
+    rally.busy = false
+    renderRally()
+  })
+}
+
+function download(blob, name) {
+  var a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// ---------------- 黑土落位 ----------------
+
+function renderPlacement() {
+  $('viewTitle').textContent = '黑土落位'
+  var g = place.grid
+  var html = '<div class="card"><h4>黑土落位</h4>' +
+    '<p class="desc">按成员实力从高到低、由内圈往外圈排。人比格子多时，最强的格子配一个最弱的（强带弱），再多的进待分配。' +
+    '算法同样是小程序那份 <code>utils/placement.js</code> 原样拿过来的。</p>' +
+    '<div class="form">' +
+    '<label>城池 ' + sel('pPreset', place.preset, Placement.PRESETS.map(function (p) { return [p.key, p.label] })) + '</label>' +
+    '<label class="chk"><input type="checkbox" id="pBattle"' + (place.battle ? ' checked' : '') + ' />留出斗阵位</label>' +
+    '</div>' +
+    '<div class="bar" style="margin-top:14px">' +
+    '<span class="muted">在册成员 ' + state.members.length + ' 人</span><span class="sp"></span>' +
+    '<button class="btn btn-primary" id="pGo">生成</button>' +
+    (g ? '<button class="btn" id="pPng">下载图片</button>' : '') +
+    '</div>'
+
+  if (g) {
+    html += '<div class="note">' + g.city + '×' + g.city + ' 城池 · 黑土上 ' + g.up + ' 圈 / 下 ' + g.down + ' 圈 · ' +
+      '黑土 ' + g.blackCount + ' 格、白土 ' + g.whiteCount + ' 格' +
+      (place.tray.length ? ' · <b class="warn">待分配 ' + place.tray.length + ' 人</b>：' + esc(place.tray.join('、')) : '') + '</div>'
+  }
+  html += '</div>'
+
+  if (g) html += '<div class="card"><div id="mapWrap" class="map-wrap"></div></div>'
+  $('body').innerHTML = html
+  if (g) drawPlacement()
+  bindPlacement()
+}
+
+/** 画菱形：每格一个旋转 45° 的方块，名字正着写 */
+function drawPlacement() {
+  var g = place.grid
+  var D = g.size > 20 ? 54 : 76
+  var span = g.size * D
+  var wrap = $('mapWrap')
+  var parts = ['<svg width="' + span + '" height="' + span + '" viewBox="0 0 ' + span + ' ' + span + '" class="map">']
+  g.cells.forEach(function (cell) {
+    var ctr = Placement.cellCenter(cell.r, cell.c, g.size, D)
+    if (cell.kind === 'city' || cell.kind === 'battle') return
+    var color = Placement.ringColor(cell.ring, cell.soil)
+    var names = (place.assign[cell.id] || [])
+    parts.push('<g transform="translate(' + ctr.x + ',' + ctr.y + ') rotate(45)">' +
+      '<rect x="' + (-D / 2.83) + '" y="' + (-D / 2.83) + '" width="' + (D / 1.414) + '" height="' + (D / 1.414) + '" rx="3" fill="' + color.fill + '" stroke="' + color.stroke + '" stroke-width="1.5"/></g>')
+    names.forEach(function (n, i) {
+      parts.push('<text x="' + ctr.x + '" y="' + (ctr.y + (names.length === 2 ? (i === 0 ? -5 : 9) : 4)) + '" text-anchor="middle" font-size="' + (names.length === 2 ? 10 : 11) + '" fill="#1f2329">' + esc(Placement.clip(n, names.length === 2 ? 5 : 6)) + '</text>')
+    })
+  })
+  // 城池：一整块
+  var c0 = Placement.cellCenter(g.lo, g.lo, g.size, D)
+  var c1 = Placement.cellCenter(g.hi, g.hi, g.size, D)
+  var cx = (c0.x + c1.x) / 2
+  var cy = (c0.y + c1.y) / 2
+  var cd = g.city * D
+  parts.push('<g transform="translate(' + cx + ',' + cy + ') rotate(45)">' +
+    '<rect x="' + (-cd / 2.83) + '" y="' + (-cd / 2.83) + '" width="' + (cd / 1.414) + '" height="' + (cd / 1.414) + '" rx="6" fill="#e8a33d" stroke="#b5651d" stroke-width="3"/></g>' +
+    '<text x="' + cx + '" y="' + (cy + 8) + '" text-anchor="middle" font-size="' + Math.round(cd * 0.16) + '" font-weight="700" fill="#7c2d12">城池</text>')
+  parts.push('</svg>')
+  wrap.innerHTML = parts.join('')
+}
+
+function bindPlacement() {
+  var p = $('pPreset')
+  if (p) p.onchange = function () { place.preset = p.value; place.grid = null; renderPlacement() }
+  var b = $('pBattle')
+  if (b) b.onchange = function () { place.battle = b.checked; place.grid = null; renderPlacement() }
+
+  var go = $('pGo')
+  if (go) go.onclick = function () {
+    var preset = Placement.PRESETS.filter(function (x) { return x.key === place.preset })[0]
+    var grid = Placement.buildGrid({ city: preset.city, up: preset.up, down: preset.down, battle: place.battle })
+    // 按实力从高到低，和小程序一致
+    var names = state.members.slice().sort(function (a, b2) { return (b2.strength || 0) - (a.strength || 0) }).map(function (m) { return m.name })
+    var made = Placement.autoUnits(names, grid.order.length)
+    var res = Placement.fill(grid.order, made.units)
+    place.grid = grid
+    place.assign = res.assign
+    place.tray = (made.tray || []).concat(res.rest || [])
+    renderPlacement()
+  }
+
+  var png = $('pPng')
+  if (png) png.onclick = downloadPlacementPng
+}
+
+/** SVG 转 PNG：画到 canvas 再导出，不用额外依赖 */
+function downloadPlacementPng() {
+  var svg = $('mapWrap').innerHTML
+  var blob = new Blob(['<?xml version="1.0"?>' + svg.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"')], { type: 'image/svg+xml;charset=utf-8' })
+  var url = URL.createObjectURL(blob)
+  var img = new Image()
+  img.onload = function () {
+    var canvas = document.createElement('canvas')
+    canvas.width = img.width * 2
+    canvas.height = img.height * 2
+    var ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    URL.revokeObjectURL(url)
+    canvas.toBlob(function (b) { download(b, '黑土落位.png') })
+  }
+  img.onerror = function () { URL.revokeObjectURL(url); alert('导出失败，可以直接截图') }
+  img.src = url
+}
+
 // ---------------- 绑事件 ----------------
 
 Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
@@ -637,7 +897,7 @@ Array.prototype.forEach.call(document.querySelectorAll('.nav'), function (el) {
     el.classList.add('on')
     state.view = el.getAttribute('data-view')
     state.keyword = ''
-    if (state.view === 'import') return render()
+    if (state.view === 'import' || state.view === 'rally' || state.view === 'placement') return render()
     state.sort = state.view === 'season'
       ? { key: 'seasonScore', desc: true }
       : state.view === 'bonus' ? { key: 'maxBonus', desc: true } : { key: 'power', desc: true }
