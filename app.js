@@ -1388,10 +1388,10 @@ function renderMine() {
             placeholder: '-', data: ' data-lv="' + lv + '" data-arm="' + a[0] + '"'
           }) + '</td>'
         }).join('') +
-        '<td class="num">' + fmtSum(levelSum(f, lv)) + '</td></tr>'
+        '<td class="num" id="sum-' + lv + '">' + fmtSum(levelSum(f, lv)) + '</td></tr>'
     }).join('') +
     '</tbody></table></div>' +
-    '<div class="sum-bar"><span>两档合计 <b class="num">' + fmtSum(allSum(f)) + '</b> 万</span>' +
+    '<div class="sum-bar"><span>两档合计 <b class="num" id="sumAll">' + fmtSum(allSum(f)) + '</b> 万</span>' +
     '<span class="muted">单位：万，小数直接打进去也认（箭头是按 1 加减）</span></div>' +
     '<div class="bar" style="margin-top:14px"><span class="sp"></span>' +
     '<button class="btn btn-primary" id="fSave"' + (mine.saving ? ' disabled' : '') + '>' + (mine.saving ? '保存中…' : '保存') + '</button></div>' +
@@ -1495,10 +1495,13 @@ function bindMine() {
   if (march) march.oninput = function () { f.maxMarch = march.value }
   Array.prototype.forEach.call(document.querySelectorAll('.tin'), function (el) {
     el.oninput = function () {
-      f.troops[el.getAttribute('data-lv')][el.getAttribute('data-arm')] = el.value
-      // 只刷小计，别整屏重画，不然输入框会失焦
-      var row = el.parentNode && el.parentNode.parentNode
-      if (row && row.lastChild) row.lastChild.textContent = fmtSum(levelSum(f, el.getAttribute('data-lv')))
+      var lv = el.getAttribute('data-lv')
+      f.troops[lv][el.getAttribute('data-arm')] = el.value
+      // 只刷小计，别整屏重画，不然输入框会失焦。按 id 找格子，别靠 DOM 层级猜
+      var cell = $('sum-' + lv)
+      if (cell) cell.textContent = fmtSum(levelSum(f, lv))
+      var all = $('sumAll')
+      if (all) all.textContent = fmtSum(allSum(f))
     }
   })
   var save = $('fSave')
