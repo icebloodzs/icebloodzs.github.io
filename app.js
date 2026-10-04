@@ -56,14 +56,20 @@ var rally = {
   mode: 'attack', groups: 4, subs: 1, mainBody: 5, subBody: 5, firstBody: 5,
   mainRatio: '5:2:3', subRatio: '5:2:3', probability: 0,
   headBy: 'rally', bodyBy: 'rally', title: '', note: '',
-  plan: null, opts: null, busy: false
+  plan: null, opts: null, busy: false,
+  // 手动换人：先点中一个位置，再点另一个就换过去
+  sel: ''
 }
 
 /** 我的属性：传完截图后拿变化前的值做对比 */
 var mine = { before: null, busy: '', msg: '', err: '' }
 
 /** 黑土落位：预设 + 排好的格子 */
-var place = { preset: 'lv7', battle: false, grid: null, assign: null, tray: [], busy: false }
+var place = {
+  preset: 'lv7', battle: false, grid: null, assign: null, tray: [], busy: false,
+  // 手动调整：sel = 选中的格子；pending = 选中的两格待定（交换还是合并）
+  sel: '', pending: null, msg: ''
+}
 
 /** 导入名单那一屏的状态；文本留在内存里，切走再切回来不丢 */
 var imp = { text: '', markMissingOut: true, busy: false, summary: null, error: '', done: '' }
@@ -270,12 +276,18 @@ function when(iso) {
   return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes())
 }
 
-/** 多久没更新了：越久颜色越重 */
+/** 多久没更新了：做成小圆标，越久颜色越重，省地方也不换行 */
 function ago(iso) {
-  if (!iso) return '<span class="danger">从未</span>'
+  if (!iso) return '<span class="tag tag-bad">从未</span>'
   var d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000)
-  var cls = d >= 7 ? 'danger' : d >= 3 ? 'warn' : 'ok'
-  return '<span class="' + cls + '">' + (d <= 0 ? '今天' : d + ' 天前') + '</span>'
+  var cls = d >= 7 ? 'tag-bad' : d >= 3 ? 'tag-warn' : 'tag-ok'
+  return '<span class="tag ' + cls + '">' + (d <= 0 ? '今天' : d + '天') + '</span>'
+}
+
+/** 时间单元格：绝对时间 + 小圆标，强制一行 */
+function timeCell(iso, emptyText) {
+  if (!iso) return '<td class="nowrap"><span class="tag tag-bad">' + (emptyText || '从未') + '</span></td>'
+  return '<td class="nowrap"><span class="when">' + when(iso) + '</span> ' + ago(iso) + '</td>'
 }
 
 function sortRows(rows, key, desc) {
@@ -340,7 +352,7 @@ function table(cols, rows, renderRow) {
   if (!rows.length) return '<div class="empty">没有符合条件的成员</div>'
   var head = cols.map(function (c) {
     var arrow = state.sort.key === c.key ? (state.sort.desc ? ' ▼' : ' ▲') : ''
-    return '<th data-sort="' + (c.key || '') + '">' + esc(c.label) + arrow + '</th>'
+    return '<th class="' + (c.cls || '') + '" data-sort="' + (c.key || '') + '">' + esc(c.label) + arrow + '</th>'
   }).join('')
   var body = rows.map(renderRow).join('')
   return '<div class="tbl-wrap"><table><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>'
@@ -400,7 +412,7 @@ var VIEWS = {
         '<td class="num">' + (troopSum(m) === null ? '—' : troopSum(m) + '万') + '</td>' +
         '<td class="muted">宫' + (b.inf || '-') + ' ' + num(t.inf) + ' / 宫' + (b.cav || '-') + ' ' + num(t.cav) + ' / 宫' + (b.arc || '-') + ' ' + num(t.arc) + '</td>' +
         '<td>' + num(m.attrsSum, 2) + '</td>' +
-        '<td>' + ago(m.attrsUpdatedAt) + '</td></tr>'
+        timeCell(m.attrsUpdatedAt, '从未') + '</tr>'
     }
   },
 
@@ -409,7 +421,7 @@ var VIEWS = {
     desc: '六维来自成员自己传的「属性加成」截图，服务端识别后入库，填不了也改不了。' +
       '点表头可以按单项排序，最后一列是这份属性是什么时候传的。',
     cols: [
-      { key: '', label: '#' }, { key: 'name', label: '成员' },
+      { key: '', label: '#', cls: 'idx' }, { key: 'name', label: '成员' },
       { key: 'attr.infDef', label: '步防' }, { key: 'attr.infHp', label: '步生' },
       { key: 'attr.cavAtk', label: '骑攻' }, { key: 'attr.cavBreak', label: '骑破' },
       { key: 'attr.arcAtk', label: '弓攻' }, { key: 'attr.arcBreak', label: '弓破' },
@@ -421,13 +433,11 @@ var VIEWS = {
         var v = a[k]
         return '<td>' + (v === null || v === undefined ? '<span class="muted">—</span>' : num(v, 2)) + '</td>'
       }
-      return '<tr><td>' + (i + 1) + '</td>' +
+      return '<tr><td class="idx">' + (i + 1) + '</td>' +
         '<td class="name">' + esc(m.name) + '</td>' +
         cell('infDef') + cell('infHp') + cell('cavAtk') + cell('cavBreak') + cell('arcAtk') + cell('arcBreak') +
         '<td class="num">' + num(m.attrsSum, 2) + '</td>' +
-        '<td>' + (m.attrsUpdatedAt
-          ? '<span class="when">' + when(m.attrsUpdatedAt) + '</span><br>' + ago(m.attrsUpdatedAt)
-          : '<span class="danger">从未上传</span>') + '</td></tr>'
+        timeCell(m.attrsUpdatedAt, '从未上传') + '</tr>'
     }
   },
 
@@ -449,7 +459,7 @@ var VIEWS = {
         '<td>' + tags.join(' ') + '</td>' +
         '<td>' + (m.boundUid ? '<span class="ok">已绑</span>' : '<span class="danger">未绑</span>') + '</td>' +
         '<td class="num">' + big(m.power) + '</td>' +
-        '<td>' + ago(m.attrsUpdatedAt) + '</td></tr>'
+        timeCell(m.attrsUpdatedAt, '从未') + '</tr>'
     }
   },
 
@@ -470,9 +480,7 @@ var VIEWS = {
         '<td class="num">' + big(m.seasonScore) + '</td>' +
         '<td>' + positionOf(m.seasonScore) + '</td>' +
         '<td class="muted">' + esc(m.heroPowerBy || '—') + '</td>' +
-        '<td>' + (m.heroPowerUpdatedAt
-          ? '<span class="when">' + when(m.heroPowerUpdatedAt) + '</span><br>' + ago(m.heroPowerUpdatedAt)
-          : '<span class="danger">从未录入</span>') + '</td></tr>'
+        timeCell(m.heroPowerUpdatedAt, '从未录入') + '</tr>'
     }
   },
 
@@ -852,29 +860,89 @@ function renderRally() {
   bindRally()
 }
 
+/**
+ * 方案表：每格都带 data-seat（车头是 "车号:h"、车身是 "车号:位次"、替补是 "b:序号"），
+ * 点一个再点另一个就换位置，和小程序里那套一样。
+ */
 function renderPlanTable() {
-  var layout = Rally.buildLayout(rally.plan, rally.opts)
-  var height = Math.max.apply(null, layout.columns.map(function (c) { return c.rows.length }))
-  var head = layout.columns.map(function (c, i) {
+  var plan = rally.plan
+  var metric = Rally.METRICS[Rally.displayKeyOf(rally.opts.bodyBy)]
+  var val = function (m) { return m ? metric.fmt(metric.get(m)) : '' }
+  var groupCount = Math.max.apply(null, plan.cars.map(function (c) { return c.group + 1 }).concat([1]))
+
+  var seat = function (key, m, cls) {
+    var on = rally.sel === key ? ' seat-on' : ''
+    return '<td class="seat ' + (cls || '') + (m ? '' : ' seat-empty') + on + '" data-seat="' + key + '">' +
+      (m ? esc(m.name) : '<span class="muted">空位</span>') + '</td>' +
+      '<td class="seat-v ' + (cls || '') + on + '" data-seat="' + key + '">' + esc(val(m)) + '</td>'
+  }
+
+  // 每组一列，列内自上而下堆这一组的车
+  var cols = []
+  for (var g = 0; g < groupCount; g += 1) {
+    var color = Rally.GROUP_COLORS[g % Rally.GROUP_COLORS.length]
+    var rows = []
+    plan.cars.forEach(function (car, ci) {
+      if (car.group !== g) return
+      if (plan.mode === 'defense') {
+        rows.push('<td colspan="2" class="cell-title" style="background:' + color.main + '">' +
+          (car.head ? esc(car.head.name) : '（车头待定）') + '<span class="cell-val">' + esc(val(car.head)) + '</span></td>')
+        rows.push('<td colspan="2" class="cell-label" style="background:' + color.light + '">车身<span class="cell-val">' + metric.label + '</span></td>')
+      } else {
+        rows.push('<td colspan="2" class="cell-title" style="background:' + (car.tier === 'prob' ? '#f08a24' : color.main) + '">' +
+          esc(Rally.carTitle ? Rally.carTitle(car) : '车') + '<span class="cell-val">' + metric.label + '</span></td>')
+        rows.push(seat(ci + ':h', car.head, 'cell-head').replace(/style="[^"]*"/g, '') )
+      }
+      car.bodies.forEach(function (m, bi) { rows.push(seat(ci + ':' + bi, m, 'cell-body')) })
+    })
+    cols.push({ color: color, rows: rows })
+  }
+
+  var height = Math.max.apply(null, cols.map(function (c) { return c.rows.length }).concat([0]))
+  var head = cols.map(function (c, i) {
     return '<th colspan="2" style="background:' + c.color.main + '">' + Rally.GROUP_NAMES[i] + '组</th>'
   }).join('')
   var body = ''
   for (var r = 0; r < height; r += 1) {
-    body += '<tr>' + layout.columns.map(function (c) {
-      var row = c.rows[r]
-      if (!row) return '<td colspan="2"></td>'
-      if (row.kind === 'title') {
-        return '<td colspan="2" class="cell-title" style="background:' + (row.prob ? '#f08a24' : c.color.main) + '">' +
-          esc(row.text) + '<span class="cell-val">' + esc(row.value) + '</span></td>'
-      }
-      var cls = row.kind === 'head' ? 'cell-head' : row.kind === 'label' ? 'cell-label' : row.kind === 'empty' ? 'cell-empty' : 'cell-body'
-      return '<td class="' + cls + '" style="background:' + (row.kind === 'empty' ? '#fafafa' : c.color.light) + '">' + esc(row.text) + '</td>' +
-        '<td class="' + cls + '" style="background:' + (row.kind === 'empty' ? '#fafafa' : c.color.light) + '">' + esc(row.value) + '</td>'
+    body += '<tr>' + cols.map(function (c) {
+      var cell = c.rows[r]
+      if (!cell) return '<td colspan="2"></td>'
+      // 给车身 / 车头格补上本组底色
+      return cell.indexOf('cell-title') >= 0 || cell.indexOf('cell-label') >= 0
+        ? cell
+        : cell.replace(/class="(seat|seat-v)([^"]*)"/g, 'class="$1$2" style="background:' + c.color.light + '"')
     }).join('') + '</tr>'
   }
-  return '<div class="card"><h4>' + esc(layout.title) + '</h4>' +
-    (layout.note ? '<p class="desc">' + esc(layout.note) + '</p>' : '') +
-    '<div class="tbl-wrap"><table class="plan"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div></div>'
+
+  var bench = (plan.bench || []).filter(Boolean)
+  var benchHtml = ''
+  if (bench.length || rally.sel) {
+    benchHtml = '<div class="bench"><span class="bench-t">替补 ' + bench.length + '</span>' +
+      bench.map(function (m, i) {
+        return '<span class="chip seat' + (rally.sel === 'b:' + i ? ' seat-on' : '') + '" data-seat="b:' + i + '">' + esc(m.name) + '</span>'
+      }).join('') +
+      (bench.length ? '' : '<span class="muted">（空）</span>') + '</div>'
+  }
+
+  return '<div class="card"><h4>' + esc(rally.opts.title) + '</h4>' +
+    '<div class="hint">' + (rally.sel
+      ? '已选中 <b>' + esc(seatName(rally.sel)) + '</b>，再点另一个位置就对调；点它自己或按 Esc 取消'
+      : '点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）') + '</div>' +
+    '<div class="tbl-wrap"><table class="plan"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table></div>' +
+    benchHtml + '</div>'
+}
+
+/** 某个位置上是谁，用来写提示 */
+function seatName(key) {
+  var p = String(key).split(':')
+  if (p[0] === 'b') {
+    var m = (rally.plan.bench || [])[Number(p[1])]
+    return m ? m.name : '替补空位'
+  }
+  var car = rally.plan.cars[Number(p[0])]
+  if (!car) return '空位'
+  var who = p[1] === 'h' ? car.head : car.bodies[Number(p[1])]
+  return who ? who.name : '空位'
 }
 
 function rallyOpts() {
@@ -909,11 +977,29 @@ function bindRally() {
     rally.plan = rally.mode === 'attack'
       ? Rally.generateAttack(state.members, opts)
       : Rally.generateDefense(state.members, opts)
+    rally.sel = ''
     renderRally()
   }
 
   var xlsx = $('rXlsx')
   if (xlsx) xlsx.onclick = exportRallyExcel
+
+  // 点两下换位置
+  Array.prototype.forEach.call(document.querySelectorAll('[data-seat]'), function (td) {
+    td.onclick = function () {
+      var key = td.getAttribute('data-seat')
+      if (!rally.sel) {
+        if (seatName(key) === '空位' || seatName(key) === '替补空位') return
+        rally.sel = key
+      } else if (rally.sel === key) {
+        rally.sel = ''
+      } else {
+        rally.plan = Rally.swapSeats(rally.plan, rally.sel, key)
+        rally.sel = ''
+      }
+      renderRally()
+    }
+  })
 }
 
 /** Excel 由云函数生成（带颜色），回来的是 base64，这边转成文件下载 */
@@ -971,6 +1057,8 @@ function renderPlacement() {
     html += '<div class="note">' + g.city + '×' + g.city + ' 城池 · 黑土上 ' + g.up + ' 圈 / 下 ' + g.down + ' 圈 · ' +
       '黑土 ' + g.blackCount + ' 格、白土 ' + g.whiteCount + ' 格' +
       (place.tray.length ? ' · <b class="warn">待分配 ' + place.tray.length + ' 人</b>：' + esc(place.tray.join('、')) : '') + '</div>'
+    html += '<div class="hint">' + placeHint() + '</div>'
+    if (place.msg) html += '<div class="note note-ok">' + esc(place.msg) + '</div>'
   }
   html += '</div>'
 
@@ -978,6 +1066,25 @@ function renderPlacement() {
   $('body').innerHTML = html
   if (g) drawPlacement()
   bindPlacement()
+}
+
+/** 顶上那行操作提示，按当前选中状态变 */
+function placeHint() {
+  if (place.pending) {
+    var a = (place.assign[place.pending.from] || []).join(' / ')
+    var b = (place.assign[place.pending.to] || []).join(' / ')
+    return '把 <b>' + esc(a) + '</b> 和 <b>' + esc(b) + '</b> 怎么处理？' +
+      '<button class="btn btn-sm" data-act="swap">交换</button>' +
+      '<button class="btn btn-sm" data-act="merge">合并到一格</button>' +
+      '<button class="btn btn-sm" data-act="cancel">取消</button>'
+  }
+  if (place.sel) {
+    var names = place.assign[place.sel] || []
+    return '已选中 <b>' + esc(names.join(' / ')) + '</b>：再点一个格子——空格就挪过去，有人就问你换还是合。' +
+      (names.length > 1 ? '<button class="btn btn-sm" data-act="split">拆成两格</button>' : '') +
+      '<button class="btn btn-sm" data-act="cancel">取消</button>'
+  }
+  return '点一个有人的格子，再点另一个格子即可<b>移动 / 交换 / 合并</b>；两个人一格的可以<b>拆开</b>。'
 }
 
 /** 画菱形：每格一个旋转 45° 的方块，名字正着写 */
@@ -992,10 +1099,12 @@ function drawPlacement() {
     if (cell.kind === 'city' || cell.kind === 'battle') return
     var color = Placement.ringColor(cell.ring, cell.soil)
     var names = (place.assign[cell.id] || [])
-    parts.push('<g transform="translate(' + ctr.x + ',' + ctr.y + ') rotate(45)">' +
-      '<rect x="' + (-D / 2.83) + '" y="' + (-D / 2.83) + '" width="' + (D / 1.414) + '" height="' + (D / 1.414) + '" rx="3" fill="' + color.fill + '" stroke="' + color.stroke + '" stroke-width="1.5"/></g>')
+    var on = place.sel === cell.id || (place.pending && (place.pending.from === cell.id || place.pending.to === cell.id))
+    parts.push('<g class="cellbox" data-cell="' + cell.id + '" transform="translate(' + ctr.x + ',' + ctr.y + ') rotate(45)">' +
+      '<rect x="' + (-D / 2.83) + '" y="' + (-D / 2.83) + '" width="' + (D / 1.414) + '" height="' + (D / 1.414) + '" rx="3" fill="' +
+      (on ? '#ffe9a8' : color.fill) + '" stroke="' + (on ? '#e0a800' : color.stroke) + '" stroke-width="' + (on ? 3 : 1.5) + '"/></g>')
     names.forEach(function (n, i) {
-      parts.push('<text x="' + ctr.x + '" y="' + (ctr.y + (names.length === 2 ? (i === 0 ? -5 : 9) : 4)) + '" text-anchor="middle" font-size="' + (names.length === 2 ? 10 : 11) + '" fill="#1f2329">' + esc(Placement.clip(n, names.length === 2 ? 5 : 6)) + '</text>')
+      parts.push('<text class="cellbox" data-cell="' + cell.id + '" x="' + ctr.x + '" y="' + (ctr.y + (names.length === 2 ? (i === 0 ? -5 : 9) : 4)) + '" text-anchor="middle" font-size="' + (names.length === 2 ? 10 : 11) + '" fill="#1f2329">' + esc(Placement.clip(n, names.length === 2 ? 5 : 6)) + '</text>')
     })
   })
   // 城池：一整块
@@ -1028,11 +1137,59 @@ function bindPlacement() {
     place.grid = grid
     place.assign = res.assign
     place.tray = (made.tray || []).concat(res.rest || [])
+    place.sel = ''
+    place.pending = null
+    place.msg = ''
     renderPlacement()
   }
 
   var png = $('pPng')
   if (png) png.onclick = downloadPlacementPng
+
+  // 格子点击：选 → 再选 → 移动 / 问换还是合
+  Array.prototype.forEach.call(document.querySelectorAll('[data-cell]'), function (node) {
+    node.onclick = function () {
+      if (place.pending) return
+      var id = node.getAttribute('data-cell')
+      var has = (place.assign[id] || []).length
+      place.msg = ''
+      if (!place.sel) {
+        if (!has) return
+        place.sel = id
+      } else if (place.sel === id) {
+        place.sel = ''
+      } else if (!has) {
+        var moved = Placement.drop(place.assign, place.sel, id, 'swap')
+        place.assign = moved.assign
+        place.sel = ''
+      } else {
+        place.pending = { from: place.sel, to: id }
+        place.sel = ''
+      }
+      renderPlacement()
+    }
+  })
+
+  // 操作条上的按钮
+  Array.prototype.forEach.call(document.querySelectorAll('[data-act]'), function (btn) {
+    btn.onclick = function () {
+      var act = btn.getAttribute('data-act')
+      if (act === 'cancel') { place.sel = ''; place.pending = null }
+      else if (act === 'split') {
+        var r = Placement.split(place.grid.order, place.assign, place.sel)
+        place.assign = r.assign
+        if (r.toTray) { place.tray = place.tray.concat([r.toTray]); place.msg = '没有空格了，' + r.toTray + ' 放进了待分配' }
+        else place.msg = '已拆开'
+        place.sel = ''
+      } else if (place.pending) {
+        var res = Placement.drop(place.assign, place.pending.from, place.pending.to, act)
+        if (res.error) place.msg = res.error
+        else { place.assign = res.assign; place.msg = act === 'merge' ? '已合并到一格' : '已交换' }
+        place.pending = null
+      }
+      renderPlacement()
+    }
+  })
 }
 
 /** SVG 转 PNG：画到 canvas 再导出，不用额外依赖 */
