@@ -49,7 +49,7 @@ var store = {
 
 var token = store.read()
 
-var state = { me: null, members: [], season: null, view: 'mine', sort: { key: 'power', desc: true }, keyword: '' }
+var state = { me: null, members: [], season: null, loginBy: {}, view: 'mine', sort: { key: 'power', desc: true }, keyword: '' }
 
 /** 集结分配：表单参数 + 生成出来的方案，切走再切回来不丢 */
 var rally = {
@@ -62,7 +62,11 @@ var rally = {
 }
 
 /** 我的属性：传完截图后拿变化前的值做对比 */
-var mine = { before: null, busy: '', msg: '', err: '' }
+var mine = { before: null, busy: '', msg: '', err: '', form: null, saving: false }
+
+/** 兵力按宫2 / 宫3 两档填 */
+var TROOP_LEVELS = ['2', '3']
+var TROOP_ARMS = [['inf', '步兵'], ['cav', '骑兵'], ['arc', '弓兵']]
 
 /** 黑土落位：预设 + 排好的格子 */
 var place = {
@@ -234,10 +238,14 @@ function load() {
   $('body').innerHTML = '<div class="card"><div class="empty">读取中…</div></div>'
   return Promise.all([
     call('admin.memberList', { roster: 'in', sort: 'powerDesc', page: 1, pageSize: 200 }),
-    call('season.list', {})
+    call('season.list', {}),
+    call('admin.userList', {})
   ]).then(function (res) {
     state.members = res[0].rows
     state.season = res[1].season
+    // 最后登录时间在 appUsers 上，按 uid 挂起来给「绑定情况」用
+    state.loginBy = {}
+    ;(res[2].rows || []).forEach(function (u) { state.loginBy[u.uid] = u.lastLoginAt })
     render()
   }).catch(function (e) {
     $('body').innerHTML = '<div class="card"><div class="empty danger">' + esc(e.message) + '</div></div>'
@@ -306,7 +314,12 @@ function sortRows(rows, key, desc) {
     heroPower: function (m) { return m.heroPower },
     seasonScore: function (m) { return m.seasonScore },
     attrsUpdatedAt: function (m) { return m.attrsUpdatedAt ? new Date(m.attrsUpdatedAt).getTime() : 0 },
-    heroPowerUpdatedAt: function (m) { return m.heroPowerUpdatedAt ? new Date(m.heroPowerUpdatedAt).getTime() : null }
+    heroPowerUpdatedAt: function (m) { return m.heroPowerUpdatedAt ? new Date(m.heroPowerUpdatedAt).getTime() : null },
+    boundAt: function (m) { return m.boundAt ? new Date(m.boundAt).getTime() : null },
+    lastLoginAt: function (m) {
+      var t = state.loginBy[m.boundUid]
+      return t ? new Date(t).getTime() : null
+    }
   }[key]
 
   // attr.infDef 这种：按六维里的某一项排
@@ -486,15 +499,19 @@ var VIEWS = {
 
   users: {
     title: '绑定情况',
-    desc: '谁已经把微信绑到了名单里的成员账号上。没绑的人在小程序里看不到自己的数据。',
+    desc: '谁已经把微信绑到了名单里的成员账号上。没绑的人在小程序里看不到自己的数据。' +
+      '最后登录按微信号算，可以看出谁很久没打开过小程序了。',
     cols: [
-      { key: '', label: '#' }, { key: 'name', label: '成员' }, { key: '', label: '绑定' },
+      { key: 'name', label: '成员' }, { key: '', label: '绑定' },
+      { key: 'boundAt', label: '绑定时间' }, { key: 'lastLoginAt', label: '最后登录' },
       { key: 'power', label: '战力' }, { key: 'strength', label: '实力' }, { key: '', label: '曾用名' }
     ],
-    row: function (m, i) {
-      return '<tr><td>' + (i + 1) + '</td>' +
-        '<td class="name">' + esc(m.name) + '</td>' +
+    row: function (m) {
+      var login = state.loginBy[m.boundUid]
+      return '<tr><td class="name">' + esc(m.name) + '</td>' +
         '<td>' + (m.boundUid ? '<span class="ok">已绑定</span>' : '<span class="danger">未绑定</span>') + '</td>' +
+        (m.boundUid ? timeCell(m.boundAt, '—') : '<td class="muted">—</td>') +
+        (m.boundUid ? timeCell(login, '没登录过') : '<td class="muted">—</td>') +
         '<td class="num">' + big(m.power) + '</td>' +
         '<td>' + big(m.strength) + '</td>' +
         '<td class="muted">' + esc((m.formerNames || []).join('、') || '—') + '</td></tr>'
@@ -1258,12 +1275,12 @@ var MY_ATTRS = [
 ]
 
 function renderMine() {
-  $('viewTitle').textContent = '我的属性'
+  $('viewTitle').textContent = '我的信息'
   var me = state.me || {}
   var m = me.member
 
   if (!m) {
-    $('body').innerHTML = '<div class="card"><h4>我的属性</h4>' +
+    $('body').innerHTML = '<div class="card"><h4>我的信息</h4>' +
       '<p class="desc">你的微信还没绑定名单里的成员账号，先在小程序里「去绑定」，绑完这里就能传截图了。</p></div>'
     return
   }
@@ -1307,6 +1324,31 @@ function renderMine() {
     '<input type="file" accept="image/*" id="shotHero" hidden /></label></div>' +
     '</div>'
 
+  // 可以手填的几项：集结值、单人出征、两档兵力
+  var f = mine.form || (mine.form = formFrom(m))
+  html += '<div class="card"><h4>集结与兵力</h4>' +
+    '<p class="desc">这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，' +
+    '以及这一队能带多少兵。兵力按兵营等级分两档填，只有一种就只填那一行。</p>' +
+    '<div class="form">' +
+    '<label>最高集结值 <input type="number" step="0.01" id="fBonus" value="' + esc(f.maxBonus) + '" style="width:110px" />%</label>' +
+    '<label>单人出征数量 <input type="number" id="fMarch" value="' + esc(f.maxMarch) + '" style="width:130px" placeholder="如 143510" /></label>' +
+    '</div>' +
+    '<div class="tbl-wrap" style="margin-top:14px"><table class="troops"><thead><tr>' +
+    '<th></th>' + TROOP_ARMS.map(function (a) { return '<th>' + a[1] + '</th>' }).join('') + '<th>小计</th></tr></thead><tbody>' +
+    TROOP_LEVELS.map(function (lv) {
+      return '<tr><td class="lv">宫' + lv + '</td>' +
+        TROOP_ARMS.map(function (a) {
+          return '<td><input type="number" step="0.1" class="tin" data-lv="' + lv + '" data-arm="' + a[0] + '" value="' + esc(f.troops[lv][a[0]]) + '" placeholder="-" /></td>'
+        }).join('') +
+        '<td class="num">' + fmtSum(levelSum(f, lv)) + '</td></tr>'
+    }).join('') +
+    '</tbody></table></div>' +
+    '<div class="sum-bar"><span>两档合计 <b class="num">' + fmtSum(allSum(f)) + '</b> 万</span>' +
+    '<span class="muted">单位：万，可以填小数</span></div>' +
+    '<div class="bar" style="margin-top:14px"><span class="sp"></span>' +
+    '<button class="btn btn-primary" id="fSave"' + (mine.saving ? ' disabled' : '') + '>' + (mine.saving ? '保存中…' : '保存') + '</button></div>' +
+    '</div>'
+
   if (mine.err) html += '<div class="card"><div class="note note-bad">' + esc(mine.err) + '</div></div>'
   if (mine.msg) html += '<div class="card"><div class="note note-ok">' + esc(mine.msg) + '</div></div>'
   if (mine.before) html += renderDiff(mine.before, m)
@@ -1344,6 +1386,45 @@ function renderDiff(before, now) {
     '</div>'
 }
 
+/** 把成员数据摊成表单用的字符串 */
+function formFrom(m) {
+  var t = {}
+  TROOP_LEVELS.forEach(function (lv) {
+    t[lv] = {}
+    TROOP_ARMS.forEach(function (a) {
+      var v = m.troopsByLevel && m.troopsByLevel[lv] ? m.troopsByLevel[lv][a[0]] : null
+      t[lv][a[0]] = v === null || v === undefined ? '' : String(v)
+    })
+  })
+  return {
+    maxBonus: m.maxBonus === null || m.maxBonus === undefined ? '' : String(m.maxBonus),
+    maxMarch: m.maxMarch === null || m.maxMarch === undefined ? '' : String(m.maxMarch),
+    troops: t
+  }
+}
+
+function levelSum(f, lv) {
+  var s = null
+  TROOP_ARMS.forEach(function (a) {
+    var raw = String(f.troops[lv][a[0]] || '').trim()
+    if (!raw) return
+    var n = Number(raw)
+    if (isFinite(n)) s = (s || 0) + n
+  })
+  return s
+}
+
+function allSum(f) {
+  var s = null
+  TROOP_LEVELS.forEach(function (lv) {
+    var one = levelSum(f, lv)
+    if (one !== null) s = (s || 0) + one
+  })
+  return s
+}
+
+var fmtSum = function (v) { return v === null ? '—' : String(Math.round(v * 10) / 10) }
+
 function bindMine() {
   var hook = function (id, kind) {
     var el = $(id)
@@ -1356,6 +1437,55 @@ function bindMine() {
   }
   hook('shotAttrs', 'attrs')
   hook('shotHero', 'hero')
+
+  var f = mine.form
+  if (!f) return
+  var bonus = $('fBonus')
+  if (bonus) bonus.oninput = function () { f.maxBonus = bonus.value }
+  var march = $('fMarch')
+  if (march) march.oninput = function () { f.maxMarch = march.value }
+  Array.prototype.forEach.call(document.querySelectorAll('.tin'), function (el) {
+    el.oninput = function () {
+      f.troops[el.getAttribute('data-lv')][el.getAttribute('data-arm')] = el.value
+      // 只刷小计，别整屏重画，不然输入框会失焦
+      var row = el.parentNode && el.parentNode.parentNode
+      if (row && row.lastChild) row.lastChild.textContent = fmtSum(levelSum(f, el.getAttribute('data-lv')))
+    }
+  })
+  var save = $('fSave')
+  if (save) save.onclick = saveMine
+}
+
+/** 保存手填的几项；六维和武将战力不在这里，它们只认截图 */
+function saveMine() {
+  if (mine.saving) return
+  var f = mine.form
+  var march = String(f.maxMarch || '').replace(/[,\s]/g, '')
+  if (march && !/^\d+$/.test(march)) {
+    mine.err = '单人出征数量请填完整数字，例如 143510'
+    return renderMine()
+  }
+  mine.saving = true
+  mine.err = ''
+  mine.msg = ''
+  renderMine()
+  call('profile.save', {
+    troopsByLevel: f.troops,
+    camps: (state.me.member && state.me.member.camps) || [],
+    maxBonus: f.maxBonus,
+    battleReportFileId: state.me.member && state.me.member.battleReportFileId,
+    maxMarch: march
+  }).then(function (res) {
+    state.me.member = res.member
+    mine.form = formFrom(res.member)
+    mine.msg = '已保存'
+    load()
+  }).catch(function (e) {
+    mine.err = e.message
+  }).then(function () {
+    mine.saving = false
+    renderMine()
+  })
 }
 
 /**
@@ -1374,6 +1504,7 @@ function uploadShot(file, kind) {
     return call('web.uploadShot', { kind: kind, base64: dataUrl, ext: 'jpg' })
   }).then(function (res) {
     state.me.member = res.member
+    mine.form = formFrom(res.member)
     mine.msg = kind === 'attrs'
       ? '识别到 ' + res.recognized.count + '/6 项并已保存' +
         (res.recognized.missing && res.recognized.missing.length ? '（有 ' + res.recognized.missing.length + ' 项没读出来，可以换张更清楚的重传）' : '')

@@ -312,3 +312,14 @@ kbd {
   color: #6c5ce7;
 }
 .btn kbd { border-color: #ded9fa; }
+
+/* 兵力两档表 */
+table.troops { width: auto; min-width: 420px; }
+table.troops th { background: #f3f1ff; color: #6c5ce7; padding: 8px 10px; position: static; }
+table.troops th:first-child { border-radius: 8px 0 0 0; }
+table.troops th:last-child { border-radius: 0 8px 0 0; }
+table.troops td { padding: 6px 8px; }
+table.troops td.lv { color: #4b5563; font-weight: 600; white-space: nowrap; }
+table.troops tbody tr:nth-child(even) { background: none; }
+table.troops tbody tr:hover { background: none; }
+.tin { width: 92px; text-align: center; }
