@@ -11,8 +11,43 @@
 var API = 'https://cloud1-d4gobc9ws5134943d-1483434711.ap-shanghai.app.tcloudbase.com/api'
 
 var TOKEN_KEY = 'sanbing_web_token'
-var token = ''
-try { token = localStorage.getItem(TOKEN_KEY) || '' } catch (e) { token = '' }
+
+/**
+ * 登录态存哪儿。
+ * 优先 localStorage；浏览器禁了本地存储（无痕、第三方数据拦截等）就退回 cookie；
+ * 两个都不行就只留在内存里，并且**明确告诉用户刷新后要重扫**，而不是悄悄把人踢回登录页。
+ */
+var store = {
+  how: 'none',
+  read: function () {
+    try {
+      var v = localStorage.getItem(TOKEN_KEY)
+      if (v) { this.how = 'local'; return v }
+    } catch (e) {}
+    var m = String(document.cookie || '').match(new RegExp('(?:^|; )' + TOKEN_KEY + '=([^;]*)'))
+    if (m) { this.how = 'cookie'; return decodeURIComponent(m[1]) }
+    return ''
+  },
+  write: function (v) {
+    try {
+      localStorage.setItem(TOKEN_KEY, v)
+      // 写完立刻读一次确认真的存住了（有的浏览器 setItem 不报错但读不回来）
+      if (localStorage.getItem(TOKEN_KEY) === v) { this.how = 'local'; return true }
+    } catch (e) {}
+    try {
+      document.cookie = TOKEN_KEY + '=' + encodeURIComponent(v) + '; max-age=604800; path=/; samesite=lax'
+      if (String(document.cookie || '').indexOf(TOKEN_KEY + '=') >= 0) { this.how = 'cookie'; return true }
+    } catch (e) {}
+    this.how = 'none'
+    return false
+  },
+  clear: function () {
+    try { localStorage.removeItem(TOKEN_KEY) } catch (e) {}
+    try { document.cookie = TOKEN_KEY + '=; max-age=0; path=/' } catch (e) {}
+  }
+}
+
+var token = store.read()
 
 var state = { me: null, members: [], season: null, view: 'roster', sort: { key: 'power', desc: true }, keyword: '' }
 
@@ -50,6 +85,13 @@ function call(action, data) {
 }
 
 function $(id) { return document.getElementById(id) }
+
+/** 这种错是「这个登录态确实不能用了」，要清掉重扫 */
+function fatal(msg) {
+  var e = new Error(msg)
+  e.fatal = true
+  return e
+}
 
 // ---------------- 登录 ----------------
 
@@ -94,8 +136,8 @@ function poll(ticket) {
       if (res.status !== 'confirmed') return
       stopLogin()
       token = res.token
-      try { localStorage.setItem(TOKEN_KEY, token) } catch (e) {}
-      $('loginTip').textContent = '登录成功，正在进入…'
+      var kept = store.write(token)
+      $('loginTip').textContent = kept ? '登录成功，正在进入…' : '登录成功（这台浏览器存不住登录态，刷新后要重扫）'
       boot()
     })
     .catch(function () {})
@@ -104,7 +146,7 @@ function poll(ticket) {
 function logout() {
   call('web.logout').catch(function () {})
   token = ''
-  try { localStorage.removeItem(TOKEN_KEY) } catch (e) {}
+  store.clear()
   location.reload()
 }
 
@@ -119,19 +161,32 @@ function boot() {
   }
   call('identity.whoami')
     .then(function (me) {
-      if (!me.alliance || !me.alliance.active) throw new Error('这个账号还没加入已激活的同盟')
-      if (me.role !== 'admin' && me.role !== 'super') throw new Error('只有管理员能用电脑版')
+      if (!me.alliance || !me.alliance.active) throw fatal('这个账号还没加入已激活的同盟')
+      if (me.role !== 'admin' && me.role !== 'super') throw fatal('只有管理员能用电脑版')
       state.me = me
       $('login').style.display = 'none'
       $('app').classList.add('on')
       $('allyName').textContent = me.alliance.name
       $('allySub').textContent = me.alliance.serverNo + ' 区 · ' + me.alliance.season
-      $('whoName').textContent = (me.nickname || '管理员') + (me.role === 'super' ? '（超管）' : '')
+      $('whoName').textContent = (me.nickname || '管理员') + (me.role === 'super' ? '（超管）' : '') +
+        (store.how === 'none' ? ' · 刷新后要重扫' : '')
       return load()
     })
     .catch(function (e) {
+      // 服务端明确说这个 token 不认（过期 / 被退掉 / 不是管理员）才清掉重扫；
+      // 网络抖一下、接口 500 这种不该把人踢回登录页，给个重试就行
+      var dead = e.errCode === 'WEB_UNAUTHED' || e.errCode === 'FORBIDDEN' || e.fatal
+      if (!dead) {
+        $('login').style.display = 'flex'
+        $('app').classList.remove('on')
+        $('qr').innerHTML = '<div class="qr-mask">连不上服务器<br>点下面重试</div>'
+        $('loginTip').textContent = (e.message || '网络不太好') + '（登录态还在，重试就行）'
+        $('refreshQr').textContent = '重试'
+        $('refreshQr').onclick = function () { $('refreshQr').textContent = '刷新二维码'; boot() }
+        return
+      }
       token = ''
-      try { localStorage.removeItem(TOKEN_KEY) } catch (err) {}
+      store.clear()
       $('login').style.display = 'flex'
       $('app').classList.remove('on')
       newTicket()
