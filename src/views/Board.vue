@@ -19,7 +19,9 @@ const hasMore = ref(false)
 const loading = ref(true)
 const busy = ref(false)
 
+const title = ref('')
 const text = ref('')
+const maxTitle = ref(30)
 const maxPost = ref(500)
 const maxComment = ref(200)
 /** 哪条帖子正在写评论：postId -> 内容 */
@@ -38,6 +40,7 @@ async function load(p = 1) {
     page.value = res.page
     hasMore.value = res.hasMore
     maxPost.value = (res.limits && res.limits.post) || 500
+    maxTitle.value = (res.limits && res.limits.title) || 30
     maxComment.value = (res.limits && res.limits.comment) || 200
   } catch (e) {
     message.error(e.message)
@@ -52,7 +55,8 @@ async function publish() {
   if (!content) return message.warning('写点什么再发')
   busy.value = true
   try {
-    await call('board.publish', { content })
+    await call('board.publish', { title: title.value.trim(), content })
+    title.value = ''
     text.value = ''
     await load(1)
   } catch (e) {
@@ -132,8 +136,9 @@ async function pin(row) {
       </n-alert>
 
       <template v-if="bound">
+        <n-input v-model:value="title" :maxlength="maxTitle" placeholder="标题（选填）" />
         <n-input v-model:value="text" type="textarea" :rows="3" :maxlength="maxPost" show-count
-          placeholder="说点什么，盟里的人都能看到" />
+          placeholder="说点什么，盟里的人都能看到" style="margin-top: 10px" />
         <div class="bar">
           <n-button type="primary" :loading="busy" @click="publish">发表</n-button>
         </div>
@@ -159,6 +164,7 @@ async function pin(row) {
           <n-button v-if="r.canRemove" size="tiny" quaternary type="error" @click="removePost(r)">删除</n-button>
         </div>
 
+        <div v-if="r.title" class="title">{{ r.title }}</div>
         <div class="text">{{ r.content }}</div>
 
         <div v-if="r.comments && r.comments.length" class="cmts">
@@ -202,6 +208,9 @@ async function pin(row) {
 .name { font-size: 14px; font-weight: 600; }
 .time { font-size: 12px; color: #8a9099; margin-top: 2px; }
 /* 正文保留换行 */
+/* 标题选填，有才显示 */
+.title { margin-top: 12px; font-size: 16px; font-weight: 600; line-height: 1.5; word-break: break-word; }
+.title + .text { margin-top: 6px; }
 .text { margin-top: 12px; font-size: 14px; line-height: 1.8; color: #3c4350; white-space: pre-wrap; word-break: break-word; }
 .cmts { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #f6f7f9; }
 .cmt { font-size: 13px; line-height: 1.9; color: #4b5563; }
