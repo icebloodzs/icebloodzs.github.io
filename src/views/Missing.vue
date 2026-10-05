@@ -46,19 +46,26 @@ const columns = [nameCol, lackCol, boundCol, bigCol('战力', 'power'), timeCol(
 </script>
 
 <template>
-  <TableCard
-    title="遗漏排查"
-    desc="找出还没填集结值、没填兵力、没传属性截图的人。勾选条件是「或」的关系。"
-    :columns="columns"
-    :rows="rows"
-    :scroll-x="860"
-  >
-    <template #filters>
-      <n-checkbox-group v-model:value="picked" style="margin-bottom: 14px">
-        <n-space>
-          <n-checkbox v-for="o in OPTS" :key="o.value" :value="o.value" :label="o.label" />
-        </n-space>
-      </n-checkbox-group>
-    </template>
-  </TableCard>
+  <div class="page">
+    <TableCard
+      title="遗漏排查"
+      desc="找出还没填集结值、没填兵力、没传属性截图的人。勾选条件是「或」的关系。"
+      :columns="columns"
+      :rows="rows"
+      :scroll-x="860"
+    >
+      <template #filters>
+        <n-checkbox-group v-model:value="picked" style="margin-bottom: 14px">
+          <n-space>
+            <n-checkbox v-for="o in OPTS" :key="o.value" :value="o.value" :label="o.label" />
+          </n-space>
+        </n-checkbox-group>
+      </template>
+    </TableCard>
+  </div>
 </template>
+
+<style scoped>
+/* 整页不滚，表格在卡片里自己滚 */
+.page { height: var(--page-h); min-height: 360px; }
+</style>

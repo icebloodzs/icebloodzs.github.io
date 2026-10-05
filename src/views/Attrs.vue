@@ -32,11 +32,18 @@ const columns = [
 </script>
 
 <template>
-  <TableCard
-    title="属性排名"
-    desc="六维来自成员自己传的「属性加成」截图，识别后入库，不支持手动修改。点表头可以按单项排序，最后一列是这份属性什么时候传的。"
-    :columns="columns"
-    :rows="members"
-    :scroll-x="1060"
-  />
+  <div class="page">
+    <TableCard
+      title="属性排名"
+      desc="六维来自成员自己传的「属性加成」截图，识别后入库，不支持手动修改。点表头可以按单项排序，最后一列是这份属性什么时候传的。"
+      :columns="columns"
+      :rows="members"
+      :scroll-x="1060"
+    />
+  </div>
 </template>
+
+<style scoped>
+/* 整页不滚，表格在卡片里自己滚 */
+.page { height: var(--page-h); min-height: 360px; }
+</style>

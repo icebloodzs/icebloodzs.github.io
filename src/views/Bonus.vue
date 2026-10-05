@@ -76,11 +76,18 @@ const columns = computed(() => [
 </style>
 
 <template>
-  <TableCard
-    title="成员加成"
-    desc="集结值和兵力由成员在「我的信息」里自己填，属性由截图识别。兵力按本赛季最高和次高两档兵营展示，没填的写「-」。按资料更新时间排序能快速找出没及时更新的人。"
-    :columns="columns"
-    :rows="members"
-    :scroll-x="1100"
-  />
+  <div class="page">
+    <TableCard
+      title="成员加成"
+      desc="集结值和兵力由成员在「我的信息」里自己填，属性由截图识别。兵力按本赛季最高和次高两档兵营展示，没填的写「-」。按资料更新时间排序能快速找出没及时更新的人。"
+      :columns="columns"
+      :rows="members"
+      :scroll-x="1100"
+    />
+  </div>
 </template>
+
+<style scoped>
+/* 整页不滚，表格在卡片里自己滚 */
+.page { height: var(--page-h); min-height: 360px; }
+</style>

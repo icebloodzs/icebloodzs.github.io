@@ -232,6 +232,15 @@ boot()
   </n-config-provider>
 </template>
 
+<style>
+/*
+ * 列表页要「整页不滚、表格自己滚」，得先有个确定的高度。
+ * 一屏 − 顶栏 64 − 内容区上下留白 (20 + 40) = 可用高度。
+ * 顶栏高度和这两个留白值改了，这里要跟着改（.top 的 height、n-layout 的 content-style）。
+ */
+:root { --page-h: calc(100vh - 124px); }
+</style>
+
 <style scoped>
 .topbar {
   position: fixed;

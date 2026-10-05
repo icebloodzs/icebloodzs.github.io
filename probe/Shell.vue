@@ -5,6 +5,10 @@ import Mine from '../src/views/Mine.vue'
 import Rally from '../src/views/Rally.vue'
 import Placement from '../src/views/Placement.vue'
 import Season from '../src/views/Season.vue'
+import Roster from '../src/views/Roster.vue'
+import Attrs from '../src/views/Attrs.vue'
+import Missing from '../src/views/Missing.vue'
+import Users from '../src/views/Users.vue'
 
 // 用 #bonus / #mine 看真实视图，#scrolled 看滚动时顶栏固不固定
 const hash = location.hash
@@ -37,7 +41,7 @@ provide('app', {
   }),
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}
 })
-const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season }
+const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users }
 const inner = computed(() => VIEWS[Object.keys(VIEWS).find((k) => hash.includes(k))] || null)
 onMounted(() => {
   // #gen：自动点一下「生成」，好把排好的表截下来
@@ -63,6 +67,15 @@ onMounted(() => {
         if (w) { w.scrollLeft = (w.scrollWidth - w.clientWidth) / 2; w.scrollTop = (w.scrollHeight - w.clientHeight) / 2 }
       }, 300)
     }, 250)
+  }
+  // #tbl：滚表格自己的那个滚动区，看表头有没有钉住
+  if (hash.includes('tbl')) {
+    setTimeout(() => {
+      const t = document.querySelector('.n-data-table')
+      const hits = [...(t ? t.querySelectorAll('*') : [])].filter((x) => x.scrollHeight > x.clientHeight + 5)
+      hits.forEach((x) => { x.scrollTop = 900 })
+      console.log('可滚的元素', hits.map((x) => x.className))
+    }, 400)
   }
   if (!hash.includes('scrolled')) return
   setTimeout(() => {
@@ -138,6 +151,15 @@ const menuOptions = [
             </div>
           </n-layout>
 </template>
+
+<style>
+/*
+ * 列表页要「整页不滚、表格自己滚」，得先有个确定的高度。
+ * 一屏 − 顶栏 64 − 内容区上下留白 (20 + 40) = 可用高度。
+ * 顶栏高度和这两个留白值改了，这里要跟着改（.top 的 height、n-layout 的 content-style）。
+ */
+:root { --page-h: calc(100vh - 124px); }
+</style>
 
 <style scoped>
 .topbar {

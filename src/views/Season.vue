@@ -59,36 +59,28 @@ const bands = computed(() => {
 
 <template>
   <div class="page">
-    <!-- 档位这块往下翻的时候钉在顶上，对着看评分落在哪一档 -->
-    <div class="pin">
-      <n-card :bordered="false" size="small" :title="(season && season.label) || '赛季'">
-        <n-space>
-          <n-tag v-for="b in bands" :key="b[0]" :type="b[2]" :bordered="false">{{ b[0] }} {{ b[1] }}</n-tag>
-        </n-space>
-      </n-card>
-    </div>
+    <!-- 档位这块不动，下面表格自己滚 -->
+    <n-card :bordered="false" size="small" :title="(season && season.label) || '赛季'">
+      <n-space>
+        <n-tag v-for="b in bands" :key="b[0]" :type="b[2]" :bordered="false">{{ b[0] }} {{ b[1] }}</n-tag>
+      </n-space>
+    </n-card>
 
-    <TableCard
-      title="赛季评分"
-      desc="评分 = 成员实力 − 武将战力。武将战力只能由成员自己上传截图识别，不支持手动修改。 点表头可以按单项排序，最后一列是这份评分什么时候传的。"
-      :columns="columns"
-      :rows="members"
-      :scroll-x="960"
-    />
+    <div class="rest">
+      <TableCard
+        title="赛季评分"
+        desc="评分 = 成员实力 − 武将战力。武将战力只能由成员自己上传截图识别，不支持手动修改。 点表头可以按单项排序，最后一列是这份评分什么时候传的。"
+        :columns="columns"
+        :rows="members"
+        :scroll-x="960"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+/* 整页不滚：上面档位卡片按内容高，剩下的全给表格，表格在卡片里自己滚 */
+.page { height: var(--page-h); min-height: 360px; display: flex; flex-direction: column; }
 .page > * + * { margin-top: 16px; }
-.pin {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  /* 把内容区顶上那 20px 留白包进来，钉住之后下面的表格才不会从缝里露出来 */
-  margin-top: -20px;
-  padding-top: 20px;
-  background: #f5f6fa;
-}
-/* 钉住之后表格会贴着它往上滚，给点阴影才分得清上下 */
-.pin :deep(.n-card) { box-shadow: 0 2px 10px rgba(31, 35, 41, 0.06); }
+.rest { flex: 1; min-height: 0; }
 </style>

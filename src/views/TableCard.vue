@@ -50,7 +50,12 @@ async function exportExcel() {
 </script>
 
 <template>
-  <n-card :title="title" :bordered="false">
+  <n-card
+    class="tc"
+    :title="title"
+    :bordered="false"
+    content-style="display:flex;flex-direction:column;min-height:0"
+  >
     <template #header-extra>
       <n-space align="center">
         <n-input v-if="search" v-model:value="keyword" placeholder="搜成员名" clearable style="width: 180px" />
@@ -61,18 +66,24 @@ async function exportExcel() {
     <n-alert v-if="desc" type="info" :bordered="false" style="margin-bottom: 14px">{{ desc }}</n-alert>
     <slot name="filters" />
 
+    <!-- flex-height：表格自己占满剩下的高度，表头钉住、只有表体滚 -->
     <n-data-table
       :columns="columns"
       :data="shown"
       :bordered="false"
       size="small"
       :scroll-x="scrollX || undefined"
+      flex-height
       striped
+      style="flex: 1; min-height: 0"
     />
     <div class="count">共 {{ shown.length }} 人</div>
   </n-card>
 </template>
 
 <style scoped>
-.count { margin-top: 10px; color: #8a9099; font-size: 12px; }
+/* 撑满外面给的高度；外面没给确定高度时退化成原来那样跟着内容长 */
+.tc { height: 100%; display: flex; flex-direction: column; }
+.tc :deep(.n-card__content) { min-height: 0; }
+.count { margin-top: 10px; color: #8a9099; font-size: 12px; flex: none; }
 </style>

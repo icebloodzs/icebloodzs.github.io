@@ -55,11 +55,18 @@ const columns = computed(() => [
 </script>
 
 <template>
-  <TableCard
-    title="绑定情况"
-    desc="谁已经把微信绑到了名单里的成员账号上。没绑的人在小程序里看不到自己的数据。最后登录按微信号算，可以看出谁很久没打开过小程序了。"
-    :columns="columns"
-    :rows="members"
-    :scroll-x="1000"
-  />
+  <div class="page">
+    <TableCard
+      title="绑定情况"
+      desc="谁已经把微信绑到了名单里的成员账号上。没绑的人在小程序里看不到自己的数据。最后登录按微信号算，可以看出谁很久没打开过小程序了。"
+      :columns="columns"
+      :rows="members"
+      :scroll-x="1000"
+    />
+  </div>
 </template>
+
+<style scoped>
+/* 整页不滚，表格在卡片里自己滚 */
+.page { height: var(--page-h); min-height: 360px; }
+</style>

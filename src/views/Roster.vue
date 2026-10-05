@@ -31,21 +31,28 @@ const stats = computed(() => {
 </script>
 
 <template>
-  <n-space vertical :size="16">
-    <n-grid :cols="5" :x-gap="14">
-      <n-gi v-for="s in stats" :key="s[0]">
-        <n-card :bordered="false" size="small">
-          <n-statistic :label="s[0]" :value="s[1]" />
-        </n-card>
-      </n-gi>
-    </n-grid>
+  <div class="page">
+    <n-space vertical :size="16">
+      <n-grid :cols="5" :x-gap="14">
+        <n-gi v-for="s in stats" :key="s[0]">
+          <n-card :bordered="false" size="small">
+            <n-statistic :label="s[0]" :value="s[1]" />
+          </n-card>
+        </n-gi>
+      </n-grid>
 
-    <TableCard
-      title="同盟名单"
-      desc="名单数据来自管理员导入的同盟成员列表。点表头切换升序 / 降序。"
-      :columns="columns"
-      :rows="members"
-      :scroll-x="1000"
-    />
-  </n-space>
+      <TableCard
+        title="同盟名单"
+        desc="名单数据来自管理员导入的同盟成员列表。点表头切换升序 / 降序。"
+        :columns="columns"
+        :rows="members"
+        :scroll-x="1000"
+      />
+    </n-space>
+  </div>
 </template>
+
+<style scoped>
+/* 整页不滚，表格在卡片里自己滚 */
+.page { height: var(--page-h); min-height: 360px; }
+</style>
