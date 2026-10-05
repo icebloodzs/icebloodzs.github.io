@@ -2,6 +2,8 @@
 import { ref, onMounted, provide, computed } from 'vue'
 import Bonus from '../src/views/Bonus.vue'
 import Mine from '../src/views/Mine.vue'
+import Rally from '../src/views/Rally.vue'
+import Placement from '../src/views/Placement.vue'
 
 // 用 #bonus / #mine 看真实视图，#scrolled 看滚动时顶栏固不固定
 const hash = location.hash
@@ -15,14 +17,47 @@ const MEMBERS = [
     troopsByLevel: { 3: { inf: 120, cav: 30, arc: 55 } } },
   { _id: 'c', name: '什么都没填', maxBonus: null, maxMarch: null, attrsSum: null, attrsUpdatedAt: null, troopsByLevel: null }
 ]
+for (let i = 0; i < 40; i += 1) {
+  MEMBERS.push({ _id: 'x' + i, name: '成员' + (i + 1), maxBonus: 120 - i, maxMarch: 200000 - i * 1000,
+    strength: 90000000 - i * 1000000, attrsSum: 5000 - i * 10, attrsUpdatedAt: '2026-10-01T00:00:00.000Z',
+    troopsByLevel: { 3: { inf: 150 - i, cav: 40, arc: 60 } } })
+}
 provide('app', {
   me: ref({ role: 'super', memberId: 'a', nickname: '我', member: MEMBERS[0] }),
   members: ref(MEMBERS),
-  season: ref({ key: 'S6', label: 'S6', limits: [] }),
+  season: ref({
+    key: 'S6', label: 'S6', limits: [], topTier: '3', topTierLabel: '宫3',
+    tiers: [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
+  }),
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}
 })
-const inner = computed(() => (hash.includes('bonus') ? Bonus : hash.includes('mine') ? Mine : null))
+const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement }
+const inner = computed(() => VIEWS[Object.keys(VIEWS).find((k) => hash.includes(k))] || null)
 onMounted(() => {
+  // #gen：自动点一下「生成」，好把排好的表截下来
+  if (hash.includes('gen')) {
+    setTimeout(() => {
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '生成')
+      if (b) b.click()
+    }, 200)
+  }
+  // #city：填个城池名字再生成，然后把地图滚到正中间，好看清城池那块
+  if (hash.includes('city')) {
+    setTimeout(() => {
+      const el = [...document.querySelectorAll('input')].find((x) => (x.placeholder || '').includes('城池名字'))
+      if (el) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(el, '丹阳城')
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === '生成')
+      if (b) b.click()
+      setTimeout(() => {
+        const w = document.querySelector('.wrap')
+        if (w) { w.scrollLeft = (w.scrollWidth - w.clientWidth) / 2; w.scrollTop = (w.scrollHeight - w.clientHeight) / 2 }
+      }, 300)
+    }, 250)
+  }
   if (!hash.includes('scrolled')) return
   setTimeout(() => {
     const el = document.querySelector('.body .n-scrollbar-container')

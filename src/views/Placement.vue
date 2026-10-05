@@ -13,6 +13,8 @@ const { members } = inject('app')
 const message = useMessage()
 
 const preset = ref('lv7')
+/** 城池上写什么名字，自己填；留空就还是写「城池」 */
+const cityName = ref('')
 const battle = ref(false)
 const grid = ref(null)
 const assign = ref({})
@@ -118,6 +120,14 @@ onUnmounted(() => document.removeEventListener('keydown', onKey))
 const selNames = computed(() => (sel.value ? (assign.value[sel.value] || []).join(' / ') : ''))
 const canSplit = computed(() => sel.value && (assign.value[sel.value] || []).length > 1)
 
+const cityText = computed(() => cityName.value.trim() || '城池')
+/** 名字长了字就小一点，别顶出城池那个方块 */
+const cityFont = computed(() => {
+  if (!city.value) return 12
+  const base = city.value.d * 0.16
+  return Math.max(10, Math.round(Math.min(base, (city.value.d * 0.78) / Math.max(2, cityText.value.length) * 1.4)))
+})
+
 function savePng() {
   const svg = document.getElementById('map')
   if (!svg) return
@@ -133,7 +143,7 @@ function savePng() {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     URL.revokeObjectURL(url)
-    canvas.toBlob((b) => download(b, '黑土落位.png'))
+    canvas.toBlob((b) => download(b, `黑土落位${cityName.value.trim() ? '·' + cityName.value.trim() : ''}.png`))
   }
   img.onerror = () => {
     URL.revokeObjectURL(url)
@@ -159,18 +169,19 @@ function savePng() {
 
       <n-space align="center">
         <n-select v-model:value="preset" :options="PRESETS" style="width: 220px" />
+        <n-input v-model:value="cityName" placeholder="城池名字，如 丹阳" maxlength="8" clearable style="width: 180px" />
         <n-checkbox v-model:checked="battle">留出斗阵位</n-checkbox>
         <span class="m">在册成员 {{ members.length }} 人</span>
       </n-space>
 
       <template v-if="grid">
         <n-alert type="info" :bordered="false" style="margin-top: 14px">
-          {{ grid.city }}×{{ grid.city }} 城池 · 黑土上 {{ grid.up }} 圈 / 下 {{ grid.down }} 圈 ·
+          城池大小 {{ grid.city }}×{{ grid.city }} · 黑土上 {{ grid.up }} 圈 / 下 {{ grid.down }} 圈 ·
           黑土 {{ grid.blackCount }} 格、白土 {{ grid.whiteCount }} 格
           <template v-if="tray.length"> · <b>待分配 {{ tray.length }} 人</b>：{{ tray.join('、') }}</template>
         </n-alert>
 
-        <n-alert :type="pending ? 'warning' : (sel ? 'warning' : 'default')" :bordered="false" style="margin-top: 10px">
+        <n-alert :type="pending || sel ? 'warning' : 'info'" :bordered="false" style="margin-top: 10px">
           <template v-if="pending">
             把 <b>{{ (assign[pending.from] || []).join(' / ') }}</b> 和 <b>{{ (assign[pending.to] || []).join(' / ') }}</b> 怎么处理？
             <n-space inline style="margin-left: 8px">
@@ -217,7 +228,7 @@ function savePng() {
               rx="6" fill="#e8a33d" stroke="#b5651d" stroke-width="3" />
           </g>
           <text v-if="city" :x="city.x" :y="city.y + 8" text-anchor="middle"
-            :font-size="Math.round(city.d * 0.16)" font-weight="700" fill="#7c2d12">城池</text>
+            :font-size="cityFont" font-weight="700" fill="#7c2d12">{{ cityText }}</text>
         </svg>
       </div>
     </n-card>

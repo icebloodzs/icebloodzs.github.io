@@ -89,7 +89,6 @@ const columns = computed(() => {
   }
   return out
 })
-const height = computed(() => Math.max(0, ...columns.value.map((c) => c.rows.length)))
 const bench = computed(() => (plan.value ? (plan.value.bench || []).filter(Boolean) : []))
 
 async function exportExcel() {
@@ -140,46 +139,46 @@ async function exportExcel() {
     </n-card>
 
     <n-card v-if="plan" :title="used.title" :bordered="false">
-      <n-alert :type="sel ? 'warning' : 'default'" :bordered="false" style="margin-bottom: 12px">
+      <n-alert :type="sel ? 'warning' : 'info'" :bordered="false" style="margin-bottom: 12px">
         <template v-if="sel">已选中 <b>{{ seatOf(sel) ? seatOf(sel).name : '空位' }}</b>，再点另一个位置就对调；点它自己取消。</template>
         <template v-else>点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）。</template>
       </n-alert>
 
+      <!-- 一组一张小表并排放，组和组之间留空，不然几十列挤成一坨看不清 -->
       <div class="wrap">
-        <table class="plan">
-          <thead>
-            <tr><th v-for="c in columns" :key="c.name" colspan="2" :style="{ background: c.color.main }">{{ c.name }}</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="r in height" :key="r">
-              <template v-for="c in columns" :key="c.name">
-                <template v-if="!c.rows[r - 1]"><td colspan="2" /></template>
-                <template v-else-if="c.rows[r - 1].kind === 'title'">
-                  <td colspan="2" class="t" :style="{ background: c.rows[r - 1].prob ? '#f08a24' : c.color.main }">
-                    {{ c.rows[r - 1].text }}<span class="v">{{ c.rows[r - 1].value }}</span>
+        <div class="cols">
+          <table v-for="c in columns" :key="c.name" class="plan">
+            <thead>
+              <tr><th colspan="2" :style="{ background: c.color.main }">{{ c.name }}</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(row, i) in c.rows" :key="i">
+                <template v-if="row.kind === 'title'">
+                  <td colspan="2" class="t" :style="{ background: row.prob ? '#f08a24' : c.color.main }">
+                    {{ row.text }}<span class="v">{{ row.value }}</span>
                   </td>
                 </template>
-                <template v-else-if="c.rows[r - 1].kind === 'label'">
+                <template v-else-if="row.kind === 'label'">
                   <td colspan="2" class="l" :style="{ background: c.color.light }">
-                    {{ c.rows[r - 1].text }}<span class="v">{{ c.rows[r - 1].value }}</span>
+                    {{ row.text }}<span class="v">{{ row.value }}</span>
                   </td>
                 </template>
                 <template v-else>
                   <td
-                    :class="['s', c.rows[r - 1].kind === 'head' ? 'hd' : '', sel === c.rows[r - 1].key ? 'on' : '']"
-                    :style="{ background: sel === c.rows[r - 1].key ? '#ffe9a8' : c.color.light }"
-                    @click="tap(c.rows[r - 1].key)"
-                  >{{ c.rows[r - 1].text || '空位' }}</td>
+                    :class="['s', 'nm', row.kind === 'head' ? 'hd' : '', sel === row.key ? 'on' : '']"
+                    :style="{ background: sel === row.key ? '#ffe9a8' : c.color.light }"
+                    @click="tap(row.key)"
+                  >{{ row.text || '空位' }}</td>
                   <td
-                    :class="['s', sel === c.rows[r - 1].key ? 'on' : '']"
-                    :style="{ background: sel === c.rows[r - 1].key ? '#ffe9a8' : c.color.light }"
-                    @click="tap(c.rows[r - 1].key)"
-                  >{{ c.rows[r - 1].value }}</td>
+                    :class="['s', 'nu', sel === row.key ? 'on' : '']"
+                    :style="{ background: sel === row.key ? '#ffe9a8' : c.color.light }"
+                    @click="tap(row.key)"
+                  >{{ row.value }}</td>
                 </template>
-              </template>
-            </tr>
-          </tbody>
-        </table>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <n-space align="center" style="margin-top: 14px">
@@ -199,10 +198,13 @@ async function exportExcel() {
 </template>
 
 <style scoped>
-.wrap { overflow-x: auto; }
-table.plan { border-collapse: collapse; font-size: 12px; }
-table.plan th { color: #fff; padding: 8px 10px; border: 1px solid #e9ebee; }
-table.plan td { border: 1px solid #e9ebee; padding: 6px 9px; text-align: center; white-space: nowrap; }
+.wrap { overflow-x: auto; padding-bottom: 6px; }
+.cols { display: flex; gap: 20px; align-items: flex-start; }
+table.plan { border-collapse: collapse; font-size: 12px; min-width: 212px; }
+table.plan th { color: #fff; padding: 9px 12px; border: 1px solid #e9ebee; }
+table.plan td { border: 1px solid #e9ebee; padding: 7px 12px; text-align: center; white-space: nowrap; }
+table.plan td.nm { text-align: left; min-width: 112px; }
+table.plan td.nu { text-align: right; min-width: 62px; color: #4b5563; }
 table.plan td.t { color: #fff; font-weight: 700; text-align: left; }
 table.plan td.l { color: #8a6d3b; font-size: 11px; text-align: left; }
 table.plan td.hd { color: #e0203a; font-weight: 700; }

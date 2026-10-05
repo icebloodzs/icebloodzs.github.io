@@ -30,7 +30,11 @@ const MEMBERS = [
 const app = {
   me: ref({ role: 'super', memberId: 'a', nickname: '我', member: MEMBERS[0] }),
   members: ref(MEMBERS),
-  season: ref({ key: 'S6', label: 'S6', limits: [] }),
+  season: ref({
+    key: 'S6', label: 'S6', limits: [],
+    topTier: '3', topTierLabel: '宫3',
+    tiers: [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
+  }),
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}
 }
 
@@ -50,12 +54,12 @@ for (const v of views) {
     const html = await renderToString(root)
     console.log(`  ok   ${v}  ${html.length} 字节`)
     if (v === 'Bonus') {
-      const want = ['兵力（宫3 / 宫2）', 'bn-l', 'bn-lv']
-      want.forEach((w) => { if (!html.includes(w)) { bad++; console.log(`  !!   Bonus 缺少 ${w}`) } })
-      if (/宫3\s*兵力|宫2\s*兵力/.test(html)) { bad++; console.log('  !!   Bonus 还留着两列') }
+      // 只留本赛季最高那一档，一行放完
+      if (!html.includes('兵力（宫3）')) { bad++; console.log('  !!   Bonus 的兵力列标题不对') }
+      if (html.includes('宫2')) { bad++; console.log('  !!   Bonus 还在显示次高档') }
     }
     if (v === 'Mine') {
-      ;['三级兵营带的兵', '二级兵营带的兵', '留空', 'lvh'].forEach((w) => {
+      ;['宫3/宫2', '本赛季最高', '宫2', '宫3'].forEach((w) => {
         if (!html.includes(w)) { bad++; console.log(`  !!   Mine 缺少 ${w}`) }
       })
     }
@@ -74,6 +78,23 @@ const checks = [
   ['内容区自己滚', /class="body"[\s\S]*?:native-scrollbar="false"/]
 ]
 checks.forEach(([n, re]) => { if (!re.test(src)) { bad++; console.log(`  !!   App.vue: ${n} 没通过`) } else console.log(`  ok   App.vue ${n}`) })
+
+// 换个赛季再渲一遍：档位必须跟着赛季走，不能写死宫2宫3
+app.season.value = { key: 'S9', label: 'S9', limits: [], topTier: '4', topTierLabel: '宫4', tiers: [{ key: '3', label: '宫3' }, { key: '4', label: '宫4' }] }
+for (const [v, want, deny] of [['Bonus', ['兵力（宫4）'], ['宫3']], ['Mine', ['宫4/宫3', '宫4'], []]]) {
+  const mod = await vite.ssrLoadModule(`/src/views/${v}.vue`)
+  const root = createSSRApp({
+    setup: () => () => h(ui.NLoadingBarProvider, null, { default: () =>
+      h(ui.NMessageProvider, null, { default: () =>
+        h(ui.NDialogProvider, null, { default: () => h(mod.default) }) }) })
+  })
+  root.use(naive)
+  root.provide('app', app)
+  const html = await renderToString(root)
+  want.forEach((w) => { if (!html.includes(w)) { bad++; console.log(`  !!   S9 的 ${v} 缺少 ${w}`) } })
+  deny.forEach((w) => { if (html.includes(w)) { bad++; console.log(`  !!   S9 的 ${v} 不该出现 ${w}`) } })
+  if (!want.some((w) => !html.includes(w))) console.log(`  ok   ${v} 换到 S9 后档位跟着变`)
+}
 
 // probe/Shell.vue 是从 App.vue 抠出来的布局副本，App.vue 改了布局它必须跟着改，
 // 不然截图自检看的就不是真页面了

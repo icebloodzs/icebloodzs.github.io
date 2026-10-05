@@ -12,9 +12,22 @@ const { me, season, reload, refreshMe } = inject('app')
 const message = useMessage()
 
 const ARMS = [['inf', '步兵'], ['cav', '骑兵'], ['arc', '弓兵']]
-const LEVELS = ['2', '3']
-/** 表格里每一档的说明，免得对着两行空格子猜该填哪个 */
-const LEVEL_HINT = { 2: '二级兵营', 3: '三级兵营' }
+
+/**
+ * 要填哪两档兵营由服务端按本赛季给（season.tiers），这里不写死：
+ * S1-S2 到 10 级、S3 宫1、S4 宫2、S5-S8 宫3、S9 往后宫4。
+ * 服务端还没回来之前先按 S6 那两档顶着，免得表格闪一下空的。
+ */
+const FALLBACK_TIERS = [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
+const TIERS = computed(() => {
+  const t = season.value && season.value.tiers
+  return Array.isArray(t) && t.length ? t : FALLBACK_TIERS
+})
+const LEVELS = computed(() => TIERS.value.map((t) => t.key))
+const topKey = computed(() => LEVELS.value[LEVELS.value.length - 1])
+const labelOf = (lv) => (TIERS.value.find((t) => t.key === lv) || {}).label || String(lv)
+/** 说明里那句「宫3/宫2」，高的在前 */
+const tierNames = computed(() => TIERS.value.map((t) => t.label).reverse().join('/'))
 const SIX = [
   ['步兵', [['infDef', '防御力'], ['infHp', '生命值']]],
   ['骑兵', [['cavAtk', '攻击力'], ['cavBreak', '破坏力']]],
@@ -29,14 +42,14 @@ const before = ref(null)
 const form = ref(blank())
 function blank() {
   const t = {}
-  LEVELS.forEach((lv) => { t[lv] = { inf: null, cav: null, arc: null } })
+  LEVELS.value.forEach((lv) => { t[lv] = { inf: null, cav: null, arc: null } })
   return { maxBonus: null, maxMarch: null, troops: t }
 }
 
 function fill(m) {
   if (!m) return
   const t = {}
-  LEVELS.forEach((lv) => {
+  LEVELS.value.forEach((lv) => {
     t[lv] = {}
     ARMS.forEach(([k]) => {
       const v = m.troopsByLevel && m.troopsByLevel[lv] ? m.troopsByLevel[lv][k] : null
@@ -45,19 +58,20 @@ function fill(m) {
   })
   form.value = { maxBonus: m.maxBonus ?? null, maxMarch: m.maxMarch ?? null, troops: t }
 }
-watch(member, fill, { immediate: true })
+// 赛季是后到的，档位一变要照着新档位重新铺一遍表格
+watch([member, LEVELS], () => fill(member.value), { immediate: true })
 
 const levelSum = (lv) => {
   let s = null
   ARMS.forEach(([k]) => {
-    const v = form.value.troops[lv][k]
+    const v = (form.value.troops[lv] || {})[k]
     if (v !== null && v !== undefined) s = (s || 0) + Number(v)
   })
   return s
 }
 const allSum = computed(() => {
   let s = null
-  LEVELS.forEach((lv) => {
+  LEVELS.value.forEach((lv) => {
     const one = levelSum(lv)
     if (one !== null) s = (s || 0) + one
   })
@@ -235,11 +249,10 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
     <!-- 手填的几项 -->
     <n-card :bordered="false" title="集结与兵力">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，以及这一队能带多少兵。
+        集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，以及这一队能带多少兵。集结值自己发集结或者上车都能看到，出证量编辑军队时就能看到。
         <div class="tip">
-          <div><b>宫3</b>：三级兵营带的兵，步 / 骑 / 弓分开填，单位万。</div>
-          <div><b>宫2</b>：二级兵营带的兵，填法一样。</div>
-          <div>只有一档的就只填那一行，另一行<b>留空</b>。留空是「没有这一档」，填 0 是「有兵营但兵是 0」，统计时不一样。</div>
+          <div><b>{{ tierNames }}</b>：步 / 骑 / 弓分开填，单位万。</div>
+          <div>填写其中一档，另一行<b>留空或填0</b>。留空即是「参与城战时数量不够」，即使有送的，中途需要治疗无法满足上车需求。</div>
         </div>
       </n-alert>
 
@@ -271,8 +284,8 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
         <tbody>
           <tr v-for="lv in LEVELS" :key="lv">
             <td>
-              <b>宫{{ lv }}</b>
-              <div class="lvh">{{ LEVEL_HINT[lv] }}</div>
+              <b>{{ labelOf(lv) }}</b>
+              <div v-if="lv === topKey" class="lvh">本赛季最高</div>
             </td>
             <td v-for="[k] in ARMS" :key="k">
               <n-input-number v-model:value="form.troops[lv][k]" :min="0" :step="1" placeholder="-" size="small" style="width: 100%" />
