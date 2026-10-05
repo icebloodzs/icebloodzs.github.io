@@ -163,7 +163,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       <template #header-extra><n-tag size="small" :bordered="false">只能截图识别</n-tag></template>
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        数值只认截图识别的结果，这里填不了也改不了。传一张游戏里的「属性加成」面板截图就会自动识别入库，和在小程序里传是同一回事。
+        数值只认截图识别的结果，不支持手动修改。传一张游戏里的「属性加成」面板截图就会自动识别入库。
       </n-alert>
 
       <n-grid :cols="3" :x-gap="14">

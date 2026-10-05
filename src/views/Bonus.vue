@@ -50,7 +50,7 @@ const columns = [
 <template>
   <TableCard
     title="成员加成"
-    desc="集结值和兵力由成员在小程序「我的数据」里自己填，属性由截图识别。按资料更新时间排序能快速找出没及时更新的人。"
+    desc="集结值和兵力由成员在「我的信息」里自己填，属性由截图识别。按资料更新时间排序能快速找出没及时更新的人。"
     :columns="columns"
     :rows="members"
     :scroll-x="1000"

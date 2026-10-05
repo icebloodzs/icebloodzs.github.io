@@ -17,7 +17,7 @@ const markMissingOut = ref(true)
 const busy = ref(false)
 const summary = ref(null)
 
-const PLACEHOLDER = '每行一名成员，列之间用 Tab 分隔\n例如：\n1\t无名胜士\t4\t宫阙2级\t240600401\t0\t11299034200\t36960\t133281933'
+const PLACEHOLDER = '每行一名成员，列之间用 Tab 分隔\n例如：\n1\t草莓招了\t4\t宫阙3级\t99999999\t0\t999999999\t99999\t999999999'
 
 const stats = computed(() => {
   const s = summary.value
@@ -108,7 +108,7 @@ const suspectCols = [
   <n-space vertical :size="16">
     <n-card title="导入同盟名单" :bordered="false">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        在游戏同盟里导出成员列表（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），
+        同盟四阶导出数据（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），
         复制后整段粘到下面，<b>保留表头那一行</b>。先点「解析预览」核对，没问题再「确认导入」。
       </n-alert>
 

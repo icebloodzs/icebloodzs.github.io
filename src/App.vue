@@ -198,7 +198,7 @@ boot()
               </div>
             </n-layout-sider>
 
-            <n-layout :native-scrollbar="false">
+            <n-layout class="inner">
               <n-layout-header bordered class="top">
                 <h3>{{ title }}</h3>
                 <n-space align="center" :size="10">
@@ -209,7 +209,11 @@ boot()
                   </n-popconfirm>
                 </n-space>
               </n-layout-header>
-              <n-layout-content class="body" :native-scrollbar="false">
+              <n-layout-content
+                class="body"
+                :native-scrollbar="false"
+                content-style="padding: 20px 24px 40px; min-height: 100%"
+              >
                 <n-spin :show="loading && !members.length">
                   <component :is="VIEWS[view].comp" />
                 </n-spin>
@@ -250,7 +254,9 @@ boot()
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 16px 14px;
+  height: 64px;
+  box-sizing: border-box;
+  padding: 0 16px;
   border-bottom: 1px solid var(--n-border-color, #efeff5);
 }
 .brand-n { font-size: 15px; font-weight: 600; line-height: 1.2; }
@@ -271,9 +277,12 @@ boot()
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  height: 56px;
+  /* 和侧栏顶部那块同高，分隔线才连得上 */
+  height: 64px;
   background: #fff;
 }
 .top h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.body { padding: 20px 24px 40px; background: #f5f6fa; }
+.inner { display: flex; flex-direction: column; height: 100%; }
+/* 内容少的时候灰底也要铺到底 */
+.body { flex: 1; min-height: 0; background: #f5f6fa; }
 </style>
