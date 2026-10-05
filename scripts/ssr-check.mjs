@@ -54,9 +54,10 @@ for (const v of views) {
     const html = await renderToString(root)
     console.log(`  ok   ${v}  ${html.length} 字节`)
     if (v === 'Bonus') {
-      // 只留本赛季最高那一档，一行放完
-      if (!html.includes('兵力（宫3）')) { bad++; console.log('  !!   Bonus 的兵力列标题不对') }
-      if (html.includes('宫2')) { bad++; console.log('  !!   Bonus 还在显示次高档') }
+      // 最高 + 次高两档排一行；没填的那档写「-」
+      if (!html.includes('兵力（宫3 / 宫2）')) { bad++; console.log('  !!   Bonus 的兵力列标题不对') }
+      if (!html.includes('步173 骑42 弓80')) { bad++; console.log('  !!   Bonus 没把三个兵种写全') }
+      if (!html.includes('步10 骑- 弓5')) { bad++; console.log('  !!   Bonus 没把没填的兵种写成 -') }
     }
     if (v === 'Mine') {
       ;['宫3/宫2', '本赛季最高', '宫2', '宫3'].forEach((w) => {
@@ -81,7 +82,7 @@ checks.forEach(([n, re]) => { if (!re.test(src)) { bad++; console.log(`  !!   Ap
 
 // 换个赛季再渲一遍：档位必须跟着赛季走，不能写死宫2宫3
 app.season.value = { key: 'S9', label: 'S9', limits: [], topTier: '4', topTierLabel: '宫4', tiers: [{ key: '3', label: '宫3' }, { key: '4', label: '宫4' }] }
-for (const [v, want, deny] of [['Bonus', ['兵力（宫4）'], ['宫3']], ['Mine', ['宫4/宫3', '宫4'], []]]) {
+for (const [v, want, deny] of [['Bonus', ['兵力（宫4 / 宫3）'], []], ['Mine', ['宫4/宫3', '宫4'], []]]) {
   const mod = await vite.ssrLoadModule(`/src/views/${v}.vue`)
   const root = createSSRApp({
     setup: () => () => h(ui.NLoadingBarProvider, null, { default: () =>

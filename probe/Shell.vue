@@ -15,6 +15,8 @@ const MEMBERS = [
     heroPower: 61000000, boundAt: '2026-09-01T00:00:00.000Z' },
   { _id: 'b', name: '只有宫3', maxBonus: 96, maxMarch: 180000, attrsSum: null, attrsUpdatedAt: null,
     troopsByLevel: { 3: { inf: 120, cav: 30, arc: 55 } } },
+  { _id: 'd', name: '两档都缺兵种', maxBonus: 101, maxMarch: 150000, attrsSum: 4800, attrsUpdatedAt: '2026-10-03T00:00:00.000Z',
+    troopsByLevel: { 3: { inf: 10, cav: null, arc: 10 }, 2: { inf: null, cav: 5, arc: null } } },
   { _id: 'c', name: '什么都没填', maxBonus: null, maxMarch: null, attrsSum: null, attrsUpdatedAt: null, troopsByLevel: null }
 ]
 for (let i = 0; i < 40; i += 1) {
