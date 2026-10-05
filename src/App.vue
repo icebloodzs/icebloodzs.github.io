@@ -198,8 +198,8 @@ boot()
               </div>
             </n-layout-sider>
 
-            <n-layout class="inner">
-              <n-layout-header bordered class="top">
+            <n-layout position="absolute">
+              <n-layout-header bordered position="absolute" class="top">
                 <h3>{{ title }}</h3>
                 <n-space align="center" :size="10">
                   <n-button size="small" secondary :loading="loading" @click="reload">刷新数据</n-button>
@@ -209,15 +209,17 @@ boot()
                   </n-popconfirm>
                 </n-space>
               </n-layout-header>
-              <n-layout-content
+              <n-layout
                 class="body"
+                position="absolute"
+                style="top: 64px"
                 :native-scrollbar="false"
                 content-style="padding: 20px 24px 40px; min-height: 100%"
               >
                 <n-spin :show="loading && !members.length">
                   <component :is="VIEWS[view].comp" />
                 </n-spin>
-              </n-layout-content>
+              </n-layout>
             </n-layout>
           </n-layout>
         </n-dialog-provider>
@@ -282,7 +284,6 @@ boot()
   background: #fff;
 }
 .top h3 { margin: 0; font-size: 18px; font-weight: 600; }
-.inner { display: flex; flex-direction: column; height: 100%; }
-/* 内容少的时候灰底也要铺到底 */
-.body { flex: 1; min-height: 0; background: #f5f6fa; }
+/* 内容区单独一层 absolute，从顶栏下面开始；顶栏因此滚不动 */
+.body { background: #f5f6fa; }
 </style>

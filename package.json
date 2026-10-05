@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check": "node scripts/ssr-check.mjs"
   },
   "dependencies": {
     "naive-ui": "^2.45.3",

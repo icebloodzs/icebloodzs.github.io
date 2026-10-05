@@ -13,6 +13,8 @@ const message = useMessage()
 
 const ARMS = [['inf', '步兵'], ['cav', '骑兵'], ['arc', '弓兵']]
 const LEVELS = ['2', '3']
+/** 表格里每一档的说明，免得对着两行空格子猜该填哪个 */
+const LEVEL_HINT = { 2: '二级兵营', 3: '三级兵营' }
 const SIX = [
   ['步兵', [['infDef', '防御力'], ['infHp', '生命值']]],
   ['骑兵', [['cavAtk', '攻击力'], ['cavBreak', '破坏力']]],
@@ -233,7 +235,12 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
     <!-- 手填的几项 -->
     <n-card :bordered="false" title="集结与兵力">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，以及这一队能带多少兵。兵力按兵营等级分两档填，只有一种就只填那一行。
+        这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，以及这一队能带多少兵。
+        <div class="tip">
+          <div><b>宫3</b>：三级兵营带的兵，步 / 骑 / 弓分开填，单位万。</div>
+          <div><b>宫2</b>：二级兵营带的兵，填法一样。</div>
+          <div>只有一档的就只填那一行，另一行<b>留空</b>。留空是「没有这一档」，填 0 是「有兵营但兵是 0」，统计时不一样。</div>
+        </div>
       </n-alert>
 
       <n-form label-placement="left" :label-width="110" size="small">
@@ -256,14 +263,17 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       <n-table :bordered="false" :single-line="false" size="small" style="margin-top: 6px">
         <thead>
           <tr>
-            <th style="width: 80px"></th>
+            <th style="width: 108px">兵营</th>
             <th v-for="[k, label] in ARMS" :key="k">{{ label }}</th>
             <th style="width: 90px">小计</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="lv in LEVELS" :key="lv">
-            <td><b>宫{{ lv }}</b></td>
+            <td>
+              <b>宫{{ lv }}</b>
+              <div class="lvh">{{ LEVEL_HINT[lv] }}</div>
+            </td>
             <td v-for="[k] in ARMS" :key="k">
               <n-input-number v-model:value="form.troops[lv][k]" :min="0" :step="1" placeholder="-" size="small" style="width: 100%" />
             </td>
@@ -284,6 +294,9 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; color: #4b5563; }
 .row b { color: #6c5ce7; }
 .old { color: #9aa0a6; }
+.tip { margin-top: 6px; line-height: 1.8; }
+.tip b { color: #4b5563; }
+.lvh { font-size: 11px; color: #9aa0a6; line-height: 1.4; margin-top: 1px; }
 .sum { text-align: right; font-weight: 600; color: #6c5ce7; }
 .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; font-size: 13px; color: #4b5563; }
 .foot b { color: #6c5ce7; font-size: 16px; }
