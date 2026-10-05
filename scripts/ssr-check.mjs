@@ -36,10 +36,10 @@ const app = {
     topTier: '3', topTierLabel: '宫3',
     tiers: [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
   }),
-  loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}
+  loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}, refreshNotices: async () => {}
 }
 
-const views = ['Mine', 'Roster', 'ImportList', 'Bonus', 'Attrs', 'Missing', 'Season', 'Rally', 'Placement', 'Users', 'Login']
+const views = ['Mine', 'Roster', 'ImportList', 'Bonus', 'Attrs', 'Missing', 'Season', 'Rally', 'Placement', 'Users', 'Notice', 'Login']
 let bad = 0
 for (const v of views) {
   try {

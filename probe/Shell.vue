@@ -9,6 +9,7 @@ import Roster from '../src/views/Roster.vue'
 import Attrs from '../src/views/Attrs.vue'
 import Missing from '../src/views/Missing.vue'
 import Users from '../src/views/Users.vue'
+import Notice from '../src/views/Notice.vue'
 
 // 用 #bonus / #mine 看真实视图，#scrolled 看滚动时顶栏固不固定
 const hash = location.hash
@@ -39,9 +40,21 @@ provide('app', {
     vanguardMax: 58000000, marshalMax: 87000000, guardianMax: 120000000,
     tiers: [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
   }),
-  loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}
+  loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}, refreshNotices: async () => {}
 })
-const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users }
+const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users, notice: Notice }
+// 公告弹窗的假数据，只为截图看样式
+const notices = ref([
+  { _id: 'n1', title: '周五晚八点集合打城', createdByName: '凡宝', createdAt: '2026-10-05T09:00:00.000Z', daysLeft: 3,
+    content: '本周五 20:00 准时集合，打下面这几个目标：\n\n1. 先清外围资源点\n2. 20:30 主力集结丹阳城\n3. 没上线的提前在群里说一声\n\n集结值没填的赶紧去「我的信息」补上，不然排不进车。' },
+  { _id: 'n2', title: '本周功勋统计口径', createdByName: '凡宝', createdAt: '2026-10-04T09:00:00.000Z', daysLeft: null,
+    content: '周功勋按周一凌晨重置算，中途导入的以最后一次为准。' }
+])
+const noticeOpen = ref(hash.includes('modal'))
+const noticeIndex = ref(0)
+const closeNotice = () => { noticeOpen.value = false }
+const when = (v) => new Date(v).toLocaleString('zh-CN')
+
 const inner = computed(() => VIEWS[Object.keys(VIEWS).find((k) => hash.includes(k))] || null)
 onMounted(() => {
   // #gen：自动点一下「生成」，好把排好的表截下来
@@ -150,6 +163,36 @@ const menuOptions = [
               </n-layout>
             </div>
           </n-layout>
+          <!-- 公告弹窗：上线自动弹一次，关掉之后从左边「同盟公告」还能再看 -->
+          <n-modal
+            v-model:show="noticeOpen"
+            preset="card"
+            :style="{ width: '560px' }"
+            :mask-closable="false"
+            :title="notices[noticeIndex] ? notices[noticeIndex].title : '同盟公告'"
+            @close="closeNotice"
+          >
+            <template v-if="notices[noticeIndex]">
+              <div class="nt-meta">
+                {{ notices[noticeIndex].createdByName }} · {{ when(notices[noticeIndex].createdAt) }}
+                <template v-if="notices[noticeIndex].daysLeft !== null">
+                  · {{ notices[noticeIndex].daysLeft }} 天后不再显示
+                </template>
+              </div>
+              <div class="nt-body">{{ notices[noticeIndex].content }}</div>
+            </template>
+            <template #footer>
+              <div class="nt-foot">
+                <n-space v-if="notices.length > 1" align="center" :size="8">
+                  <n-button size="small" quaternary :disabled="noticeIndex === 0" @click="noticeIndex -= 1">上一条</n-button>
+                  <span class="nt-meta">{{ noticeIndex + 1 }} / {{ notices.length }}</span>
+                  <n-button size="small" quaternary :disabled="noticeIndex >= notices.length - 1" @click="noticeIndex += 1">下一条</n-button>
+                </n-space>
+                <div style="flex: 1"></div>
+                <n-button type="primary" @click="closeNotice">知道了</n-button>
+              </div>
+            </template>
+          </n-modal>
 </template>
 
 <style>
@@ -223,4 +266,10 @@ const menuOptions = [
 .body { background: #f5f6fa; }
 .probe-box { background: #fff; border-radius: 10px; padding: 20px; font-size: 14px; }
 .probe-tall { height: 1400px; background: #fff; border-radius: 10px; margin-top: 16px; padding: 20px; }
+</style>
+
+<style>
+.nt-meta { font-size: 12px; color: #8a9099; }
+.nt-body { margin-top: 12px; font-size: 14px; line-height: 1.85; color: #3c4350; white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; }
+.nt-foot { display: flex; align-items: center; }
 </style>

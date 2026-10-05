@@ -6,6 +6,7 @@
 import { ref, computed, h, provide } from 'vue'
 import { NIcon } from 'naive-ui'
 import { call, token, setToken, store, inflight, fatal } from './api'
+import { when } from './fmt'
 import Login from './views/Login.vue'
 import Mine from './views/Mine.vue'
 import Roster from './views/Roster.vue'
@@ -17,6 +18,7 @@ import Season from './views/Season.vue'
 import Rally from './views/Rally.vue'
 import Placement from './views/Placement.vue'
 import Users from './views/Users.vue'
+import Notice from './views/Notice.vue'
 
 const VIEWS = {
   mine: { label: '我的信息', icon: '👤', comp: Mine },
@@ -28,7 +30,8 @@ const VIEWS = {
   season: { label: '赛季评分', icon: '🏅', comp: Season },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
-  users: { label: '绑定情况', icon: '👥', comp: Users }
+  users: { label: '绑定情况', icon: '👥', comp: Users },
+  notice: { label: '同盟公告', icon: '📢', comp: Notice }
 }
 
 const screen = ref(token.value ? 'boot' : 'login')
@@ -41,6 +44,38 @@ const loading = ref(false)
 const loginTip = ref('')
 const loginWhy = ref('')
 const netError = ref(false)
+
+/** 同盟公告：有没看过的就弹一次，关掉之后首页菜单里还能再看 */
+const notices = ref([])
+const noticeOpen = ref(false)
+const noticeIndex = ref(0)
+
+async function refreshNotices() {
+  try {
+    const res = await call('notice.list', {})
+    notices.value = res.rows || []
+    const unread = res.unread || []
+    if (unread.length) {
+      const i = notices.value.findIndex((n) => n._id === unread[0])
+      noticeIndex.value = Math.max(0, i)
+      noticeOpen.value = true
+    }
+  } catch (e) {
+    // 公告拉不到不影响别的，静默
+  }
+}
+
+/** 关掉弹窗，顺手把当前这几条记成看过了 */
+async function closeNotice() {
+  noticeOpen.value = false
+  const ids = notices.value.map((n) => n._id)
+  if (!ids.length) return
+  try {
+    await call('notice.read', { ids })
+  } catch (e) {
+    // 没记上下次再弹一遍
+  }
+}
 
 const icon = (t) => () => h('span', { style: 'font-size:15px' }, t)
 const menuOptions = [
@@ -57,7 +92,7 @@ const menuOptions = [
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'placement'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
+    children: ['rally', 'placement', 'notice'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
   { type: 'group', label: '账号', key: 'g3', children: [{ label: VIEWS.users.label, key: 'users', icon: icon('👥') }] }
 ]
@@ -73,7 +108,7 @@ const themeOverrides = {
 }
 
 // 各页都要用的数据，provide 下去，省得一层层传
-provide('app', { me, members, season, loginBy, reload, refreshMe })
+provide('app', { me, members, season, loginBy, reload, refreshMe, refreshNotices })
 
 async function boot() {
   if (!token.value) {
@@ -88,6 +123,7 @@ async function boot() {
     me.value = who
     screen.value = 'app'
     await reload()
+    refreshNotices()
   } catch (e) {
     // 服务端明确说登录态不能用才清掉；网络抖一下保留，给个重试
     // FEATURE_LOCKED = 这个盟的会员等级不够用电脑版，token 留着也没用，一起清掉
@@ -230,11 +266,53 @@ boot()
               </n-layout>
             </div>
           </n-layout>
+
+          <!-- 公告弹窗：上线自动弹一次，关掉之后从左边「同盟公告」还能再看 -->
+          <n-modal
+            v-model:show="noticeOpen"
+            preset="card"
+            :style="{ width: '560px' }"
+            :mask-closable="false"
+            :title="notices[noticeIndex] ? notices[noticeIndex].title : '同盟公告'"
+            @close="closeNotice"
+          >
+            <template v-if="notices[noticeIndex]">
+              <div class="nt-meta">
+                {{ notices[noticeIndex].createdByName }} · {{ when(notices[noticeIndex].createdAt) }}
+                <template v-if="notices[noticeIndex].daysLeft !== null">
+                  · {{ notices[noticeIndex].daysLeft }} 天后不再显示
+                </template>
+              </div>
+              <div class="nt-body">{{ notices[noticeIndex].content }}</div>
+            </template>
+            <template #footer>
+              <div class="nt-foot">
+                <n-space v-if="notices.length > 1" align="center" :size="8">
+                  <n-button size="small" quaternary :disabled="noticeIndex === 0" @click="noticeIndex -= 1">上一条</n-button>
+                  <span class="nt-meta">{{ noticeIndex + 1 }} / {{ notices.length }}</span>
+                  <n-button size="small" quaternary :disabled="noticeIndex >= notices.length - 1" @click="noticeIndex += 1">下一条</n-button>
+                </n-space>
+                <div style="flex: 1"></div>
+                <n-button type="primary" @click="closeNotice">知道了</n-button>
+              </div>
+            </template>
+          </n-modal>
         </n-dialog-provider>
       </n-loading-bar-provider>
     </n-message-provider>
   </n-config-provider>
 </template>
+
+<style>
+/*
+ * 公告弹窗的样式必须是全局的：n-modal 会把内容 teleport 到 body 上，
+ * scoped 的属性选择器带不过去，写成 scoped 的话换行和底部排版都会失效。
+ */
+.nt-meta { font-size: 12px; color: #8a9099; }
+/* 公告正文保留管理员写的换行 */
+.nt-body { margin-top: 12px; font-size: 14px; line-height: 1.85; color: #3c4350; white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; }
+.nt-foot { display: flex; align-items: center; }
+</style>
 
 <style>
 /*
