@@ -32,15 +32,17 @@ const stats = computed(() => {
 
 <template>
   <div class="page">
-    <n-space vertical :size="16">
-      <n-grid :cols="5" :x-gap="14">
-        <n-gi v-for="s in stats" :key="s[0]">
-          <n-card :bordered="false" size="small">
-            <n-statistic :label="s[0]" :value="s[1]" />
-          </n-card>
-        </n-gi>
-      </n-grid>
+    <n-grid :cols="5" :x-gap="14">
+      <n-gi v-for="s in stats" :key="s[0]">
+        <n-card :bordered="false" size="small">
+          <n-statistic :label="s[0]" :value="s[1]" />
+        </n-card>
+      </n-gi>
+    </n-grid>
 
+    <!-- 剩下的高度全给表格。注意别再套 n-space：
+         它会把每个子项各包一层高度自适应的 div，表格就撑不开了 -->
+    <div class="rest">
       <TableCard
         title="同盟名单"
         desc="名单数据来自管理员导入的同盟成员列表。点表头切换升序 / 降序。"
@@ -48,11 +50,13 @@ const stats = computed(() => {
         :rows="members"
         :scroll-x="1000"
       />
-    </n-space>
+    </div>
   </div>
 </template>
 
 <style scoped>
 /* 整页不滚，表格在卡片里自己滚 */
-.page { height: var(--page-h); min-height: 360px; }
+.page { height: var(--page-h); min-height: 360px; display: flex; flex-direction: column; }
+.page > * + * { margin-top: 16px; }
+.rest { flex: 1; min-height: 0; }
 </style>

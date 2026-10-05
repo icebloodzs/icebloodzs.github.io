@@ -1,5 +1,6 @@
 // 把每个视图单独 SSR 渲染一遍：只要模板/脚本里有引用错误就会直接抛出来，
 // 比打包能多抓一层（打包不执行代码）。
+import fs from 'node:fs'
 import { JSDOM } from 'jsdom'
 import { createServer } from 'vite'
 import { createSSRApp, h, ref } from 'vue'
@@ -71,7 +72,7 @@ for (const v of views) {
 }
 
 // App.vue：顶栏固定（header 和内容区都是 absolute，内容区从 64px 开始）
-const src = (await import('node:fs')).readFileSync('src/App.vue', 'utf8')
+const src = fs.readFileSync('src/App.vue', 'utf8')
 const checks = [
   ['header absolute', /<n-layout-header[^>]*position="absolute"/],
   ['内容区 absolute', /<n-layout\s+class="body"[\s\S]*?position="absolute"/],
@@ -97,9 +98,25 @@ for (const [v, want, deny] of [['Bonus', ['兵力（宫4 / 宫3）'], []], ['Min
   if (!want.some((w) => !html.includes(w))) console.log(`  ok   ${v} 换到 S9 后档位跟着变`)
 }
 
+// 列表页靠 .page 的固定高度把高度一层层传给表格，中间夹一个 n-space 就断了
+// （n-space 给每个子项包一层高度自适应的 div，表格会变成 0 高，整张表看不见）
+for (const v of ['Roster', 'Bonus', 'Attrs', 'Missing', 'Season', 'Users']) {
+  const src = fs.readFileSync(`src/views/${v}.vue`, 'utf8')
+  const i = src.indexOf('<div class="page">')
+  const j = src.indexOf('<TableCard')
+  if (i < 0 || j < 0) { bad++; console.log(`  !!   ${v}.vue 没有 .page 外壳`); continue }
+  const span = src.slice(i, j)
+  if ((span.match(/<n-space/g) || []).length > (span.match(/<\/n-space>/g) || []).length) {
+    bad++
+    console.log(`  !!   ${v}.vue 的 TableCard 被 n-space 包住了，表格会撑不开`)
+  } else {
+    console.log(`  ok   ${v}.vue 的表格能拿到高度`)
+  }
+}
+
 // probe/Shell.vue 是从 App.vue 抠出来的布局副本，App.vue 改了布局它必须跟着改，
 // 不然截图自检看的就不是真页面了
-const shell = (await import('node:fs')).readFileSync('probe/Shell.vue', 'utf8')
+const shell = fs.readFileSync('probe/Shell.vue', 'utf8')
 ;['class="right"', 'position="absolute"', 'style="top: 64px"', '--page-h'].forEach((m) => {
   if (!shell.includes(m)) { bad++; console.log(`  !!   probe/Shell.vue 和 App.vue 不一致，缺 ${m}，请重新生成`) }
 })
