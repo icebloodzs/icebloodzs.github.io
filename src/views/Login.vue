@@ -98,9 +98,9 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
         {{ tip }}
         <div v-if="why" class="why">{{ why }}</div>
       </n-alert>
-      <n-button v-if="state === 'ready'" quaternary size="small" style="margin-top: 12px" @click="newTicket">
-        刷新二维码
-      </n-button>
+      <div class="foot">
+        <n-button v-if="state === 'ready'" quaternary size="tiny" @click="newTicket">刷新二维码</n-button>
+      </div>
     </n-card>
   </div>
 </template>
@@ -146,7 +146,14 @@ h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; text-align: center; }
   font-size: 13px;
 }
 
-.steps { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.steps {
+  width: 200px;
+  margin: 20px auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.foot { margin-top: 14px; text-align: center; }
 .step { display: flex; align-items: flex-start; gap: 10px; }
 .no {
   flex: none;
