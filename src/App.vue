@@ -19,6 +19,7 @@ import Rally from './views/Rally.vue'
 import Placement from './views/Placement.vue'
 import Users from './views/Users.vue'
 import Notice from './views/Notice.vue'
+import Board from './views/Board.vue'
 
 const VIEWS = {
   mine: { label: '我的信息', icon: '👤', comp: Mine },
@@ -31,7 +32,8 @@ const VIEWS = {
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
   users: { label: '绑定情况', icon: '👥', comp: Users },
-  notice: { label: '同盟公告', icon: '📢', comp: Notice }
+  notice: { label: '同盟公告', icon: '📢', comp: Notice },
+  board: { label: '留言板', icon: '💬', comp: Board }
 }
 
 const screen = ref(token.value ? 'boot' : 'login')
@@ -92,7 +94,7 @@ const menuOptions = [
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'placement', 'notice'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
+    children: ['rally', 'placement', 'notice', 'board'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
   { type: 'group', label: '账号', key: 'g3', children: [{ label: VIEWS.users.label, key: 'users', icon: icon('👥') }] }
 ]

@@ -10,6 +10,7 @@ import Attrs from '../src/views/Attrs.vue'
 import Missing from '../src/views/Missing.vue'
 import Users from '../src/views/Users.vue'
 import Notice from '../src/views/Notice.vue'
+import Board from '../src/views/Board.vue'
 
 // 用 #bonus / #mine 看真实视图，#scrolled 看滚动时顶栏固不固定
 const hash = location.hash
@@ -42,7 +43,7 @@ provide('app', {
   }),
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}, refreshNotices: async () => {}
 })
-const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users, notice: Notice }
+const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users, notice: Notice, board: Board }
 // 公告弹窗的假数据，只为截图看样式
 const notices = ref([
   { _id: 'n1', title: '周五晚八点集合打城', createdByName: '凡宝', createdAt: '2026-10-05T09:00:00.000Z', daysLeft: 3,
