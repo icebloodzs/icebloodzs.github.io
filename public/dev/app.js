@@ -89,6 +89,27 @@ function ago(v) {
   return Math.floor(d / 30) + ' 个月前'
 }
 
+/** 把文本存成文件下载下来（备份就是靠这个落到本机的） */
+function download(name, text) {
+  const blob = new Blob([text], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+const stamp = () => {
+  const d = new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+}
+
+const size = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ? (n / 1024).toFixed(0) + ' KB' : n + ' B')
+
 function copy(text) {
   navigator.clipboard
     .writeText(text)
@@ -169,6 +190,7 @@ const VIEWS = [
   { key: 'alliances', title: '同盟', render: renderAlliances },
   { key: 'vision', title: '识别用量', render: renderVision },
   { key: 'plans', title: '会员方案', render: renderPlans },
+  { key: 'backup', title: '备份', render: renderBackup },
   { key: 'logs', title: '操作日志', render: renderLogs }
 ]
 // 当前页记在地址栏 hash 里，刷新 / 收藏都停在原地
@@ -542,10 +564,25 @@ async function renderVision() {
       <table><thead><tr><th>月份</th><th class="num">调用</th><th class="num">失败</th><th class="num">token</th><th class="num">成本</th></tr></thead><tbody>${mRows}</tbody></table>
     </div>
     <div class="card">
-      <h3>最近 200 次</h3>
-      <p class="hint">共 ${num(d.total)} 条。失败的也记——老是失败说明那个盟的人传的图不对，可以主动去问。</p>
+      <div class="row" style="justify-content:space-between">
+        <h3>最近 200 次</h3>
+        <button class="btn ghost small" id="vPrune">清理半年前的明细</button>
+      </div>
+      <p class="hint">共 ${num(d.total)} 条，只取最近 200 条看。失败的也记——老是失败说明那个盟的人传的图不对，可以主动去问。
+        明细是会一直长的，清掉旧的不影响上面的按月统计（那份存在另一张汇总表里）。</p>
       <table><thead><tr><th>时间</th><th>类型</th><th>成员</th><th class="num">token</th><th>结果</th><th>模型</th></tr></thead><tbody>${rows}</tbody></table>
     </div>`
+
+  $('vPrune').onclick = async () => {
+    if (!confirm('删掉半年前的逐条识别记录？按月统计不受影响，删了就找不回来了。')) return
+    try {
+      const r = await call('dev.visionPrune', { months: 6 })
+      toast('删了 ' + r.deleted + ' 条')
+      renderVision()
+    } catch (e) {
+      toast(e.message)
+    }
+  }
 }
 
 // ---------------- 会员方案 ----------------
@@ -575,6 +612,104 @@ async function renderPlans() {
       <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里和激活码的下拉都会跟着变。小程序端暂时不展示会员信息。</p>
     </div>
     <div class="grid g3">${cards}</div>`
+}
+
+// ---------------- 备份 ----------------
+
+async function renderBackup() {
+  const d = await call('dev.backupMeta')
+  const total = d.collections.reduce((a, c) => a + (c.count || 0), 0)
+
+  const rows = d.collections
+    .map((c) => `<tr><td><code>${esc(c.name)}</code></td><td class="num">${num(c.count)}</td><td class="muted tiny">${esc(c.error || '')}</td></tr>`)
+    .join('')
+  const files = d.files
+    .map((f) => `<tr><td><code>${esc(f.path)}</code></td><td class="num">${size(f.size)}</td></tr>`)
+    .join('')
+
+  $('body').innerHTML = `
+    <div class="card">
+      <h3>备份到本机</h3>
+      <p class="hint">
+        点下面的按钮会直接下载到你电脑的「下载」目录。数据是逐页取回来再拼成一个 JSON，
+        集合大的时候要等一会儿，别中途切页面。
+        <b>环境变量（智谱 API Key 这些）不在备份里</b>，换环境要自己重新填。
+      </p>
+      <div class="row">
+        <button class="btn" id="bAll">全部备份（数据 + 代码）</button>
+        <button class="btn ghost" id="bData">只备份数据</button>
+        <button class="btn ghost" id="bCode">只备份云函数代码</button>
+      </div>
+      <div class="codes" id="bLog" hidden></div>
+    </div>
+
+    <div class="grid g3" style="align-items:start">
+      <div class="card">
+        <h3>数据（${num(total)} 条）</h3>
+        <table><thead><tr><th>集合</th><th class="num">条数</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      </div>
+      <div class="card" style="grid-column: span 2">
+        <h3>云函数代码（${d.files.length} 个文件）</h3>
+        <p class="hint">线上正在跑的那一份，不含 node_modules。本地仓库才是正本，这里是用来核对线上到底是哪一版的。</p>
+        <table><thead><tr><th>文件</th><th class="num">大小</th></tr></thead><tbody>${files}</tbody></table>
+      </div>
+    </div>`
+
+  const logBox = $('bLog')
+  const say = (t) => {
+    logBox.hidden = false
+    logBox.innerHTML += esc(t) + '<br />'
+    logBox.scrollTop = logBox.scrollHeight
+  }
+
+  async function dumpData() {
+    const out = { env: 'cloud1-d4gobc9ws5134943d', at: new Date().toISOString(), collections: {} }
+    for (const c of d.collections) {
+      if (c.error) {
+        say(`${c.name} 跳过（${c.error}）`)
+        continue
+      }
+      const rows = []
+      for (let skip = 0; ; skip += d.pageSize) {
+        const page = await call('dev.backupCollection', { name: c.name, skip, limit: d.pageSize })
+        rows.push(...page.rows)
+        say(`${c.name} ${rows.length}/${c.count}`)
+        if (page.done) break
+      }
+      out.collections[c.name] = rows
+    }
+    return out
+  }
+
+  async function run(what) {
+    ;['bAll', 'bData', 'bCode'].forEach((id) => { $(id).disabled = true })
+    logBox.hidden = false
+    logBox.innerHTML = ''
+    try {
+      if (what !== 'code') {
+        say('开始导数据…')
+        const data = await dumpData()
+        download(`sanbing-data-${stamp()}.json`, JSON.stringify(data, null, 2))
+        say('数据已下载')
+      }
+      if (what !== 'data') {
+        say('开始导代码…')
+        const code = await call('dev.backupCode')
+        download(`sanbing-code-${stamp()}.json`, JSON.stringify(code, null, 2))
+        say(`代码已下载（${code.count} 个文件，${size(code.bytes)}）`)
+      }
+      toast('备份好了，看下载目录')
+    } catch (e) {
+      say('出错了：' + e.message)
+      toast(e.message)
+    } finally {
+      ;['bAll', 'bData', 'bCode'].forEach((id) => { const b = $(id); if (b) b.disabled = false })
+    }
+  }
+
+  $('bAll').onclick = () => run('all')
+  $('bData').onclick = () => run('data')
+  $('bCode').onclick = () => run('code')
 }
 
 // ---------------- 操作日志 ----------------
