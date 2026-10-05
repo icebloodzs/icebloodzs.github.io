@@ -118,7 +118,7 @@ async function exportExcel() {
         </n-space>
       </template>
 
-      <n-alert type="default" :bordered="false" style="margin-bottom: 14px">
+      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         车头按集结值（或六维）从高到低挑，车身按你选的排法依次填。算的是和小程序同一套逻辑，两边结果一致。
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>

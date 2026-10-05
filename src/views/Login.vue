@@ -10,6 +10,12 @@ import QRCode from 'qrcode'
 const props = defineProps({ tip: String, why: String, retry: Boolean })
 const emit = defineEmits(['done', 'retry'])
 
+const STEPS = [
+  ['微信打开小程序', '管理 → 登录电脑版'],
+  ['扫上面这个码', '点「确认登录」'],
+  ['这里会自动进去', '七天内不用再扫']
+]
+
 const qr = ref('')
 const state = ref('loading')
 const msg = ref('')
@@ -78,11 +84,15 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
         </div>
       </div>
 
-      <n-steps vertical size="small" :current="0" class="steps">
-        <n-step title="打开小程序" description="管理 → 登录电脑版" />
-        <n-step title="扫上面这个码" description="点确认" />
-        <n-step title="自动进入" description="七天内不用再扫" />
-      </n-steps>
+      <div class="steps">
+        <div v-for="(t, i) in STEPS" :key="i" class="step">
+          <span class="no">{{ i + 1 }}</span>
+          <div>
+            <div class="st">{{ t[0] }}</div>
+            <div class="sd">{{ t[1] }}</div>
+          </div>
+        </div>
+      </div>
 
       <n-alert v-if="tip" :type="retry ? 'warning' : 'info'" :bordered="false" style="margin-top: 14px">
         {{ tip }}
@@ -101,20 +111,28 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #8b7cf0, #6c5ce7);
+  background: linear-gradient(140deg, #7b6ef0 0%, #6c5ce7 55%, #5a4bd1 100%);
 }
-.box { width: 400px; text-align: center; border-radius: 18px; }
-h1 { margin: 0 0 4px; font-size: 22px; }
-.sub { color: #8a9099; font-size: 13px; margin-bottom: 22px; }
+.box {
+  width: 372px;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(40, 24, 100, 0.28);
+}
+h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; text-align: center; }
+.sub { color: #8a9099; font-size: 12px; text-align: center; margin-bottom: 20px; }
+
 .qr {
-  width: 220px;
-  height: 220px;
+  width: 200px;
+  height: 200px;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid #efeff5;
+  border-radius: 12px;
+  overflow: hidden;
 }
-.qr img { width: 220px; height: 220px; }
+.qr img { width: 198px; height: 198px; display: block; }
 .qr-mask {
   width: 100%;
   height: 100%;
@@ -122,11 +140,28 @@ h1 { margin: 0 0 4px; font-size: 22px; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: #f1f2f6;
-  border-radius: 12px;
+  gap: 8px;
+  background: #fafafc;
   color: #8a9099;
   font-size: 13px;
 }
-.steps { margin-top: 22px; text-align: left; }
+
+.steps { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.step { display: flex; align-items: flex-start; gap: 10px; }
+.no {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #efeafe;
+  color: #6c5ce7;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+.st { font-size: 13px; color: #1f2329; }
+.sd { font-size: 12px; color: #9aa0a6; margin-top: 1px; }
 .why { margin-top: 6px; font-size: 11px; opacity: 0.75; word-break: break-all; }
 </style>

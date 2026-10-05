@@ -16,7 +16,6 @@ export const bigCol = (title, key, width = 110) => ({
   title,
   key,
   width,
-  align: 'right',
   sorter: sorter((r) => r[key]),
   render: (r) => big(r[key]),
   xls: (r) => (r[key] === null || r[key] === undefined ? '' : Number(r[key]))
@@ -26,7 +25,6 @@ export const numCol = (title, key, digits = 2, width = 100) => ({
   title,
   key,
   width,
-  align: 'right',
   sorter: sorter((r) => r[key]),
   render: (r) => num(r[key], digits),
   xls: (r) => (r[key] === null || r[key] === undefined ? '' : Number(r[key]))
@@ -54,7 +52,6 @@ export const boundCol = {
   title: '绑定',
   key: 'boundUid',
   width: 90,
-  align: 'center',
   sorter: sorter((r) => (r.boundUid ? 1 : 0)),
   render: (r) => h(NTag, { size: 'small', type: r.boundUid ? 'success' : 'error', bordered: false },
     () => (r.boundUid ? '已绑定' : '未绑定')),

@@ -58,7 +58,7 @@ async function exportExcel() {
       </n-space>
     </template>
 
-    <n-alert v-if="desc" type="default" :bordered="false" style="margin-bottom: 14px">{{ desc }}</n-alert>
+    <n-alert v-if="desc" type="info" :bordered="false" style="margin-bottom: 14px">{{ desc }}</n-alert>
     <slot name="filters" />
 
     <n-data-table

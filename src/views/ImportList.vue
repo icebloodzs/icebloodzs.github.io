@@ -107,7 +107,7 @@ const suspectCols = [
 <template>
   <n-space vertical :size="16">
     <n-card title="导入同盟名单" :bordered="false">
-      <n-alert type="default" :bordered="false" style="margin-bottom: 14px">
+      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         在游戏同盟里导出成员列表（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），
         复制后整段粘到下面，<b>保留表头那一行</b>。先点「解析预览」核对，没问题再「确认导入」。
       </n-alert>

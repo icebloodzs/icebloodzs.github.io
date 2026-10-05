@@ -153,7 +153,7 @@ function savePng() {
         </n-space>
       </template>
 
-      <n-alert type="default" :bordered="false" style="margin-bottom: 14px">
+      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         按成员实力从高到低、由内圈往外圈排。人比格子多时，最强的格子配一个最弱的（强带弱），再多的进待分配。
       </n-alert>
 

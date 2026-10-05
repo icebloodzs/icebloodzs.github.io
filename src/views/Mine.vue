@@ -162,7 +162,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       <template #header>我的属性 · {{ member.name }}</template>
       <template #header-extra><n-tag size="small" :bordered="false">只能截图识别</n-tag></template>
 
-      <n-alert type="default" :bordered="false" style="margin-bottom: 14px">
+      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         数值只认截图识别的结果，这里填不了也改不了。传一张游戏里的「属性加成」面板截图就会自动识别入库，和在小程序里传是同一回事。
       </n-alert>
 
@@ -210,7 +210,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 
     <!-- 赛季评分 -->
     <n-card :bordered="false" :title="'赛季评分 · ' + ((season && season.label) || '')">
-      <n-alert type="default" :bordered="false" style="margin-bottom: 14px">
+      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         评分 = 成员实力 − 武将战力。武将战力同样只能靠截图识别，传战力面板截图即可。
       </n-alert>
       <n-descriptions :column="5" bordered size="small">
@@ -232,7 +232,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 
     <!-- 手填的几项 -->
     <n-card :bordered="false" title="集结与兵力">
-      <n-alert type="default" :bordered="false" style="margin-bottom: 14px">
+      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         这几项游戏里没有现成截图，手填。集结值和单人出征说的是<b>同一队</b>——你集结值最高的那一队，以及这一队能带多少兵。兵力按兵营等级分两档填，只有一种就只填那一行。
       </n-alert>
 

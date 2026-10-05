@@ -8,7 +8,7 @@ const { members } = inject('app')
 
 const columns = [
   nameCol,
-  { title: '阶级', key: 'rank', width: 80, align: 'center', sorter: sorter((r) => r.rank) },
+  { title: '阶级', key: 'rank', width: 80,  sorter: sorter((r) => r.rank) },
   { title: '火炉', key: 'furnace', width: 110 },
   bigCol('战力', 'power'),
   bigCol('实力', 'strength'),

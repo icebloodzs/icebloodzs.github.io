@@ -10,7 +10,6 @@ const attrCol = (title, key) => ({
   title,
   key: 'a_' + key,
   width: 92,
-  align: 'right',
   sorter: sorter((r) => (r.attrs ? r.attrs[key] : null)),
   render: (r) => {
     const v = r.attrs && r.attrs[key]

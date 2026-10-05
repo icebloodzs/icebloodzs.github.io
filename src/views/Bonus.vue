@@ -24,7 +24,6 @@ const troopCol = (lv) => ({
   title: `宫${lv} 兵力`,
   key: 'lv' + lv,
   width: 150,
-  align: 'right',
   sorter: sorter((r) => sumOf(r, lv)),
   render: (r) => {
     const s = sumOf(r, lv)

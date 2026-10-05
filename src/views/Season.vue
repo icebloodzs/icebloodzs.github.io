@@ -35,8 +35,7 @@ const columns = computed(() => [
     title: '定位',
     key: 'position',
     width: 100,
-    align: 'center',
-    render: (r) => {
+      render: (r) => {
       const p = posOf(r.seasonScore)
       return p ? h(NTag, { size: 'small', type: p.type, bordered: false }, () => p.label) : '—'
     },

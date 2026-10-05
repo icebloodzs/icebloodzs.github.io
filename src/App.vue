@@ -177,24 +177,36 @@ boot()
             @retry="onRetry"
           />
 
-          <n-layout v-else has-sider style="min-height: 100vh">
-            <n-layout-sider bordered :width="208" :native-scrollbar="false" class="side">
+          <n-layout v-else has-sider position="absolute">
+            <n-layout-sider bordered :width="212" :native-scrollbar="false" content-style="display:flex;flex-direction:column">
               <div class="brand">
-                <div class="brand-n">{{ ally.name }}</div>
-                <div class="brand-s">{{ ally.serverNo }} 区 · {{ ally.season }}</div>
+                <n-avatar round :size="34" color="#6c5ce7">{{ (ally.name || '盟').slice(0, 1) }}</n-avatar>
+                <div>
+                  <div class="brand-n">{{ ally.name }}</div>
+                  <div class="brand-s">{{ ally.serverNo }} 区 · {{ ally.season }}</div>
+                </div>
               </div>
-              <n-menu v-model:value="view" :options="menuOptions" :indent="18" />
+              <n-menu v-model:value="view" :options="menuOptions" :indent="18" style="flex: 1" />
+              <div class="who">
+                <n-avatar round :size="26" color="#e8e4ff" style="color:#6c5ce7">
+                  {{ (me.nickname || '管').slice(0, 1) }}
+                </n-avatar>
+                <div class="who-t">
+                  <div class="who-n">{{ me.nickname || '管理员' }}</div>
+                  <div class="who-r">{{ me.role === 'super' ? '超级管理员' : '管理员' }}</div>
+                </div>
+              </div>
             </n-layout-sider>
 
-            <n-layout>
+            <n-layout :native-scrollbar="false">
               <n-layout-header bordered class="top">
                 <h3>{{ title }}</h3>
-                <n-space align="center">
-                  <n-tag :bordered="false" type="success" size="small" round>
-                    {{ me.nickname || '管理员' }}{{ me.role === 'super' ? ' · 超管' : '' }}
-                  </n-tag>
-                  <n-button size="small" :loading="loading" @click="reload">刷新数据</n-button>
-                  <n-button size="small" quaternary @click="logout">退出</n-button>
+                <n-space align="center" :size="10">
+                  <n-button size="small" secondary :loading="loading" @click="reload">刷新数据</n-button>
+                  <n-popconfirm @positive-click="logout">
+                    <template #trigger><n-button size="small" quaternary>退出</n-button></template>
+                    退出后需要重新扫码登录
+                  </n-popconfirm>
                 </n-space>
               </n-layout-header>
               <n-layout-content class="body" :native-scrollbar="false">
@@ -234,23 +246,34 @@ boot()
 }
 .boot-t { color: #fff; opacity: 0.9; font-size: 14px; }
 
-.side { background: linear-gradient(180deg, #8b7cf0, #7a68e8); }
-.side :deep(.n-menu .n-menu-item-content) { color: rgba(255, 255, 255, 0.86); }
-.side :deep(.n-menu .n-menu-item-content:hover) { background: rgba(255, 255, 255, 0.12); }
-.side :deep(.n-menu .n-menu-item-content--selected) { background: rgba(255, 255, 255, 0.22); }
-.side :deep(.n-menu .n-menu-item-content--selected .n-menu-item-content-header) { color: #fff; font-weight: 600; }
-.side :deep(.n-menu-item-group-title) { color: rgba(255, 255, 255, 0.65); }
-.brand { padding: 20px 20px 10px; color: #fff; }
-.brand-n { font-size: 20px; font-weight: 700; }
-.brand-s { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--n-border-color, #efeff5);
+}
+.brand-n { font-size: 15px; font-weight: 600; line-height: 1.2; }
+.brand-s { font-size: 12px; color: #8a9099; margin-top: 2px; }
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--n-border-color, #efeff5);
+}
+.who-n { font-size: 13px; font-weight: 600; line-height: 1.2; }
+.who-r { font-size: 11px; color: #8a9099; margin-top: 2px; }
 
 .top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 24px;
+  padding: 0 24px;
+  height: 56px;
   background: #fff;
 }
-.top h3 { margin: 0; font-size: 19px; }
-.body { padding: 20px 24px 60px; background: #f5f6fa; }
+.top h3 { margin: 0; font-size: 18px; font-weight: 600; }
+.body { padding: 20px 24px 40px; background: #f5f6fa; }
 </style>
