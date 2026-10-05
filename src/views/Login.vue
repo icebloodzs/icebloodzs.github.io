@@ -10,11 +10,8 @@ import QRCode from 'qrcode'
 const props = defineProps({ tip: String, why: String, retry: Boolean })
 const emit = defineEmits(['done', 'retry'])
 
-const STEPS = [
-  ['微信打开小程序', '管理 → 登录电脑版'],
-  ['扫上面这个码', '点「确认登录」'],
-  ['这里会自动进去', '七天内不用再扫']
-]
+/** 横着排，只留短标题；展开的说明放下面一行 */
+const STEPS = ['微信打开小程序', '扫码并确认', '自动进入']
 
 const qr = ref('')
 const state = ref('loading')
@@ -87,19 +84,19 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
       <div class="steps">
         <div v-for="(t, i) in STEPS" :key="i" class="step">
           <span class="no">{{ i + 1 }}</span>
-          <div>
-            <div class="st">{{ t[0] }}</div>
-            <div class="sd">{{ t[1] }}</div>
-          </div>
+          <div class="st">{{ t }}</div>
         </div>
       </div>
+      <div class="hint">小程序里走「管理 → 登录电脑版」· 登录后七天内不用再扫</div>
 
       <n-alert v-if="tip" :type="retry ? 'warning' : 'info'" :bordered="false" style="margin-top: 14px">
         {{ tip }}
         <div v-if="why" class="why">{{ why }}</div>
       </n-alert>
       <div class="foot">
-        <n-button v-if="state === 'ready'" quaternary size="tiny" @click="newTicket">刷新二维码</n-button>
+        <n-button v-if="state === 'ready'" tertiary round size="small" class="rf" @click="newTicket">
+          <span class="rf-i">↻</span> 换一个二维码
+        </n-button>
       </div>
     </n-card>
   </div>
@@ -147,28 +144,41 @@ h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; text-align: center; }
 }
 
 .steps {
-  width: 200px;
-  margin: 20px auto 0;
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  margin: 22px 0 0;
 }
-.foot { margin-top: 14px; text-align: center; }
-.step { display: flex; align-items: flex-start; gap: 10px; }
+.step {
+  flex: 1;
+  position: relative;
+  text-align: center;
+}
+/* 两点之间连一条细线，线压在圆点下面 */
+.step + .step::before {
+  content: '';
+  position: absolute;
+  left: -50%;
+  top: 11px;
+  width: 100%;
+  height: 1px;
+  background: #eceaf5;
+}
 .no {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  margin-top: 1px;
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #efeafe;
   color: #6c5ce7;
   font-size: 12px;
   font-weight: 600;
-  line-height: 20px;
-  text-align: center;
+  line-height: 22px;
 }
-.st { font-size: 13px; color: #1f2329; }
-.sd { font-size: 12px; color: #9aa0a6; margin-top: 1px; }
+.st { margin-top: 7px; font-size: 12px; color: #4b5563; white-space: nowrap; }
+.hint { margin-top: 12px; font-size: 12px; color: #9aa0a6; text-align: center; line-height: 1.7; }
+.foot { margin-top: 16px; text-align: center; }
+.rf-i { display: inline-block; margin-right: 2px; font-size: 13px; }
+.rf:hover .rf-i { transform: rotate(180deg); transition: transform 0.35s ease; }
 .why { margin-top: 6px; font-size: 11px; opacity: 0.75; word-break: break-all; }
 </style>
