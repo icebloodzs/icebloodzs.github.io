@@ -8,7 +8,7 @@ import { ref, inject, computed, h } from 'vue'
 import { useMessage, useDialog, NButton } from 'naive-ui'
 import { call } from '../api'
 
-const { reload } = inject('app')
+const { me, reload } = inject('app')
 const message = useMessage()
 const dialog = useDialog()
 
@@ -16,6 +16,8 @@ const text = ref('')
 const markMissingOut = ref(true)
 const busy = ref(false)
 const summary = ref(null)
+/** 在册上限由服务端给（whoami），界面只负责显示 */
+const maxMembers = computed(() => (me.value && me.value.alliance && me.value.alliance.maxMembers) || 100)
 
 const PLACEHOLDER = '每行一名成员，列之间用 Tab 分隔\n例如：\n1\t草莓招了\t4\t宫阙3级\t99999999\t0\t999999999\t99999\t999999999'
 
@@ -110,6 +112,7 @@ const suspectCols = [
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         同盟四阶导出数据（含 成员名称/阶级/火炉等级/战力/周功勋/总功勋/周捐献/实力），
         复制后整段粘到下面，<b>保留表头那一行</b>。先点「解析预览」核对，没问题再「确认导入」。
+        同盟最多 {{ maxMembers }} 人，超了导不进去。
       </n-alert>
 
       <n-input v-model:value="text" type="textarea" :rows="8" :placeholder="PLACEHOLDER" />
@@ -137,6 +140,10 @@ const suspectCols = [
           </n-alert>
           <n-alert v-if="summary.truncated" type="error" :bordered="false">
             有 {{ summary.truncated }} 行列数不全（多半是粘贴被截断），已跳过没写进去。
+          </n-alert>
+          <n-alert v-if="summary.overLimit" type="error" :bordered="false">
+            导入后在册会有 <b>{{ summary.willBeInRoster }}</b> 人，超过上限 {{ summary.maxMembers }} 人，这样是导不进去的。
+            多半是粘错了内容，或者关掉了「把名单里消失的人标记为已离队」。
           </n-alert>
           <n-alert v-if="summary.bulkLower" type="error" :bordered="false">
             有 {{ summary.dropped }} 人的总功勋比库里小，这份名单可能是旧的或者赛季重置了。确认导入时会再问你一次。
