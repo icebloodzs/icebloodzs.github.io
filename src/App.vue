@@ -198,29 +198,33 @@ boot()
               </div>
             </n-layout-sider>
 
-            <n-layout position="absolute">
-              <n-layout-header bordered position="absolute" class="top">
-                <h3>{{ title }}</h3>
-                <n-space align="center" :size="10">
-                  <n-button size="small" secondary :loading="loading" @click="reload">刷新数据</n-button>
-                  <n-popconfirm @positive-click="logout">
-                    <template #trigger><n-button size="small" quaternary>退出</n-button></template>
-                    退出后需要重新扫码登录
-                  </n-popconfirm>
-                </n-space>
-              </n-layout-header>
-              <n-layout
-                class="body"
-                position="absolute"
-                style="top: 64px"
-                :native-scrollbar="false"
-                content-style="padding: 20px 24px 40px; min-height: 100%"
-              >
-                <n-spin :show="loading && !members.length">
-                  <component :is="VIEWS[view].comp" />
-                </n-spin>
+            <!-- 外面套一层 relative 的壳：里面那层是 absolute 定位的，
+                 没有这层壳它会贴到最外层 n-layout 上，把左边侧栏盖住 -->
+            <div class="right">
+              <n-layout position="absolute">
+                <n-layout-header bordered position="absolute" class="top">
+                  <h3>{{ title }}</h3>
+                  <n-space align="center" :size="10">
+                    <n-button size="small" secondary :loading="loading" @click="reload">刷新数据</n-button>
+                    <n-popconfirm @positive-click="logout">
+                      <template #trigger><n-button size="small" quaternary>退出</n-button></template>
+                      退出后需要重新扫码登录
+                    </n-popconfirm>
+                  </n-space>
+                </n-layout-header>
+                <n-layout
+                  class="body"
+                  position="absolute"
+                  style="top: 64px"
+                  :native-scrollbar="false"
+                  content-style="padding: 20px 24px 40px; min-height: 100%"
+                >
+                  <n-spin :show="loading && !members.length">
+                    <component :is="VIEWS[view].comp" />
+                  </n-spin>
+                </n-layout>
               </n-layout>
-            </n-layout>
+            </div>
           </n-layout>
         </n-dialog-provider>
       </n-loading-bar-provider>
@@ -284,6 +288,8 @@ boot()
   background: #fff;
 }
 .top h3 { margin: 0; font-size: 18px; font-weight: 600; }
+/* 侧栏右边剩下的地方，给里面的 absolute 布局当定位参照 */
+.right { position: relative; flex: 1; min-width: 0; }
 /* 内容区单独一层 absolute，从顶栏下面开始；顶栏因此滚不动 */
 .body { background: #f5f6fa; }
 </style>

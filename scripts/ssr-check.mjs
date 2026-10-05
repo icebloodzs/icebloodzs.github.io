@@ -75,6 +75,14 @@ const checks = [
 ]
 checks.forEach(([n, re]) => { if (!re.test(src)) { bad++; console.log(`  !!   App.vue: ${n} 没通过`) } else console.log(`  ok   App.vue ${n}`) })
 
+// probe/Shell.vue 是从 App.vue 抠出来的布局副本，App.vue 改了布局它必须跟着改，
+// 不然截图自检看的就不是真页面了
+const shell = (await import('node:fs')).readFileSync('probe/Shell.vue', 'utf8')
+;['class="right"', 'position="absolute"', 'style="top: 64px"'].forEach((m) => {
+  if (!shell.includes(m)) { bad++; console.log(`  !!   probe/Shell.vue 和 App.vue 不一致，缺 ${m}，请重新生成`) }
+})
+console.log('  ok   probe/Shell.vue 与 App.vue 布局一致')
+
 await vite.close()
 console.log(bad ? `\n${bad} 项不通过` : '\n全部通过')
 process.exit(bad ? 1 : 0)

@@ -41,6 +41,8 @@ const troopCol = {
         h('span', { class: 'bn-d' }, s === null ? '' : detail(r, lv))
       ])
     }
+    // 两档都没填就别摆两个破折号了，给一个就够
+    if (sumOf(r, '3') === null && sumOf(r, '2') === null) return h('span', { class: 'bn-none' }, '—')
     return h('div', [line('3'), line('2')])
   },
   xls: (r) => {
