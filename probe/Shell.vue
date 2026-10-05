@@ -4,6 +4,7 @@ import Bonus from '../src/views/Bonus.vue'
 import Mine from '../src/views/Mine.vue'
 import Rally from '../src/views/Rally.vue'
 import Placement from '../src/views/Placement.vue'
+import Season from '../src/views/Season.vue'
 
 // 用 #bonus / #mine 看真实视图，#scrolled 看滚动时顶栏固不固定
 const hash = location.hash
@@ -22,18 +23,21 @@ const MEMBERS = [
 for (let i = 0; i < 40; i += 1) {
   MEMBERS.push({ _id: 'x' + i, name: '成员' + (i + 1), maxBonus: 120 - i, maxMarch: 200000 - i * 1000,
     strength: 90000000 - i * 1000000, attrsSum: 5000 - i * 10, attrsUpdatedAt: '2026-10-01T00:00:00.000Z',
+    heroPower: 20000000 + i * 500000, seasonScore: 70000000 - i * 1500000,
+    heroPowerBy: '成员' + (i + 1), heroPowerUpdatedAt: '2026-10-02T00:00:00.000Z',
     troopsByLevel: { 3: { inf: 150 - i, cav: 40, arc: 60 } } })
 }
 provide('app', {
   me: ref({ role: 'super', memberId: 'a', nickname: '我', member: MEMBERS[0] }),
   members: ref(MEMBERS),
   season: ref({
-    key: 'S6', label: 'S6', limits: [], topTier: '3', topTierLabel: '宫3',
+    key: 'S6', label: 'S6 赛季', limits: [], topTier: '3', topTierLabel: '宫3',
+    vanguardMax: 58000000, marshalMax: 87000000, guardianMax: 120000000,
     tiers: [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
   }),
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}
 })
-const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement }
+const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season }
 const inner = computed(() => VIEWS[Object.keys(VIEWS).find((k) => hash.includes(k))] || null)
 onMounted(() => {
   // #gen：自动点一下「生成」，好把排好的表截下来
