@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=1180" />
+  <title>三冰小帮手 · 开发者后台</title>
+  <link rel="stylesheet" href="./style.css?v=1" />
+</head>
+<body>
+  <!-- 带着 token 刷新时要等 whoami 回来才知道去登录页还是进后台，这期间不能让登录页先闪出来 -->
+  <div class="boot" id="boot"><div class="spin"></div><div>正在进入…</div></div>
+
+  <div class="login" id="login" hidden>
+    <div class="login-box">
+      <h1>开发者后台</h1>
+      <p class="sub">用开发者微信扫码进入。普通管理员扫了也进不来。</p>
+      <div id="qr"><div class="qr-mask">正在生成二维码…</div></div>
+      <ol class="steps">
+        <li>微信打开小程序 → <b>管理</b> → <b>登录电脑版</b></li>
+        <li>扫上面这个码，点确认</li>
+        <li>这里会自动进去，七天内不用再扫</li>
+      </ol>
+      <div class="tip" id="loginTip"></div>
+      <button class="btn ghost" id="refreshQr">换一个二维码</button>
+    </div>
+  </div>
+
+  <div class="app" id="app" hidden>
+    <aside class="side">
+      <div class="brand"><span class="logo">三</span><div><b>开发者后台</b><i id="who">—</i></div></div>
+      <nav id="nav"></nav>
+      <button class="btn ghost small" id="logout">退出</button>
+    </aside>
+    <main class="main">
+      <header class="top">
+        <h2 id="viewTitle">总览</h2>
+        <div class="right">
+          <span class="muted" id="updatedAt"></span>
+          <button class="btn ghost small" id="reload">刷新</button>
+        </div>
+      </header>
+      <section class="body" id="body"></section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="./app.js?v=1"></script>
+</body>
+</html>
