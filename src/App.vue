@@ -90,13 +90,17 @@ async function boot() {
     await reload()
   } catch (e) {
     // 服务端明确说登录态不能用才清掉；网络抖一下保留，给个重试
-    const dead = e.errCode === 'WEB_UNAUTHED' || e.errCode === 'FORBIDDEN' || e.fatal
+    // FEATURE_LOCKED = 这个盟的会员等级不够用电脑版，token 留着也没用，一起清掉
+    const dead = e.errCode === 'WEB_UNAUTHED' || e.errCode === 'FORBIDDEN' || e.errCode === 'FEATURE_LOCKED' || e.fatal
     if (!dead) {
       netError.value = true
       loginTip.value = (e.message || '连不上服务器') + '（登录态还在，重试就行）'
       loginWhy.value = ''
     } else {
-      loginWhy.value = `上次的登录态被服务器拒了：${e.errCode || '未知'}，存在 ${store.how === 'cookie' ? 'cookie' : 'localStorage'}，已清掉`
+      loginWhy.value =
+        e.errCode === 'FEATURE_LOCKED'
+          ? '电脑版是高级会员及以上才有的功能，升级后再扫码'
+          : `上次的登录态被服务器拒了：${e.errCode || '未知'}，存在 ${store.how === 'cookie' ? 'cookie' : 'localStorage'}，已清掉`
       loginTip.value = e.message || '登录已失效，请重新扫码'
       setToken('')
       netError.value = false
