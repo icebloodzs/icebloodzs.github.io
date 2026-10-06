@@ -17,6 +17,7 @@ import Missing from './views/Missing.vue'
 import Season from './views/Season.vue'
 import Rally from './views/Rally.vue'
 import Placement from './views/Placement.vue'
+import Shape from './views/Shape.vue'
 import Users from './views/Users.vue'
 import Notice from './views/Notice.vue'
 import Board from './views/Board.vue'
@@ -31,6 +32,7 @@ const VIEWS = {
   season: { label: '赛季评分', icon: '🏅', comp: Season },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
+  shape: { label: '摆图形', icon: '🔠', comp: Shape },
   users: { label: '绑定情况', icon: '👥', comp: Users },
   notice: { label: '同盟公告', icon: '📢', comp: Notice },
   board: { label: '留言板', icon: '💬', comp: Board }
@@ -94,7 +96,7 @@ const menuOptions = [
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'placement', 'notice', 'board'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
+    children: ['rally', 'placement', 'shape', 'notice', 'board'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
   { type: 'group', label: '账号', key: 'g3', children: [{ label: VIEWS.users.label, key: 'users', icon: icon('👥') }] }
 ]

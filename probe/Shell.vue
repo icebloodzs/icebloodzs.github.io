@@ -4,6 +4,7 @@ import Bonus from '../src/views/Bonus.vue'
 import Mine from '../src/views/Mine.vue'
 import Rally from '../src/views/Rally.vue'
 import Placement from '../src/views/Placement.vue'
+import Shape from '../src/views/Shape.vue'
 import Season from '../src/views/Season.vue'
 import Roster from '../src/views/Roster.vue'
 import Attrs from '../src/views/Attrs.vue'
@@ -43,7 +44,7 @@ provide('app', {
   }),
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}, refreshNotices: async () => {}
 })
-const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users, notice: Notice, board: Board }
+const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, shape: Shape, season: Season, roster: Roster, attrs: Attrs, missing: Missing, users: Users, notice: Notice, board: Board }
 // 公告弹窗的假数据，只为截图看样式
 const notices = ref([
   { _id: 'n1', title: '周五晚八点集合打城', createdByName: '凡宝', createdAt: '2026-10-05T09:00:00.000Z', daysLeft: 3,
@@ -114,7 +115,7 @@ const menuOptions = [
     { label: '成员加成', key: 'bonus' }, { label: '属性排名', key: 'attrs' },
     { label: '遗漏排查', key: 'missing' }, { label: '赛季评分', key: 'season' }] },
   { type: 'group', label: '指挥工具', key: 'g3', children: [
-    { label: '集结分配', key: 'rally' }, { label: '黑土落位', key: 'placement' }] },
+    { label: '集结分配', key: 'rally' }, { label: '黑土落位', key: 'placement' }, { label: '摆图形', key: 'shape' }] },
   { type: 'group', label: '账号', key: 'g4', children: [{ label: '绑定情况', key: 'users' }] }
 ]
 </script>
