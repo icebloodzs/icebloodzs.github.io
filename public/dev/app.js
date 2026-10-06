@@ -190,6 +190,7 @@ const VIEWS = [
   { key: 'alliances', title: '同盟', render: renderAlliances },
   { key: 'vision', title: '识别用量', render: renderVision },
   { key: 'plans', title: '会员方案', render: renderPlans },
+  { key: 'demo', title: '演示环境', render: renderDemo },
   { key: 'backup', title: '备份', render: renderBackup },
   { key: 'logs', title: '操作日志', render: renderLogs }
 ]
@@ -612,6 +613,106 @@ async function renderPlans() {
       <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里和激活码的下拉都会跟着变。小程序端暂时不展示会员信息。</p>
     </div>
     <div class="grid g3">${cards}</div>`
+}
+
+// ---------------- 演示环境 ----------------
+
+async function renderDemo() {
+  const d = await call('demo.status')
+  const demo = d.demo
+
+  $('body').innerHTML = `
+    <div class="card">
+      <h3>演示环境</h3>
+      <p class="hint">
+        造一个跟真盟完全隔离的「演示同盟」：人数和数值分布照着真盟的样子来，但<b>名字全是生成的</b>，
+        不会把真玩家 ID 放进宣传视频。还会补一段历史（逐日名单快照 + 六维逐步提升），
+        不然看板上「涨了多少」那半边是空的。删掉演示盟 = 一次性清干净，碰不到真盟。
+      </p>
+      <div class="row">
+        <label class="f">成员数<input id="dCount" type="number" value="86" min="10" max="100" /></label>
+        <label class="f">历史天数<input id="dDays" type="number" value="21" min="2" max="60" /></label>
+        <label class="f">随机种子<input id="dSeed" type="number" value="20261006" /></label>
+        <button class="btn" id="dSeed2" style="align-self:flex-end">${demo ? '重新生成' : '生成演示数据'}</button>
+        ${demo ? '<button class="btn ghost" id="dDel" style="align-self:flex-end">删掉演示盟</button>' : ''}
+      </div>
+      <div class="codes" id="dLog" hidden></div>
+    </div>
+
+    <div class="grid g3">
+      ${statCard('演示同盟', demo ? esc(demo.name) : '还没造', demo ? `${esc(demo.serverNo)} 区` : '点上面生成')}
+      ${statCard('成员', demo ? num(demo.members) : '—', demo ? '全是生成的假名' : '')}
+      ${statCard('历史快照', demo ? num(demo.snapshots) : '—', demo ? '逐日一份' : '')}
+    </div>
+
+    <div class="card">
+      <h3>我现在在哪</h3>
+      <p class="hint">
+        一个微信同时只能属于一个盟，所以要在小程序里看演示数据，得把自己临时挪过去。
+        原来的归属和绑定存在服务端，切回来完整还原。
+        <b>小程序里也能切</b>：管理页顶上有个「演示环境」卡片，录视频时在那儿切更顺手。
+      </p>
+      <div class="row">
+        <span class="tag ${d.inDemo ? 'amber' : 'green'}">${d.inDemo ? '正在演示盟' : '在自己的盟' + (d.home ? '' : '')}</span>
+        ${d.home ? `<span class="muted tiny">原归属：${esc(d.home.name || '—')}</span>` : ''}
+        <div style="flex:1"></div>
+        ${demo ? `<button class="btn ${d.inDemo ? 'ghost' : ''}" id="dSwitch">${d.inDemo ? '回到我自己的盟' : '切到演示同盟'}</button>` : ''}
+      </div>
+    </div>`
+
+  const logBox = $('dLog')
+  const say = (t) => { logBox.hidden = false; logBox.innerHTML += esc(t) + '<br />' }
+
+  $('dSeed2').onclick = async () => {
+    if (demo && !confirm('会先把现有的演示盟整个删掉再重造，确定？')) return
+    $('dSeed2').disabled = true
+    logBox.hidden = false
+    logBox.innerHTML = ''
+    say('正在生成，上百条记录要写一会儿，别切页面…')
+    try {
+      const res = await call('demo.seed', {
+        count: Number($('dCount').value || 86),
+        days: Number($('dDays').value || 21),
+        seed: Number($('dSeed').value || 20261006)
+      })
+      say(`好了：${res.members} 人 · ${res.rosterSnapshots} 份名单快照 · ${res.attrSnapshots} 条六维记录`)
+      toast('演示数据已生成')
+      setTimeout(renderDemo, 1200)
+    } catch (e) {
+      say('出错了：' + e.message)
+      toast(e.message)
+    } finally {
+      const b = $('dSeed2')
+      if (b) b.disabled = false
+    }
+  }
+
+  if ($('dDel')) {
+    $('dDel').onclick = async () => {
+      if (!confirm('把演示盟和它的全部数据删掉。真盟不受影响。确定？')) return
+      try {
+        await call('demo.remove')
+        toast('删掉了')
+        renderDemo()
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+  }
+
+  if ($('dSwitch')) {
+    $('dSwitch').onclick = async () => {
+      const back = d.inDemo
+      if (!confirm(back ? '回到你自己的盟，绑定和权限原样还原。' : '把你自己临时挪到演示盟，随时能切回来。')) return
+      try {
+        await call('demo.switch', { back })
+        toast(back ? '回来了' : '切过去了')
+        renderDemo()
+      } catch (e) {
+        toast(e.message)
+      }
+    }
+  }
 }
 
 // ---------------- 备份 ----------------
