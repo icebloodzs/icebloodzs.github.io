@@ -32,6 +32,11 @@ const maxComment = ref(200)
 const draft = ref({})
 /** 哪几条展开了全部评论 */
 const expanded = ref({})
+/** 哪几条展开了全文（长帖子默认收起来） */
+const unfolded = ref({})
+
+/** 要不要收起来：按纯文本长度算，带图的也算长。不去量高度，省得抖 */
+const isLong = (r) => (r.content || '').length > 160 || /<img/i.test(r.html || '')
 
 const bound = computed(() => Boolean(me.value && me.value.member))
 
@@ -165,7 +170,14 @@ async function pin(row) {
 
         <div v-if="r.title" class="title">{{ r.title }}</div>
         <!-- html 是服务端洗过白名单的（见云函数 lib/richtext.js），这里才敢 v-html -->
-        <div class="text" v-html="r.html"></div>
+        <div class="text" :class="{ clamp: isLong(r) && !unfolded[r._id] }" v-html="r.html"></div>
+        <n-button
+          v-if="isLong(r)"
+          size="tiny"
+          text
+          type="primary"
+          @click="unfolded = { ...unfolded, [r._id]: !unfolded[r._id] }"
+        >{{ unfolded[r._id] ? '收起' : '展开全文' }}</n-button>
 
         <div v-if="r.comments && r.comments.length" class="cmts">
           <div v-for="c in r.comments" :key="c._id" class="cmt">
@@ -266,6 +278,19 @@ async function pin(row) {
 .text :deep(p) { margin: 0 0 4px; }
 .text :deep(p:last-child) { margin-bottom: 0; }
 .text :deep(img) { max-width: 360px; max-height: 320px; border-radius: 8px; margin-top: 6px; display: block; }
+/*
+ * 长帖子先收起来。用 max-height 不用 line-clamp：正文里可能有图，
+ * 按行裁会把图裁成半张，限高则是整体收住，看着更像「还有下文」。
+ * 下面那层渐变是收起时的提示，展开后自然就没了。
+ */
+.text.clamp { max-height: 160px; overflow: hidden; position: relative; }
+.text.clamp::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 48px;
+  background: linear-gradient(rgba(255, 255, 255, 0), #fff);
+}
 .cmts { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #f6f7f9; }
 .cmt { font-size: 13px; line-height: 1.9; color: #4b5563; }
 .cmt b { color: #6c5ce7; }
