@@ -119,9 +119,12 @@ async function upload({ file }, kind) {
     const res = await call('web.uploadShot', { kind, base64, ext: 'jpg' })
     await refreshMe()
     await reload()
-    message.success(kind === 'attrs'
+    const done = kind === 'attrs'
       ? `识别到 ${res.recognized.count}/6 项并已保存`
-      : `读到武将战力 ${res.heroPowerText}，已保存`)
+      : `读到武将战力 ${res.heroPowerText}，已保存`
+    // 页面上不常驻显示额度，只在刚传完这一下告诉他还剩几次
+    const q = res.quota && res.quota[kind]
+    message.success(q ? (q.left > 0 ? `${done}，今天还能传 ${q.left} 次` : `${done}，今天的 ${res.quota.limit} 次用完了`) : done)
   } catch (e) {
     before.value = null
     message.error(e.message)
