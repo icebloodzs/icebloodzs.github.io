@@ -285,7 +285,8 @@ boot()
                   · {{ notices[noticeIndex].daysLeft }} 天后不再显示
                 </template>
               </div>
-              <div class="nt-body">{{ notices[noticeIndex].content }}</div>
+              <!-- html 是服务端洗过白名单的，这里才敢 v-html -->
+              <div class="nt-body" v-html="notices[noticeIndex].html"></div>
             </template>
             <template #footer>
               <div class="nt-foot">
@@ -312,7 +313,9 @@ boot()
  */
 .nt-meta { font-size: 12px; color: #8a9099; }
 /* 公告正文保留管理员写的换行 */
-.nt-body { margin-top: 12px; font-size: 14px; line-height: 1.85; color: #3c4350; white-space: pre-wrap; word-break: break-word; max-height: 50vh; overflow: auto; }
+.nt-body { margin-top: 12px; font-size: 14px; line-height: 1.85; color: #3c4350; word-break: break-word; max-height: 50vh; overflow: auto; }
+.nt-body p { margin: 0 0 4px; }
+.nt-body p:last-child { margin-bottom: 0; }
 .nt-foot { display: flex; align-items: center; }
 </style>
 

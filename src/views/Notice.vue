@@ -8,13 +8,16 @@ import { ref, inject, onMounted, h } from 'vue'
 import { useMessage, useDialog, NTag, NButton, NSpace } from 'naive-ui'
 import { call } from '../api'
 import { when } from '../fmt'
+import RichEditor from './RichEditor.vue'
 
 const { refreshNotices } = inject('app')
 const message = useMessage()
 const dialog = useDialog()
 
 const title = ref('')
-const content = ref('')
+const html = ref('')
+const textLen = ref(0)
+const maxContent = ref(1000)
 const duration = ref('7d')
 /** 服务端会回真正的选项，这里给一份一样的兜底，免得没加载完时下拉里露出 7d 这种原始值 */
 const durations = ref([
@@ -45,6 +48,7 @@ async function load() {
     }
     activeCount.value = res.activeCount || 0
     max.value = res.max || 5
+    if (res.limits && res.limits.content) maxContent.value = res.limits.content
   } catch (e) {
     message.error(e.message)
   } finally {
@@ -55,12 +59,13 @@ onMounted(load)
 
 async function publish() {
   if (!title.value.trim()) return message.warning('请填标题')
-  if (!content.value.trim()) return message.warning('请填内容')
+  if (!html.value || !textLen.value) return message.warning('请填内容')
   busy.value = true
   try {
-    await call('notice.publish', { title: title.value.trim(), content: content.value.trim(), duration: duration.value })
+    await call('notice.publish', { title: title.value.trim(), html: html.value, duration: duration.value })
     title.value = ''
-    content.value = ''
+    html.value = ''
+    textLen.value = 0
     message.success('已发布')
     await load()
     await refreshNotices()
@@ -104,7 +109,14 @@ const leftText = (r) =>
 
       <n-space vertical :size="12">
         <n-input v-model:value="title" placeholder="标题，如：周五晚八点集合打城" maxlength="30" show-count />
-        <n-input v-model:value="content" type="textarea" :rows="6" placeholder="公告内容，可以分行写" maxlength="1000" show-count />
+        <RichEditor
+          v-model="html"
+          :image="false"
+          :max-length="maxContent"
+          :height="220"
+          placeholder="公告内容，可以分行写；能加粗、改字色"
+          @length="textLen = $event"
+        />
         <n-space align="center">
           <span class="lab">展示时长</span>
           <n-select v-model:value="duration" :options="durations" style="width: 140px" />
@@ -125,7 +137,8 @@ const leftText = (r) =>
             <n-button v-if="r.status === 'on'" size="tiny" quaternary type="error" @click="act(r, 'revoke')">撤销</n-button>
             <n-button v-else size="tiny" quaternary type="error" @click="act(r, 'remove')">删掉</n-button>
           </div>
-          <div class="body">{{ r.content }}</div>
+          <!-- html 是服务端洗过白名单的，这里才敢 v-html -->
+          <div class="body" v-html="r.html"></div>
         </div>
       </n-spin>
     </n-card>
@@ -140,5 +153,7 @@ const leftText = (r) =>
 .head { display: flex; align-items: center; gap: 10px; }
 .meta { font-size: 12px; color: #8a9099; }
 /* 公告正文保留管理员写的换行 */
-.body { margin-top: 8px; font-size: 13px; line-height: 1.8; color: #4b5563; white-space: pre-wrap; word-break: break-word; }
+.body { margin-top: 8px; font-size: 13px; line-height: 1.8; color: #4b5563; word-break: break-word; }
+.body :deep(p) { margin: 0 0 4px; }
+.body :deep(p:last-child) { margin-bottom: 0; }
 </style>

@@ -7,6 +7,7 @@ import { ref, inject, onMounted, computed } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { call } from '../api'
 import { when } from '../fmt'
+import RichEditor from './RichEditor.vue'
 
 const { me } = inject('app')
 const message = useMessage()
@@ -20,9 +21,12 @@ const loading = ref(true)
 const busy = ref(false)
 
 const title = ref('')
-const text = ref('')
+const html = ref('')
+const textLen = ref(0)
 const maxTitle = ref(30)
-const maxPost = ref(500)
+const maxPost = ref(1000)
+/** 发帖表单做成弹窗：列表页干净一点，右下角一个加号唤出来 */
+const composing = ref(false)
 const maxComment = ref(200)
 /** 哪条帖子正在写评论：postId -> 内容 */
 const draft = ref({})
@@ -39,7 +43,7 @@ async function load(p = 1) {
     total.value = res.total
     page.value = res.page
     hasMore.value = res.hasMore
-    maxPost.value = (res.limits && res.limits.post) || 500
+    maxPost.value = (res.limits && res.limits.post) || 1000
     maxTitle.value = (res.limits && res.limits.title) || 30
     maxComment.value = (res.limits && res.limits.comment) || 200
   } catch (e) {
@@ -51,13 +55,15 @@ async function load(p = 1) {
 onMounted(() => load(1))
 
 async function publish() {
-  const content = text.value.trim()
-  if (!content) return message.warning('写点什么再发')
+  if (!html.value || !textLen.value) return message.warning('写点什么再发')
+  if (textLen.value > maxPost.value) return message.warning(`正文最多 ${maxPost.value} 字`)
   busy.value = true
   try {
-    await call('board.publish', { title: title.value.trim(), content })
+    await call('board.publish', { title: title.value.trim(), html: html.value })
     title.value = ''
-    text.value = ''
+    html.value = ''
+    textLen.value = 0
+    composing.value = false
     await load(1)
   } catch (e) {
     message.error(e.message)
@@ -130,20 +136,13 @@ async function pin(row) {
 <template>
   <n-space vertical :size="16">
     <n-card title="同盟留言板" :bordered="false">
-      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        只有本盟的人看得到，没有跨盟。显示的是你绑定的成员名，不是微信昵称。
-        自己发的随时能删，管理员谁的都能删、也能置顶。
+      <n-alert :type="bound ? 'info' : 'warning'" :bordered="false">
+        <template v-if="bound">
+          只有本盟的人看得到，没有跨盟。显示的是你绑定的成员名，不是微信昵称。
+          自己发的随时能删，管理员谁的都能删、也能置顶。点右下角的 ＋ 发帖。
+        </template>
+        <template v-else>绑定游戏账号之后才能发言。</template>
       </n-alert>
-
-      <template v-if="bound">
-        <n-input v-model:value="title" :maxlength="maxTitle" placeholder="标题（选填）" />
-        <n-input v-model:value="text" type="textarea" :rows="3" :maxlength="maxPost" show-count
-          placeholder="说点什么，盟里的人都能看到" style="margin-top: 10px" />
-        <div class="bar">
-          <n-button type="primary" :loading="busy" @click="publish">发表</n-button>
-        </div>
-      </template>
-      <n-alert v-else type="warning" :bordered="false">绑定游戏账号之后才能发言。</n-alert>
     </n-card>
 
     <n-spin :show="loading && !rows.length">
@@ -165,7 +164,8 @@ async function pin(row) {
         </div>
 
         <div v-if="r.title" class="title">{{ r.title }}</div>
-        <div class="text">{{ r.content }}</div>
+        <!-- html 是服务端洗过白名单的（见云函数 lib/richtext.js），这里才敢 v-html -->
+        <div class="text" v-html="r.html"></div>
 
         <div v-if="r.comments && r.comments.length" class="cmts">
           <div v-for="c in r.comments" :key="c._id" class="cmt">
@@ -193,10 +193,60 @@ async function pin(row) {
       <div v-else-if="rows.length" class="muted end">共 {{ total }} 条</div>
     </n-spin>
   </n-space>
+
+  <!-- 右下角的发帖按钮 -->
+  <button v-if="bound" class="fab" title="发帖" @click="composing = true">＋</button>
+
+  <n-modal
+    v-model:show="composing"
+    preset="card"
+    title="发表留言"
+    :style="{ width: '720px' }"
+    :mask-closable="false"
+  >
+    <n-space vertical :size="12">
+      <n-input v-model:value="title" :maxlength="maxTitle" placeholder="标题（选填）" />
+      <RichEditor
+        v-model="html"
+        :max-length="maxPost"
+        :height="300"
+        placeholder="说点什么，盟里的人都能看到。可以加粗、改字色、插一张图。"
+        @length="textLen = $event"
+      />
+    </n-space>
+    <template #footer>
+      <div class="foot">
+        <span class="muted">只有本盟的人看得到</span>
+        <div style="flex: 1"></div>
+        <n-button @click="composing = false">取消</n-button>
+        <n-button type="primary" :loading="busy" @click="publish">发表</n-button>
+      </div>
+    </template>
+  </n-modal>
 </template>
 
 <style scoped>
-.bar { display: flex; justify-content: flex-end; margin-top: 12px; }
+/* 右下角浮动的发帖按钮 */
+.fab {
+  all: unset;
+  position: fixed;
+  right: 40px;
+  bottom: 40px;
+  z-index: 50;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b7cf0, #6c5ce7);
+  color: #fff;
+  font-size: 30px;
+  line-height: 56px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 10px 26px rgba(108, 92, 231, 0.42);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.fab:hover { transform: translateY(-2px); box-shadow: 0 14px 32px rgba(108, 92, 231, 0.5); }
+.foot { display: flex; align-items: center; gap: 10px; }
 .empty { padding: 40px; text-align: center; color: #8a9099; }
 .post { margin-bottom: 14px; }
 .head { display: flex; align-items: center; gap: 10px; }
@@ -211,7 +261,11 @@ async function pin(row) {
 /* 标题选填，有才显示 */
 .title { margin-top: 12px; font-size: 16px; font-weight: 600; line-height: 1.5; word-break: break-word; }
 .title + .text { margin-top: 6px; }
-.text { margin-top: 12px; font-size: 14px; line-height: 1.8; color: #3c4350; white-space: pre-wrap; word-break: break-word; }
+/* 富文本：服务端只放行加粗 / 字色 / 一张图，这里把图和段落收一下 */
+.text { margin-top: 12px; font-size: 14px; line-height: 1.8; color: #3c4350; word-break: break-word; }
+.text :deep(p) { margin: 0 0 4px; }
+.text :deep(p:last-child) { margin-bottom: 0; }
+.text :deep(img) { max-width: 360px; max-height: 320px; border-radius: 8px; margin-top: 6px; display: block; }
 .cmts { margin-top: 12px; padding: 10px 14px; border-radius: 10px; background: #f6f7f9; }
 .cmt { font-size: 13px; line-height: 1.9; color: #4b5563; }
 .cmt b { color: #6c5ce7; }

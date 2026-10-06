@@ -47,9 +47,9 @@ const VIEWS = { bonus: Bonus, mine: Mine, rally: Rally, placement: Placement, se
 // 公告弹窗的假数据，只为截图看样式
 const notices = ref([
   { _id: 'n1', title: '周五晚八点集合打城', createdByName: '凡宝', createdAt: '2026-10-05T09:00:00.000Z', daysLeft: 3,
-    content: '本周五 20:00 准时集合，打下面这几个目标：\n\n1. 先清外围资源点\n2. 20:30 主力集结丹阳城\n3. 没上线的提前在群里说一声\n\n集结值没填的赶紧去「我的信息」补上，不然排不进车。' },
+    html: '<p>本周五 <strong>20:00</strong> 准时集合，打下面这几个目标：</p><p>1. 先清外围资源点</p><p>2. 20:30 主力集结<span style="color:#d93026">丹阳城</span></p><p>3. 没上线的提前在群里说一声</p>' },
   { _id: 'n2', title: '本周功勋统计口径', createdByName: '凡宝', createdAt: '2026-10-04T09:00:00.000Z', daysLeft: null,
-    content: '周功勋按周一凌晨重置算，中途导入的以最后一次为准。' }
+    html: '<p>周功勋按<strong>周一凌晨</strong>重置算，中途导入的以最后一次为准。</p>' }
 ])
 const noticeOpen = ref(hash.includes('modal'))
 const noticeIndex = ref(0)
@@ -58,6 +58,13 @@ const when = (v) => new Date(v).toLocaleString('zh-CN')
 
 const inner = computed(() => VIEWS[Object.keys(VIEWS).find((k) => hash.includes(k))] || null)
 onMounted(() => {
+  // #compose：自动点一下右下角的加号，好把发帖弹窗截下来
+  if (hash.includes('compose')) {
+    setTimeout(() => {
+      const b = document.querySelector('.fab')
+      if (b) b.click()
+    }, 500)
+  }
   // #gen：自动点一下「生成」，好把排好的表截下来
   if (hash.includes('gen')) {
     setTimeout(() => {
