@@ -114,6 +114,19 @@ for (const v of ['Roster', 'Bonus', 'Attrs', 'Missing', 'Season', 'Users']) {
   }
 }
 
+// /dev/ 不走构建，缓存全靠 index.html 里的 ?v= 戳；戳和文件内容对不上就是忘了跑 build
+{
+  const crypto = await import('node:crypto')
+  const want = crypto
+    .createHash('sha256')
+    .update(['app.js', 'style.css'].map((f) => fs.readFileSync(`public/dev/${f}`)).join('\n'))
+    .digest('hex')
+    .slice(0, 8)
+  const html = fs.readFileSync('public/dev/index.html', 'utf8')
+  if (html.includes(`?v=${want}`)) console.log('  ok   dev/ 的缓存版本戳是最新的')
+  else { bad++; console.log(`  !!   dev/ 的版本戳过期了，跑一下 npm run stamp（应该是 ${want}）`) }
+}
+
 // probe/Shell.vue 是从 App.vue 抠出来的布局副本，App.vue 改了布局它必须跟着改，
 // 不然截图自检看的就不是真页面了
 const shell = fs.readFileSync('probe/Shell.vue', 'utf8')

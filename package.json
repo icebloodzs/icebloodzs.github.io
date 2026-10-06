@@ -4,10 +4,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/stamp-dev.mjs && vite build",
     "preview": "vite preview",
     "check": "node scripts/ssr-check.mjs",
-    "probe": "vite --port 5199 --open /probe/"
+    "probe": "vite --port 5199 --open /probe/",
+    "stamp": "node scripts/stamp-dev.mjs"
   },
   "dependencies": {
     "naive-ui": "^2.45.3",
