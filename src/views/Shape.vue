@@ -5,7 +5,7 @@
  * 和「黑土落位」的区别：这里的字是沿**游戏的 X/Y 网格**画的，格子边对边紧挨着，
  * 在菱形视角下看才是正的。这里只算「哪些格子要站人、每格的序号和坐标」，不排成员。
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import * as S from '../lib/shape'
 import * as P from '../lib/placement'
@@ -13,14 +13,8 @@ import { download } from '../xlsx'
 
 const message = useMessage()
 
-const LEVELS = [
-  { label: '7级（内 9×9 + 外 11 圈）', value: 'lv7', city: 9, rings: 11 },
-  { label: '6级（内 4×4 + 外 5 圈）', value: 'lv6', city: 4, rings: 5 },
-  { label: '5级（内 4×4 + 外 5 圈）', value: 'lv5', city: 4, rings: 5 },
-  { label: '4级小王城（内 3×3 + 外 4 圈）', value: 'lv4k', city: 3, rings: 4 },
-  { label: '4级（内 3×3 + 外 2 圈）', value: 'lv4', city: 3, rings: 2 },
-  { label: '3级（内 3×3 + 外 2 圈）', value: 'lv3', city: 3, rings: 2 }
-]
+/** 摆图形只在 7 级城池上摆：内 9×9 + 外 11 圈，边长 31 */
+const LEVEL = { label: '7级城池', city: 9, rings: 11 }
 /** 四个区域各一种底色，和小程序保持一致 */
 const BLOCK_COLORS = [
   { fill: '#4a90d9', text: '#fff' },
@@ -29,34 +23,24 @@ const BLOCK_COLORS = [
   { fill: '#f0ad4e', text: '#5a3a00' }
 ]
 const AREAS = S.AREAS
-const ORIGIN_MODES = [
-  { label: '最上面那一格', value: 'top' },
-  { label: '城池中心', value: 'center' }
-]
 
-const level = ref('lv7')
-const originMode = ref('top')
 const baseX = ref('')
 const baseY = ref('')
 const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '' })
 const D = ref(44)
 const labelMode = ref('coord')
 
-const cur = computed(() => LEVELS.find((l) => l.value === level.value) || LEVELS[0])
-const board = computed(() => S.buildBoard(cur.value.city, cur.value.rings))
+const board = computed(() => S.buildBoard(LEVEL.city, LEVEL.rings))
 
 /**
- * 顶角 (0,0) 那一格的游戏坐标。
- * 填「最上面那一格」就是它本身；填「城池中心」要往外推半个棋盘。
- * 没填就返回 null —— 图上只标序号，不标坐标。
+ * 顶角 (0,0) 那一格的游戏坐标 —— 填的就是黑土最上面那一格，不用换算。
+ * 没填就返回 null，图上只标序号、不标坐标。
  */
 const origin = computed(() => {
   const x = Number(baseX.value)
   const y = Number(baseY.value)
   if (!baseX.value || !baseY.value || !Number.isFinite(x) || !Number.isFinite(y)) return null
-  if (originMode.value === 'top') return { x: Math.round(x), y: Math.round(y) }
-  const mid = (board.value.size - 1) / 2
-  return { x: Math.round(x + mid), y: Math.round(y + mid) }
+  return { x: Math.round(x), y: Math.round(y) }
 })
 
 const result = computed(() => {
@@ -118,7 +102,7 @@ const city = computed(() => {
   const b = board.value
   const mid = (b.size - 1) / 2
   const ctr = P.cellCenter(mid, mid, b.size, D.value)
-  return { x: ctr.x, y: ctr.y, d: b.city * D.value, label: cur.value.label.split('（')[0] }
+  return { x: ctr.x, y: ctr.y, d: b.city * D.value, label: LEVEL.label }
 })
 
 const corner = computed(() => {
@@ -150,12 +134,6 @@ const blocks = computed(() =>
     color: b.ok ? BLOCK_COLORS[bi % BLOCK_COLORS.length].fill : '#b9bec6'
   }))
 )
-
-// 换城池等级时，原来摆得下的图案可能就摆不下了，提示一下
-watch(level, () => {
-  const bad = blocks.value.filter((b) => !b.ok)
-  if (bad.length) message.warning(`${bad[0].area}「${bad[0].text}」在这个尺寸下摆不下`)
-})
 
 const listCols = [
   { title: '序号', key: 'seq', width: 80 },
@@ -207,21 +185,18 @@ function savePng() {
       </template>
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        用黑土格子拼字或图案。字是沿游戏的 X/Y 网格画的，在菱形视角下看才是正的。
-        填了参照坐标之后每格都会标出实际坐标，照着报点位不会错。
+        用 7 级城池的黑土格子拼字或图案，整幅图摆在城池下方：左下、右下各一块贴着下边，
+        正下方再放个图案，中间留出缝、左右对称。填了参照坐标之后每格都会标出实际坐标，照着报点位不会错。
       </n-alert>
 
       <n-form label-placement="left" :label-width="90" size="small">
         <n-grid :cols="4" :x-gap="16">
-          <n-gi :span="2">
-            <n-form-item label="城池等级"><n-select v-model:value="level" :options="LEVELS" /></n-form-item>
-          </n-gi>
-          <n-gi :span="2">
+          <n-gi :span="4">
             <n-form-item label="参照坐标">
-              <n-space :size="8" align="center" style="width: 100%">
-                <n-select v-model:value="originMode" :options="ORIGIN_MODES" style="width: 150px" />
-                <n-input v-model:value="baseX" placeholder="X 如 629" style="width: 110px" />
-                <n-input v-model:value="baseY" placeholder="Y 如 639" style="width: 110px" />
+              <n-space :size="8" align="center">
+                <n-input v-model:value="baseX" placeholder="X 如 521" style="width: 120px" />
+                <n-input v-model:value="baseY" placeholder="Y 如 1314" style="width: 120px" />
+                <span class="lab">填黑土最上面那一格的坐标，游戏里点一下那格就能看到</span>
               </n-space>
             </n-form-item>
           </n-gi>

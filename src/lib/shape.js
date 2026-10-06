@@ -13,7 +13,7 @@
 /** 5×9 点阵。参考图里一个字约 5 格宽、10 格高，这里按同样的比例做 */
 const FONT = {
   '0': ['11111', '11011', '11011', '11011', '11011', '11011', '11011', '11011', '11111'],
-  '1': ['00110', '01110', '11110', '00110', '00110', '00110', '00110', '00110', '11111'],
+  '1': ['01110', '01110', '01110', '01110', '01110', '01110', '01110', '01110', '01110'],
   '2': ['11111', '00011', '00011', '00011', '11111', '11000', '11000', '11000', '11111'],
   '3': ['11111', '00011', '00011', '00011', '11111', '00011', '00011', '00011', '11111'],
   '4': ['11011', '11011', '11011', '11011', '11111', '00011', '00011', '00011', '00011'],
@@ -106,6 +106,18 @@ const PATTERNS = {
   箭头: mask(7, 0, 10, arrowShape(6, 14)),
   十字: mask(8, -8, 8, crossShape(4, 12))
 }
+
+/**
+ * 整幅图是摆在城池**下方**看的，不是绕着城池一圈。
+ * 左右两块往下边靠（0 = 停在城池那一行，1 = 贴死下边角），正下方的图案再往外挪，
+ * 中间自然就空出一条缝，左右和下方三块连起来是对称的。
+ */
+const SIDE_DOWN = 1.0
+/**
+ * 正下方的图案和城池之间至少空几圈。
+ * 只是「往下挪一点留条缝」，不是一路挪到底角 —— 底角那一片正是左下、右下两块要贴的边。
+ */
+const BOTTOM_GAP = 3
 
 const GLYPH_W = 5
 const GLYPH_H = 9
@@ -224,8 +236,10 @@ function placeBitmap(board, rawRows, area, occupied, target) {
     const cc = c0 + (w - 1) / 2
     const u = cc - rc
     const dv = cc + rc - centerV
-    if (area === 'leftBottom') return u < 0 && Math.abs(dv) <= -u
-    if (area === 'rightBottom') return u > 0 && Math.abs(dv) <= u
+    // 左右两块只许待在城池那一行**以下**：dv >= 0。允许往上的话字会跑到城池两侧，
+    // 和正下方的图案凑不成一组（这也是老版黑土落位的规矩）。
+    if (area === 'leftBottom') return u < 0 && dv >= 0 && dv <= -u
+    if (area === 'rightBottom') return u > 0 && dv >= 0 && dv <= u
     if (area === 'top') return dv < 0 && Math.abs(u) <= -dv
     if (area === 'bottom') return dv > 0 && Math.abs(u) <= dv
     return false
@@ -257,10 +271,12 @@ function placeBitmap(board, rawRows, area, occupied, target) {
         const dc = cell.c < lo ? lo - cell.c : cell.c > hi ? cell.c - hi : 0
         return s + Math.max(dr, dc)
       }, 0) / cells.length
-      // 偏离本方向中心线多远：先摆正，再谈靠里，免得几块都挤到城池正下方、把别的方向堵死
+      // 排序用的「偏离」：上下两块求摆正（贴着中线），左右两块求往下靠（dv 越大越靠下边）
       const rc = r0 + (H - 1) / 2
       const cc = c0 + (W - 1) / 2
-      const off = area === 'top' || area === 'bottom' ? Math.abs(cc - rc) : Math.abs(cc + rc - centerV)
+      const off = area === 'top' || area === 'bottom'
+        ? Math.abs(cc - rc)
+        : size - 1 - (cc + rc - centerV)
       // 对面已经摆过的话，这块就照着镜像位置摆，两边才对称
       const away = target ? Math.abs(rc - target.r) + Math.abs(cc - target.c) : 0
       candidates.push({ r0, c0, cells, dist, off, away })
@@ -378,20 +394,39 @@ function placeScreen(board, rows, area, occupied, target) {
         const r = (v - u) / 2
         return { id: `${r}_${c}`, r, c }
       })
-      const dist = cells.reduce((acc, cell) => {
+      const rings = cells.map((cell) => {
         const dr = cell.r < lo ? lo - cell.r : cell.r > hi ? cell.r - hi : 0
         const dc = cell.c < lo ? lo - cell.c : cell.c > hi ? cell.c - hi : 0
-        return acc + Math.max(dr, dc)
-      }, 0) / cells.length
+        return Math.max(dr, dc)
+      })
+      const dist = rings.reduce((a, x) => a + x, 0) / rings.length
       const rc = cells.reduce((acc, x) => acc + x.r, 0) / cells.length
       const cc = cells.reduce((acc, x) => acc + x.c, 0) / cells.length
       const away = target ? Math.abs(rc - target.r) + Math.abs(cc - target.c) : 0
-      candidates.push({ cells, holes, dist, off: Math.abs(uc), away, rc, cc })
+      const vs = cells.map((cell) => cell.r + cell.c)
+      candidates.push({
+        cells,
+        holes,
+        dist,
+        // 图案离城池最近的那条边在屏幕上的位置，用来留缝
+        edge: area === 'bottom' ? Math.min.apply(null, vs) : Math.max.apply(null, vs),
+        off: Math.abs(uc),
+        away,
+        rc,
+        cc
+      })
     }
   }
   if (!candidates.length) return null
-  // 先要图形完整（没有补不上的缝），再谈对称、摆正、靠里
-  candidates.sort(
+  // 正下方的图案要和城池底角隔开一道缝（屏幕上空 BOTTOM_GAP 行）；
+  // 实在挤不下时再退回不留缝的摆法，总比摆不出来强。
+  let pool = candidates
+  if (area === 'bottom') {
+    const spaced = candidates.filter((x) => x.edge >= 2 * hi + BOTTOM_GAP)
+    if (spaced.length) pool = spaced
+  }
+  // 先要图形完整（没有补不上的缝），再谈对称、摆正，最后靠里
+  pool.sort(
     (a, b) =>
       a.holes - b.holes ||
       b.cells.length - a.cells.length ||
@@ -399,7 +434,7 @@ function placeScreen(board, rows, area, occupied, target) {
       a.off - b.off ||
       a.dist - b.dist
   )
-  return candidates[0]
+  return pool[0]
 }
 
 /**
@@ -409,22 +444,33 @@ function placeScreen(board, rows, area, occupied, target) {
  * @param origin 顶角坐标，用来给每格标游戏坐标
  * @returns { blocks: [{area, text, ok, reason, cells:[{id,r,c,seq,x,y}], total}], cells, total }
  */
+/**
+ * 摆的先后顺序：正下方的图案先占住城池正下方那条中线，上方次之，左右两块最后贴着下边摆。
+ * 反过来的话，左右两块会先滑到下边中间，把图案的位置吃掉，三块就凑不成一组了。
+ * 注意这只是**摆的顺序**，序号还是按用户填的顺序编（见下面第二轮）。
+ */
+const PLACE_ORDER = ['bottom', 'top', 'leftBottom', 'rightBottom']
+
 function placeAll(board, items, origin) {
+  // 已经被占掉的格子，外加四周一圈缓冲：几块图形之间留条缝，不然会黏成一片看不出是几块
   const taken = new Set()
+  const hits = {}
   const blocks = []
   const placed = {}
-  let seq = 0
-  items.forEach((item) => {
+  const queue = items
+    .slice()
+    .sort((a, b) => PLACE_ORDER.indexOf(a.area) - PLACE_ORDER.indexOf(b.area))
+  queue.forEach((item) => {
     const text = String(item.text || '').trim()
     if (!text) return
     const bad = unsupported(text)
     if (bad.length) {
-      blocks.push({ area: item.area, text, ok: false, reason: `摆不了：${bad.join(' ')}`, cells: [], total: 0 })
+      hits[item.area] = { text, ok: false, reason: `摆不了：${bad.join(' ')}` }
       return
     }
     const bmp = bitmapOf(text)
     if (!bmp) {
-      blocks.push({ area: item.area, text, ok: false, reason: '这个内容摆不了', cells: [], total: 0 })
+      hits[item.area] = { text, ok: false, reason: '这个内容摆不了' }
       return
     }
     // 对面那块已经摆好的话，这块就按镜像位置摆：
@@ -445,7 +491,7 @@ function placeAll(board, items, origin) {
       ? placeScreen(board, bmp.rows, item.area, taken, target)
       : placeBitmap(board, bmp.rows, item.area, taken, target)
     if (!hit) {
-      blocks.push({ area: item.area, text, ok: false, reason: '这一片放不下，换短一点的内容', cells: [], total: 0 })
+      hits[item.area] = { text, ok: false, reason: '这一片放不下，换短一点的内容' }
       return
     }
     // 序号按各块自己的读法编：
@@ -458,20 +504,34 @@ function placeAll(board, items, origin) {
       top: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r),
       bottom: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r)
     }
-    const cells = hit.cells
-      .slice()
-      .sort(order[item.area] || order.leftBottom)
-      .map((cell) => {
-        seq += 1
-        const xy = coordOf(cell.r, cell.c, origin)
-        return { ...cell, seq, x: xy.x, y: xy.y }
-      })
-    cells.forEach((cell) => taken.add(cell.id))
+    const cells = hit.cells.slice().sort(order[item.area] || order.leftBottom)
+    cells.forEach((cell) => {
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) taken.add(`${cell.r + dr}_${cell.c + dc}`)
+      }
+    })
     placed[item.area] = {
       r: cells.reduce((acc, x) => acc + x.r, 0) / cells.length,
       c: cells.reduce((acc, x) => acc + x.c, 0) / cells.length
     }
-    blocks.push({ area: item.area, text: bmp.name, ok: true, reason: '', cells, total: cells.length })
+    hits[item.area] = { text: bmp.name, ok: true, reason: '', cells }
+  })
+
+  // 第二轮：按用户填的顺序出结果、编序号。摆的顺序只管占位，不影响报点的次序。
+  let seq = 0
+  items.forEach((item) => {
+    const hit = hits[item.area]
+    if (!hit) return
+    if (!hit.ok) {
+      blocks.push({ area: item.area, text: hit.text, ok: false, reason: hit.reason, cells: [], total: 0 })
+      return
+    }
+    const cells = hit.cells.map((cell) => {
+      seq += 1
+      const xy = coordOf(cell.r, cell.c, origin)
+      return { ...cell, seq, x: xy.x, y: xy.y }
+    })
+    blocks.push({ area: item.area, text: hit.text, ok: true, reason: '', cells, total: cells.length })
   })
 
   const all = []
