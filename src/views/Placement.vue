@@ -16,6 +16,8 @@ const preset = ref('lv7')
 /** 城池上写什么名字，自己填；留空就还是写「城池」 */
 const cityName = ref('')
 const battle = ref(false)
+/** 人比格子多时：开=强带弱（两人一格），关=一个一位、排不下的进待分配 */
+const pairWeak = ref(true)
 const grid = ref(null)
 const assign = ref({})
 const tray = ref([])
@@ -28,7 +30,7 @@ function generate() {
   const p = P.PRESETS.find((x) => x.key === preset.value)
   const g = P.buildGrid({ city: p.city, up: p.up, down: p.down, battle: battle.value })
   const names = members.value.slice().sort((a, b) => (b.strength || 0) - (a.strength || 0)).map((m) => m.name)
-  const made = P.autoUnits(names, g.order.length)
+  const made = P.autoUnits(names, g.order.length, pairWeak.value)
   const res = P.fill(g.order, made.units)
   grid.value = g
   assign.value = res.assign
@@ -164,13 +166,15 @@ function savePng() {
       </template>
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        按成员实力从高到低、由内圈往外圈排。人比格子多时，最强的格子配一个最弱的（强带弱），再多的进待分配。
+        按成员实力从高到低、由内圈往外圈排。
+        人比格子多时：勾上「强带弱」是最强的格子配一个最弱的、两人一格；不勾就一格只站一个，排不下的进待分配。
       </n-alert>
 
       <n-space align="center">
         <n-select v-model:value="preset" :options="PRESETS" style="width: 220px" />
         <n-input v-model:value="cityName" placeholder="城池名字，如 丹阳" maxlength="8" clearable style="width: 180px" />
         <n-checkbox v-model:checked="battle">留出斗阵位</n-checkbox>
+        <n-checkbox v-model:checked="pairWeak">人多时强带弱</n-checkbox>
         <span class="m">在册成员 {{ members.length }} 人</span>
       </n-space>
 

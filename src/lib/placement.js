@@ -158,9 +158,16 @@ function buildGrid({ city, up, down, battle }) {
  * 最强的格子配最弱的多余成员（与参考图内环 "草莓招了 / 大功率" 的做法一致）。
  * 再多就进待分配。
  */
-function autoUnits(names, slotCount) {
+/**
+ * 人比格子多时怎么办，两种：
+ *   强带弱（默认）—— 最强的格子配一个最弱的，两人一格，尽量都站上去
+ *   一个一位      —— 一格只站一个，排不下的进待分配，让盟主自己定谁上
+ * pair 传 false 就是后者。
+ */
+function autoUnits(names, slotCount, pair) {
   const primary = names.slice(0, slotCount)
   const overflow = names.slice(slotCount)
+  if (pair === false) return { units: primary.map((n) => [n]), tray: overflow }
   const pairCount = Math.min(overflow.length, primary.length)
   const weakest = overflow.slice().reverse()
   const units = primary.map((n, i) => (i < pairCount ? [n, weakest[i]] : [n]))
