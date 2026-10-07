@@ -43,65 +43,84 @@ const topPercent = computed(() => {
 })
 
 /*
- * 走势图。没引图表库 —— 一条折线加几条堆叠带，手写 SVG 比装个库划算。
+ * 走势图。没引图表库 —— 几条折线加一套刻度，手写 SVG 比装个库划算。
  *
  * 两种看法：
- *   堆叠 —— 每一维一条带子叠起来，顶边还是总和，但能看出这次是哪一维在涨
- *   总和 —— 只画一条线，上下留白压紧，起伏更明显
+ *   分维 —— 每一维各一条线，六条并排看，谁在涨谁没动一目了然（默认）
+ *   总和 —— 只画总和那一条。总和是三千多、单维是几百，画在一起会把单维压成平线，
+ *           所以分开两个模式，不混在一张图里
  */
-const W = 640
-const H = 200
-const PAD = { l: 8, r: 8, t: 18, b: 24 }
-const mode = ref('stack')
+const W = 680
+const H = 260
+const PAD = { l: 44, r: 12, t: 14, b: 42 }
+const mode = ref('dims')
 
 /** 六维配色，顺序和 attrKeys 一致：步 → 骑 → 弓，同兵种深浅成对 */
-const BAND = ['#6c5ce7', '#a79bff', '#0ea5a4', '#5eead4', '#f59e0b', '#fcd34d']
+const BAND = ['#5b7cfa', '#9db4ff', '#12a594', '#5eead4', '#f59e0b', '#fcd34d']
+
+/** 刻度取整：1 / 2 / 5 的倍数，标出来才是整数 */
+function ticksOf(lo, hi, n = 5) {
+  const raw = (hi - lo) / n || 1
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)))
+  const k = raw / mag
+  const step = (k <= 1 ? 1 : k <= 2 ? 2 : k <= 5 ? 5 : 10) * mag
+  const out = []
+  for (let v = Math.floor(lo / step) * step; v <= hi + step * 0.001; v += step) {
+    if (v >= lo - step * 0.001) out.push(Math.round(v * 100) / 100)
+  }
+  return out
+}
 
 const chart = computed(() => {
   const pts = history.value.filter((p) => p.sum != null)
   if (pts.length < 2) return null
   const keys = (data.value && data.value.keys) || []
   const labels = (data.value && data.value.labels) || []
+  const dims = mode.value === 'dims'
+
+  /*
+   * 纵轴范围按数据本身留边，不从 0 起。
+   * 六维都是三五百，从 0 画会把六条线全挤在上面三分之一，谁涨谁跌根本分不出来 ——
+   * 这一屏要看的就是「有没有在涨」，不是比谁的绝对值大，所以留边优先。
+   */
+  const all = dims
+    ? pts.reduce((acc, p) => acc.concat((p.values || []).filter((v) => v != null)), [])
+    : pts.map((p) => p.sum)
+  let lo = Math.min(...all)
+  let hi = Math.max(...all)
+  if (hi === lo) hi = lo + 1
+  const pad = (hi - lo) * 0.18
+  lo = Math.max(0, lo - pad)
+  hi += pad
+  const ts = ticksOf(lo, hi)
+  hi = Math.max(hi, ts[ts.length - 1])
+  lo = Math.min(lo, ts[0])
+
   const iw = W - PAD.l - PAD.r
   const ih = H - PAD.t - PAD.b
   const xAt = (i) => PAD.l + (i / (pts.length - 1)) * iw
+  const yAt = (v) => PAD.t + ih - ((v - lo) / (hi - lo)) * ih
 
-  // 堆叠必须从 0 起画（带子厚度就是那一维的值）；只看总和时压紧上下，起伏才明显
-  const stacked = mode.value === 'stack'
-  const vals = pts.map((p) => p.sum)
-  let lo = stacked ? 0 : Math.min(...vals)
-  let hi = Math.max(...vals)
-  if (hi === lo) hi = lo + 1
-  if (!stacked) lo -= (hi - lo) * 0.15
-  const span = hi - lo
-  const yAt = (v) => PAD.t + ih - ((v - lo) / span) * ih
+  const series = dims
+    ? keys.map((k, j) => ({
+        key: k,
+        label: labels[j] || k,
+        color: BAND[j % BAND.length],
+        pts: pts.map((p, i) => ({ x: xAt(i), y: yAt((p.values || [])[j] || 0) }))
+      }))
+    : [{
+        key: 'sum',
+        label: '总和',
+        color: '#6c5ce7',
+        pts: pts.map((p, i) => ({ x: xAt(i), y: yAt(p.sum) }))
+      }]
 
-  const bands = keys.map((k, j) => {
-    const top = []
-    const bottom = []
-    pts.forEach((p, i) => {
-      const v = p.values || []
-      const under = v.slice(0, j).reduce((x, y) => x + (y || 0), 0)
-      bottom.push(`${xAt(i).toFixed(1)},${yAt(under).toFixed(1)}`)
-      top.push(`${xAt(i).toFixed(1)},${yAt(under + (v[j] || 0)).toFixed(1)}`)
-    })
-    return {
-      key: k,
-      label: labels[j] || k,
-      color: BAND[j % BAND.length],
-      points: top.concat(bottom.reverse()).join(' ')
-    }
-  })
-
-  const line = pts.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.sum).toFixed(1)}`).join(' ')
   return {
-    stacked,
-    bands,
-    line,
-    area: `${PAD.l},${PAD.t + ih} ${line} ${PAD.l + iw},${PAD.t + ih}`,
-    pts: pts.map((p, i) => ({ x: xAt(i), y: yAt(p.sum), sum: p.sum, at: p.at })),
-    lo,
-    hi
+    dims,
+    series: series.map((x) => ({ ...x, line: x.pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') })),
+    grid: ts.map((v) => ({ v, y: yAt(v) })),
+    xs: pts.map((p, i) => ({ x: xAt(i), at: p.at })),
+    y0: PAD.t + ih
   }
 })
 
@@ -146,46 +165,39 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
         <n-card :bordered="false" size="small" title="属性走势" class="col">
           <template #header-extra>
             <n-radio-group v-model:value="mode" size="small">
-              <n-radio-button value="stack">分维堆叠</n-radio-button>
-              <n-radio-button value="sum">只看总和</n-radio-button>
+              <n-radio-button value="dims">分维</n-radio-button>
+              <n-radio-button value="sum">总和</n-radio-button>
             </n-radio-group>
           </template>
-          <svg v-if="chart" class="chart" :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="sumFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#6c5ce7" stop-opacity="0.26" />
-                <stop offset="100%" stop-color="#6c5ce7" stop-opacity="0.02" />
-              </linearGradient>
-            </defs>
-            <template v-if="chart.stacked">
-              <polygon v-for="b in chart.bands" :key="b.key" :points="b.points"
-                :fill="b.color" fill-opacity="0.85" stroke="#fff" stroke-width="0.6" />
-            </template>
-            <polygon v-else :points="chart.area" fill="url(#sumFill)" stroke="none" />
-            <polyline v-if="chart.stacked" :points="chart.line" fill="none" stroke="#1f2329"
-              stroke-opacity="0.5" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
-            <polyline v-else :points="chart.line" fill="none" stroke="#6c5ce7" stroke-width="2.5"
-              stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
-            <g v-for="(p, i) in chart.pts" :key="i">
-              <circle :cx="p.x" :cy="p.y" :r="i === chart.pts.length - 1 ? 4.5 : 3"
-                fill="#fff" stroke="#6c5ce7" stroke-width="2" />
+          <svg v-if="chart" class="chart" :viewBox="`0 0 ${W} ${H}`">
+            <!-- 横向网格 + 左侧刻度 -->
+            <g v-for="g in chart.grid" :key="g.v">
+              <line :x1="PAD.l" :y1="g.y" :x2="W - PAD.r" :y2="g.y" stroke="#edeef2" stroke-width="1" />
+              <text :x="PAD.l - 8" :y="g.y + 3.5" font-size="10" fill="#9aa0a6" text-anchor="end">{{ g.v }}</text>
             </g>
-            <text :x="PAD.l" :y="H - 6" font-size="11" fill="#8a9099">{{ dayText(chart.pts[0].at) }}</text>
-            <text :x="W - PAD.r" :y="H - 6" font-size="11" fill="#8a9099" text-anchor="end">
-              {{ dayText(chart.pts[chart.pts.length - 1].at) }}
+            <!-- 每一维一条线，各自的空心圆点 -->
+            <g v-for="sr in chart.series" :key="sr.key">
+              <polyline :points="sr.line" fill="none" :stroke="sr.color" stroke-width="2"
+                stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+              <circle v-for="(p, i) in sr.pts" :key="i" :cx="p.x" :cy="p.y" r="3.2"
+                fill="#fff" :stroke="sr.color" stroke-width="1.8" />
+            </g>
+            <!-- 底部日期 -->
+            <text v-for="(x, i) in chart.xs" :key="i" :x="x.x" :y="H - 24" font-size="10" fill="#9aa0a6"
+              :text-anchor="i === 0 ? 'start' : i === chart.xs.length - 1 ? 'end' : 'middle'">
+              {{ dayText(x.at) }}
             </text>
           </svg>
-          <div v-if="chart && chart.stacked" class="legend">
-            <span v-for="b in chart.bands" :key="b.key" class="lg">
-              <i :style="{ background: b.color }"></i>{{ b.label }}
+          <div v-if="chart" class="legend">
+            <span v-for="sr in chart.series" :key="sr.key" class="lg">
+              <i :style="{ borderColor: sr.color }"></i>{{ sr.label }}
             </span>
           </div>
           <div v-if="!chart" class="empty">
             至少传过两次属性才画得出走势，现在只有 {{ history.length }} 次。
           </div>
           <div v-if="chart" class="lab" style="margin-top: 6px">
-            {{ history.length }} 次记录 ·
-            {{ chart.stacked ? '顶边是总和，带子厚度就是那一维' : `区间 ${num(chart.lo, 0)} ~ ${num(chart.hi, 0)}` }}
+            {{ history.length }} 次记录 · {{ chart.dims ? '每一维一条线，看谁在涨' : '六维加起来的总和' }}
           </div>
         </n-card>
 
@@ -275,10 +287,11 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 
 .cols { display: flex; gap: 14px; align-items: stretch; }
 .col { flex: 1; min-width: 0; }
-.chart { width: 100%; height: 200px; display: block; }
-.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.chart { width: 100%; height: 260px; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 2px; }
 .lg { display: inline-flex; align-items: center; font-size: 11px; color: #6b7280; }
-.lg i { width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
+/* 图例的点做成空心圆，和线上的标记一致 */
+.lg i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid; margin-right: 5px; }
 
 .dim { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px solid #f1f1f5; }
 .dim:first-child { border-top: 0; }
