@@ -368,7 +368,15 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
   position: absolute;
   top: 8px;
   margin-left: 12px;
-  min-width: 182px;
+  /*
+   * 必须给宽度。绝对定位 + left:X% 时，不写宽度就按「容器右边剩下那点空间」收缩，
+   * 越靠右的列越窄，文字就被挤换行了 —— .flip 的位移是布局之后才发生的，救不回来。
+   * max-content 让它按内容撑开，不受剩余空间限制。
+   */
+  width: max-content;
+  min-width: 196px;
+  max-width: 280px;
+  white-space: nowrap;
   padding: 10px 12px;
   border-radius: 10px;
   background: #fff;
@@ -379,12 +387,12 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 }
 /* 靠右那几列往左翻，不然会顶出卡片 */
 .tip.flip { transform: translateX(-100%); margin-left: -12px; }
-.tip-h { font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid #eceef2; }
+.tip-h { font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid #eceef2; white-space: nowrap; }
 .tip-r { display: flex; align-items: center; padding: 4px 0; font-size: 12px; }
 .tip-r i { width: 8px; height: 8px; border-radius: 50%; border: 2px solid; margin-right: 8px; flex: none; }
 .tip-l { width: 44px; flex: none; color: #6b7280; }
-.tip-v { flex: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
-.tip-d { flex: none; color: #9aa0a6; font-variant-numeric: tabular-nums; }
+.tip-v { flex: 1; padding-right: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip-d { flex: none; min-width: 56px; text-align: right; color: #9aa0a6; font-variant-numeric: tabular-nums; }
 .tip-d.up { color: #16a34a; font-weight: 600; }
 .tip-d.down { color: #e23832; font-weight: 600; }
 .tip-sum { margin-top: 2px; padding-top: 7px; border-top: 1px solid #eceef2; }
