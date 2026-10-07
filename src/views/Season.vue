@@ -30,7 +30,7 @@ const columns = computed(() => [
       ? h('span', { style: 'color:#c9ccd1' }, '未录入')
       : h('b', { style: 'color:#6c5ce7' }, big(r.heroPower)))
   },
-  bigCol('赛季评分', 'seasonScore'),
+  bigCol('赛季评分', 'seasonScore', 110, true),
   {
     title: '定位',
     key: 'position',

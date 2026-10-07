@@ -12,20 +12,23 @@ export const nameCol = {
   render: (r) => h('b', r.name)
 }
 
-export const bigCol = (title, key, width = 110) => ({
+export const bigCol = (title, key, width = 110, desc = false) => ({
   title,
   key,
   width,
   sorter: sorter((r) => r[key]),
+  defaultSortOrder: desc ? 'descend' : undefined,
   render: (r) => big(r[key]),
   xls: (r) => (r[key] === null || r[key] === undefined ? '' : Number(r[key]))
 })
 
-export const numCol = (title, key, digits = 2, width = 100) => ({
+/** desc=true 时这一列就是表格的默认排序列（降序），一进来就按它排好 */
+export const numCol = (title, key, digits = 2, width = 100, desc = false) => ({
   title,
   key,
   width,
   sorter: sorter((r) => r[key]),
+  defaultSortOrder: desc ? 'descend' : undefined,
   render: (r) => num(r[key], digits),
   xls: (r) => (r[key] === null || r[key] === undefined ? '' : Number(r[key]))
 })

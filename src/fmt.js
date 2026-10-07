@@ -34,16 +34,23 @@ export function ago(iso) {
   }
 }
 
-/** 排序用：没填的一律当 null，调用方把它们沉到最后 */
+/**
+ * 排序用。没填的一律当**最小**。
+ *
+ * 原来是把空值固定返回「排最后」，想让它不管升降序都垫底 —— 但 naive-ui 是拿
+ * sorter 的结果直接取反来做降序的，于是一按降序，没填的全翻到了最上面。
+ * 排行榜默认都是降序看最高的几个，空值堆在头上最难受，所以改成「空=最小」：
+ * 降序时沉底（要的就是这个），升序时在最前面，两个方向都说得通。
+ */
 export function cmp(a, b) {
   const an = a === null || a === undefined
   const bn = b === null || b === undefined
   if (an && bn) return 0
-  if (an) return 1
-  if (bn) return -1
+  if (an) return -1
+  if (bn) return 1
   if (typeof a === 'string' || typeof b === 'string') return String(a).localeCompare(String(b), 'zh')
   return a - b
 }
 
-/** naive-ui 的 sorter：没填的永远垫底，不跟着升降序翻上来 */
+/** naive-ui 的 sorter */
 export const sorter = (get) => (rowA, rowB) => cmp(get(rowA), get(rowB))

@@ -26,7 +26,7 @@ const columns = [
   attrCol('骑破', 'cavBreak'),
   attrCol('弓攻', 'arcAtk'),
   attrCol('弓破', 'arcBreak'),
-  numCol('六维总和', 'attrsSum', 2, 110),
+  numCol('六维总和', 'attrsSum', 2, 110, true),
   timeCol('最后更新', 'attrsUpdatedAt', '从未上传')
 ]
 </script>

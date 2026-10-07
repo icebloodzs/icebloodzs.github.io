@@ -61,7 +61,7 @@ const columns = computed(() => [
   numCol('最高集结值', 'maxBonus', 2, 120),
   bigCol('单人出征', 'maxMarch', 110),
   troopCol.value,
-  numCol('六维总和', 'attrsSum', 2, 110),
+  numCol('六维总和', 'attrsSum', 2, 110, true),
   timeCol('资料更新', 'attrsUpdatedAt')
 ])
 </script>

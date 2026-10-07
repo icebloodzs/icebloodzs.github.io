@@ -27,8 +27,7 @@ const AREAS = S.AREAS
 const baseX = ref('')
 const baseY = ref('')
 const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '' })
-const D = ref(44)
-const labelMode = ref('coord')
+const D = ref(56)
 
 const board = computed(() => S.buildBoard(LEVEL.city, LEVEL.rings))
 
@@ -67,12 +66,17 @@ function fitFont(dy, chars) {
   return Math.max(5, Math.floor(room / (chars * 0.6 / 2 + 0.5)))
 }
 /**
- * 一格里只放一行字。序号和坐标同时放会把坐标压到 6 号字，谁也看不清，
- * 两样都要看就下面的点位清单，那里是一一对应的。
+ * 一格里上下两行：上面序号、下面坐标。
+ * 坐标是 7 个字符，又在格子偏下、菱形最窄的地方，字号只能压得很小；
+ * 嫌看不清就把「格子大小」往右拖，或者直接看下面的点位清单。
+ * 没填参照坐标时就只有序号，那它独占一行、可以放大些。
  */
 const label = computed(() => {
-  if (!origin.value || labelMode.value === 'seq') return { key: 'seq', dy: 0, fs: fitFont(0, 3) }
-  return { key: 'coord', dy: 0, fs: fitFont(0, 7) }
+  if (!origin.value) return { seq: { dy: 0, fs: fitFont(0, 3) } }
+  return {
+    seq: { dy: -0.13 * D.value, fs: fitFont(0.13, 3) },
+    coord: { dy: 0.15 * D.value, fs: fitFont(0.15, 7) }
+  }
 })
 
 const cells = computed(() => {
@@ -211,10 +215,6 @@ function savePng() {
       <n-space align="center" :size="14">
         <span class="lab">格子大小</span>
         <n-slider v-model:value="D" :min="20" :max="80" :step="2" style="width: 180px" />
-        <n-radio-group v-model:value="labelMode" size="small" :disabled="!origin">
-          <n-radio-button value="coord">格内标坐标</n-radio-button>
-          <n-radio-button value="seq">格内标序号</n-radio-button>
-        </n-radio-group>
         <span v-if="corner" class="lab">
           顶角 {{ corner.top }} · 底角 {{ corner.bottom }}
         </span>
@@ -241,9 +241,13 @@ function savePng() {
             </g>
             <template v-if="c.seq">
               <text
-                :x="c.x" :y="c.y + label.dy + label.fs * 0.35" text-anchor="middle"
-                :font-size="label.fs" font-weight="700" :fill="c.text"
-              >{{ label.key === 'seq' ? c.seq : c.coord }}</text>
+                :x="c.x" :y="c.y + label.seq.dy + label.seq.fs * 0.35" text-anchor="middle"
+                :font-size="label.seq.fs" font-weight="700" :fill="c.text"
+              >{{ c.seq }}</text>
+              <text
+                v-if="label.coord" :x="c.x" :y="c.y + label.coord.dy + label.coord.fs * 0.35"
+                text-anchor="middle" :font-size="label.coord.fs" font-weight="600" :fill="c.text"
+              >{{ c.coord }}</text>
             </template>
           </g>
           <g :transform="`translate(${city.x},${city.y}) rotate(45)`">
