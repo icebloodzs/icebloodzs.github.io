@@ -369,13 +369,15 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
   top: 8px;
   margin-left: 12px;
   /*
-   * 必须给宽度。绝对定位 + left:X% 时，不写宽度就按「容器右边剩下那点空间」收缩，
-   * 越靠右的列越窄，文字就被挤换行了 —— .flip 的位移是布局之后才发生的，救不回来。
-   * max-content 让它按内容撑开，不受剩余空间限制。
+   * 宽度要写死。绝对定位 + left:X% 时不写宽度的话，浏览器按「容器右边剩下那点空间」
+   * 收缩它，越靠右的列越窄，文字就被挤换行 —— .flip 的位移是布局之后才发生的，救不回来。
+   *
+   * 也不能用 max-content：那样框正好贴着内容，下面的 flex:1 没有富余空间可分，
+   * 数值和涨跌会挤成一坨。写死一个宽度，让 flex 把涨跌推到右边；
+   * 万一哪天数字特别长，min-width:max-content 再把框撑开。
    */
-  width: max-content;
-  min-width: 196px;
-  max-width: 280px;
+  width: 238px;
+  min-width: max-content;
   white-space: nowrap;
   padding: 10px 12px;
   border-radius: 10px;
