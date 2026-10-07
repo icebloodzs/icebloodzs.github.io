@@ -117,8 +117,9 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
   box-shadow: 0 24px 60px rgba(40, 24, 100, 0.28);
 }
 /* 图案本身四周没留白，这里靠外边距撑开 */
-.logo { display: block; width: 104px; height: auto; margin: 2px auto 12px; }
-h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; text-align: center; }
+.logo { display: block; width: 196px; height: auto; margin: 2px auto 14px; }
+/* logo 上已经有「三冰小帮手」，标题缩一号，只说明这一页是干什么的 */
+h1 { margin: 0 0 4px; font-size: 16px; font-weight: 600; text-align: center; color: #4b5563; }
 .sub { color: #8a9099; font-size: 12px; text-align: center; margin-bottom: 20px; }
 
 .qr {
