@@ -54,6 +54,8 @@ const W = 680
 const H = 260
 const PAD = { l: 44, r: 12, t: 14, b: 42 }
 const mode = ref('dims')
+/** 鼠标移到哪一列（或点中哪一列）；-1 = 没选 */
+const hover = ref(-1)
 
 /** 六维配色，顺序和 attrKeys 一致：步 → 骑 → 弓，同兵种深浅成对 */
 const BAND = ['#5b7cfa', '#9db4ff', '#12a594', '#5eead4', '#f59e0b', '#fcd34d']
@@ -115,13 +117,39 @@ const chart = computed(() => {
         pts: pts.map((p, i) => ({ x: xAt(i), y: yAt(p.sum) }))
       }]
 
+  // 每一列一块透明的感应区，鼠标扫过去就锁定那一列
+  const half = pts.length > 1 ? iw / (pts.length - 1) / 2 : iw
   return {
     dims,
     series: series.map((x) => ({ ...x, line: x.pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') })),
     grid: ts.map((v) => ({ v, y: yAt(v) })),
-    xs: pts.map((p, i) => ({ x: xAt(i), at: p.at })),
-    y0: PAD.t + ih
+    xs: pts.map((p, i) => ({
+      x: xAt(i),
+      at: p.at,
+      zone: { x: Math.max(PAD.l, xAt(i) - half), w: Math.min(half * 2, W - PAD.r - Math.max(PAD.l, xAt(i) - half)) }
+    })),
+    y0: PAD.t + ih,
+    yTop: PAD.t
   }
+})
+
+/** 选中那一列的明细：每一维当时多少、比上一次涨了多少 */
+const picked = computed(() => {
+  const c = chart.value
+  const pts = history.value.filter((p) => p.sum != null)
+  const i = hover.value
+  if (!c || i < 0 || i >= pts.length) return null
+  const labels = (data.value && data.value.labels) || []
+  const prev = pts[i - 1]
+  const cur = pts[i]
+  const rows = labels.map((label, j) => {
+    const v = (cur.values || [])[j]
+    const b = prev ? (prev.values || [])[j] : null
+    const d = v != null && b != null ? Math.round((v - b) * 100) / 100 : null
+    return { label, color: BAND[j % BAND.length], value: v, delta: d }
+  })
+  const sd = prev && cur.sum != null && prev.sum != null ? Math.round((cur.sum - prev.sum) * 100) / 100 : null
+  return { i, at: cur.at, no: i + 1, total: pts.length, sum: cur.sum, sumDelta: sd, rows, x: c.xs[i].x }
 })
 
 const dayText = (v) => (v ? String(v).slice(5, 10).replace('-', '/') : '')
@@ -182,12 +210,39 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
               <circle v-for="(p, i) in sr.pts" :key="i" :cx="p.x" :cy="p.y" r="3.2"
                 fill="#fff" :stroke="sr.color" stroke-width="1.8" />
             </g>
+            <!-- 选中那一列：一条竖线 + 感应区 -->
+            <line v-if="picked" :x1="picked.x" :y1="chart.yTop" :x2="picked.x" :y2="chart.y0"
+              stroke="#9aa0a6" stroke-width="1" stroke-dasharray="3 3" />
+            <rect v-for="(x, i) in chart.xs" :key="'z' + i" :x="x.zone.x" :y="chart.yTop"
+              :width="x.zone.w" :height="chart.y0 - chart.yTop" fill="transparent"
+              @mouseenter="hover = i" @mouseleave="hover = -1" />
             <!-- 底部日期 -->
             <text v-for="(x, i) in chart.xs" :key="i" :x="x.x" :y="H - 24" font-size="10" fill="#9aa0a6"
               :text-anchor="i === 0 ? 'start' : i === chart.xs.length - 1 ? 'end' : 'middle'">
               {{ dayText(x.at) }}
             </text>
           </svg>
+          <!-- 扫到某一列时把那次的数值列出来 -->
+          <div v-if="picked" class="tip">
+            <div class="tip-h">{{ dayText(picked.at) }} · 第 {{ picked.no }}/{{ picked.total }} 次</div>
+            <div v-for="r in picked.rows" :key="r.label" class="tip-r">
+              <i :style="{ borderColor: r.color }"></i>
+              <span class="tip-l">{{ r.label }}</span>
+              <span class="tip-v">{{ r.value == null ? '—' : num(r.value, 2) }}</span>
+              <span class="tip-d" :class="r.delta > 0 ? 'up' : r.delta < 0 ? 'down' : ''">
+                {{ r.delta == null ? '' : r.delta === 0 ? '持平' : signed(r.delta) }}
+              </span>
+            </div>
+            <div class="tip-r tip-sum">
+              <i style="border-color: transparent"></i>
+              <span class="tip-l">总和</span>
+              <span class="tip-v">{{ num(picked.sum, 2) }}</span>
+              <span class="tip-d" :class="picked.sumDelta > 0 ? 'up' : picked.sumDelta < 0 ? 'down' : ''">
+                {{ picked.sumDelta == null ? '' : signed(picked.sumDelta) }}
+              </span>
+            </div>
+          </div>
+          <div v-else-if="chart" class="lab" style="text-align: center">鼠标扫过图上任意一列，看那一次的具体数值</div>
           <div v-if="chart" class="legend">
             <span v-for="sr in chart.series" :key="sr.key" class="lg">
               <i :style="{ borderColor: sr.color }"></i>{{ sr.label }}
@@ -292,6 +347,18 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 .lg { display: inline-flex; align-items: center; font-size: 11px; color: #6b7280; }
 /* 图例的点做成空心圆，和线上的标记一致 */
 .lg i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid; margin-right: 5px; }
+
+/* 扫到某一列时弹出来的明细 */
+.tip { margin-top: 6px; padding: 10px 12px; border-radius: 8px; background: #fafafc; }
+.tip-h { font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid #eceef2; }
+.tip-r { display: flex; align-items: center; padding: 4px 0; font-size: 12px; }
+.tip-r i { width: 8px; height: 8px; border-radius: 50%; border: 2px solid; margin-right: 8px; flex: none; }
+.tip-l { width: 44px; flex: none; color: #6b7280; }
+.tip-v { flex: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip-d { flex: none; color: #9aa0a6; font-variant-numeric: tabular-nums; }
+.tip-d.up { color: #16a34a; font-weight: 600; }
+.tip-d.down { color: #e23832; font-weight: 600; }
+.tip-sum { margin-top: 2px; padding-top: 7px; border-top: 1px solid #eceef2; }
 
 .dim { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px solid #f1f1f5; }
 .dim:first-child { border-top: 0; }
