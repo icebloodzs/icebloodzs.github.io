@@ -82,7 +82,13 @@ async function closeNotice() {
 }
 
 const icon = (t) => () => h('span', { style: 'font-size:15px' }, t)
-const menuOptions = [
+// 服务端下发的功能开关。留言板现在被一刀切关掉了（个人主体小程序不让做用户发帖，
+// 见云函数 lib/membership.js），这边菜单也跟着藏，免得点进去只拿到一句「功能未开放」。
+const can = (key) => {
+  const f = me.value && me.value.alliance && me.value.alliance.features
+  return !f || f[key] !== false
+}
+const menuOptions = computed(() => [
   { type: 'group', label: '我的', key: 'g0', children: [{ label: VIEWS.mine.label, key: 'mine', icon: icon('👤') }] },
   {
     type: 'group',
@@ -96,10 +102,12 @@ const menuOptions = [
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'placement', 'shape', 'notice', 'board'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
+    children: ['rally', 'placement', 'shape', 'notice', 'board']
+      .filter((k) => k !== 'board' || can('forum'))
+      .map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
   { type: 'group', label: '账号', key: 'g3', children: [{ label: VIEWS.users.label, key: 'users', icon: icon('👥') }] }
-]
+])
 
 const themeOverrides = {
   common: {
