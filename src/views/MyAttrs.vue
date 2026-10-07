@@ -43,35 +43,63 @@ const topPercent = computed(() => {
 })
 
 /*
- * 折线图。没有引图表库 —— 就一条线，手写 SVG 比装一个库划算得多。
- * 点少于两个就不画（一条线至少得有两头）。
+ * 走势图。没引图表库 —— 一条折线加几条堆叠带，手写 SVG 比装个库划算。
+ *
+ * 两种看法：
+ *   堆叠 —— 每一维一条带子叠起来，顶边还是总和，但能看出这次是哪一维在涨
+ *   总和 —— 只画一条线，上下留白压紧，起伏更明显
  */
 const W = 640
-const H = 180
-const PAD = { l: 8, r: 8, t: 16, b: 24 }
+const H = 200
+const PAD = { l: 8, r: 8, t: 18, b: 24 }
+const mode = ref('stack')
+
+/** 六维配色，顺序和 attrKeys 一致：步 → 骑 → 弓，同兵种深浅成对 */
+const BAND = ['#6c5ce7', '#a79bff', '#0ea5a4', '#5eead4', '#f59e0b', '#fcd34d']
 
 const chart = computed(() => {
   const pts = history.value.filter((p) => p.sum != null)
   if (pts.length < 2) return null
-  const vals = pts.map((p) => p.sum)
-  let lo = Math.min(...vals)
-  let hi = Math.max(...vals)
-  // 全程没变过的话给个假的上下界，不然除以 0
-  if (hi === lo) { hi = lo + 1; lo -= 1 }
-  const span = hi - lo
+  const keys = (data.value && data.value.keys) || []
+  const labels = (data.value && data.value.labels) || []
   const iw = W - PAD.l - PAD.r
   const ih = H - PAD.t - PAD.b
-  const xy = pts.map((p, i) => ({
-    x: PAD.l + (pts.length === 1 ? iw / 2 : (i / (pts.length - 1)) * iw),
-    y: PAD.t + ih - ((p.sum - lo) / span) * ih,
-    sum: p.sum,
-    at: p.at
-  }))
+  const xAt = (i) => PAD.l + (i / (pts.length - 1)) * iw
+
+  // 堆叠必须从 0 起画（带子厚度就是那一维的值）；只看总和时压紧上下，起伏才明显
+  const stacked = mode.value === 'stack'
+  const vals = pts.map((p) => p.sum)
+  let lo = stacked ? 0 : Math.min(...vals)
+  let hi = Math.max(...vals)
+  if (hi === lo) hi = lo + 1
+  if (!stacked) lo -= (hi - lo) * 0.15
+  const span = hi - lo
+  const yAt = (v) => PAD.t + ih - ((v - lo) / span) * ih
+
+  const bands = keys.map((k, j) => {
+    const top = []
+    const bottom = []
+    pts.forEach((p, i) => {
+      const v = p.values || []
+      const under = v.slice(0, j).reduce((x, y) => x + (y || 0), 0)
+      bottom.push(`${xAt(i).toFixed(1)},${yAt(under).toFixed(1)}`)
+      top.push(`${xAt(i).toFixed(1)},${yAt(under + (v[j] || 0)).toFixed(1)}`)
+    })
+    return {
+      key: k,
+      label: labels[j] || k,
+      color: BAND[j % BAND.length],
+      points: top.concat(bottom.reverse()).join(' ')
+    }
+  })
+
+  const line = pts.map((p, i) => `${xAt(i).toFixed(1)},${yAt(p.sum).toFixed(1)}`).join(' ')
   return {
-    pts: xy,
-    line: xy.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' '),
-    // 线下面填一块浅色，视觉上更像「涨上去的」
-    area: `${PAD.l},${PAD.t + ih} ` + xy.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ` ${(PAD.l + iw)},${PAD.t + ih}`,
+    stacked,
+    bands,
+    line,
+    area: `${PAD.l},${PAD.t + ih} ${line} ${PAD.l + iw},${PAD.t + ih}`,
+    pts: pts.map((p, i) => ({ x: xAt(i), y: yAt(p.sum), sum: p.sum, at: p.at })),
     lo,
     hi
   }
@@ -117,25 +145,47 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
         <!-- 折线 -->
         <n-card :bordered="false" size="small" title="属性走势" class="col">
           <template #header-extra>
-            <span class="lab">{{ history.length }} 次记录</span>
+            <n-radio-group v-model:value="mode" size="small">
+              <n-radio-button value="stack">分维堆叠</n-radio-button>
+              <n-radio-button value="sum">只看总和</n-radio-button>
+            </n-radio-group>
           </template>
           <svg v-if="chart" class="chart" :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none">
-            <polyline :points="chart.area" fill="rgba(108,92,231,0.12)" stroke="none" />
-            <polyline :points="chart.line" fill="none" stroke="#6c5ce7" stroke-width="2.5"
+            <defs>
+              <linearGradient id="sumFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#6c5ce7" stop-opacity="0.26" />
+                <stop offset="100%" stop-color="#6c5ce7" stop-opacity="0.02" />
+              </linearGradient>
+            </defs>
+            <template v-if="chart.stacked">
+              <polygon v-for="b in chart.bands" :key="b.key" :points="b.points"
+                :fill="b.color" fill-opacity="0.85" stroke="#fff" stroke-width="0.6" />
+            </template>
+            <polygon v-else :points="chart.area" fill="url(#sumFill)" stroke="none" />
+            <polyline v-if="chart.stacked" :points="chart.line" fill="none" stroke="#1f2329"
+              stroke-opacity="0.5" stroke-width="1.5" stroke-linejoin="round" vector-effect="non-scaling-stroke" />
+            <polyline v-else :points="chart.line" fill="none" stroke="#6c5ce7" stroke-width="2.5"
               stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
             <g v-for="(p, i) in chart.pts" :key="i">
-              <circle :cx="p.x" :cy="p.y" r="3.5" fill="#fff" stroke="#6c5ce7" stroke-width="2" />
+              <circle :cx="p.x" :cy="p.y" :r="i === chart.pts.length - 1 ? 4.5 : 3"
+                fill="#fff" stroke="#6c5ce7" stroke-width="2" />
             </g>
             <text :x="PAD.l" :y="H - 6" font-size="11" fill="#8a9099">{{ dayText(chart.pts[0].at) }}</text>
             <text :x="W - PAD.r" :y="H - 6" font-size="11" fill="#8a9099" text-anchor="end">
               {{ dayText(chart.pts[chart.pts.length - 1].at) }}
             </text>
           </svg>
-          <div v-else class="empty">
+          <div v-if="chart && chart.stacked" class="legend">
+            <span v-for="b in chart.bands" :key="b.key" class="lg">
+              <i :style="{ background: b.color }"></i>{{ b.label }}
+            </span>
+          </div>
+          <div v-if="!chart" class="empty">
             至少传过两次属性才画得出走势，现在只有 {{ history.length }} 次。
           </div>
           <div v-if="chart" class="lab" style="margin-top: 6px">
-            区间 {{ num(chart.lo, 0) }} ~ {{ num(chart.hi, 0) }}
+            {{ history.length }} 次记录 ·
+            {{ chart.stacked ? '顶边是总和，带子厚度就是那一维' : `区间 ${num(chart.lo, 0)} ~ ${num(chart.hi, 0)}` }}
           </div>
         </n-card>
 
@@ -225,7 +275,10 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 
 .cols { display: flex; gap: 14px; align-items: stretch; }
 .col { flex: 1; min-width: 0; }
-.chart { width: 100%; height: 180px; display: block; }
+.chart { width: 100%; height: 200px; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+.lg { display: inline-flex; align-items: center; font-size: 11px; color: #6b7280; }
+.lg i { width: 9px; height: 9px; border-radius: 3px; margin-right: 5px; }
 
 .dim { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px solid #f1f1f5; }
 .dim:first-child { border-top: 0; }
