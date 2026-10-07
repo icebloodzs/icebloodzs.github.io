@@ -18,6 +18,7 @@ import Season from './views/Season.vue'
 import Rally from './views/Rally.vue'
 import Placement from './views/Placement.vue'
 import Shape from './views/Shape.vue'
+import MyAttrs from './views/MyAttrs.vue'
 import Users from './views/Users.vue'
 import Notice from './views/Notice.vue'
 import Board from './views/Board.vue'
@@ -33,6 +34,7 @@ const VIEWS = {
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
   shape: { label: '摆图形', icon: '🔠', comp: Shape },
+  myattrs: { label: '我的属性', icon: '📈', comp: MyAttrs },
   users: { label: '绑定情况', icon: '👥', comp: Users },
   notice: { label: '同盟公告', icon: '📢', comp: Notice },
   board: { label: '留言板', icon: '💬', comp: Board }
@@ -89,7 +91,12 @@ const can = (key) => {
   return !f || f[key] !== false
 }
 const menuOptions = computed(() => [
-  { type: 'group', label: '我的', key: 'g0', children: [{ label: VIEWS.mine.label, key: 'mine', icon: icon('👤') }] },
+  {
+    type: 'group',
+    label: '我的',
+    key: 'g0',
+    children: ['mine', 'myattrs'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
+  },
   {
     type: 'group',
     label: '成员数据',
@@ -120,7 +127,15 @@ const themeOverrides = {
 }
 
 // 各页都要用的数据，provide 下去，省得一层层传
-provide('app', { me, members, season, loginBy, reload, refreshMe, refreshNotices })
+/*
+ * 本赛季要看几维：S1~S3 只有四维（没开骑兵），S4 起六维。
+ * 服务端在 whoami 里下发，这边不自己算，免得两头规则对不上。
+ */
+const attrKeys = computed(() => {
+  const a = me.value && me.value.alliance
+  return (a && a.attrKeys) || ['infDef', 'infHp', 'cavAtk', 'cavBreak', 'arcAtk', 'arcBreak']
+})
+provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices })
 
 async function boot() {
   if (!token.value) {

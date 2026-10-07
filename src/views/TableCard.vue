@@ -3,7 +3,8 @@
  * 列表页的壳：标题 + 说明 + 搜索 + 导出 Excel + 表格。
  * 六个列表页长得都一样，统一到这里，各页只管给列定义。
  *
- * 列定义就是 naive-ui 那套，额外认一个 xls(row)：导出时这一列取什么值，不写就按 key 取。
+ * 列定义就是 naive-ui 那套，额外认一个 xls(row, index)：导出时这一列取什么值，不写就按 key 取。
+ * index 是**当前排序后**的行号，和表格里看到的序号一致。
  */
 import { ref, computed } from 'vue'
 import { useMessage } from 'naive-ui'
@@ -34,9 +35,9 @@ async function exportExcel() {
   try {
     const cols = props.columns.filter((c) => c.title)
     const aoa = [cols.map((c) => c.title)]
-    shown.value.forEach((r) => {
+    shown.value.forEach((r, i) => {
       aoa.push(cols.map((c) => {
-        const v = c.xls ? c.xls(r) : r[c.key]
+        const v = c.xls ? c.xls(r, i) : r[c.key]
         return v === null || v === undefined ? '' : v
       }))
     })
