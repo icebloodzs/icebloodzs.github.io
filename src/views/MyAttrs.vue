@@ -149,7 +149,20 @@ const picked = computed(() => {
     return { label, color: BAND[j % BAND.length], value: v, delta: d }
   })
   const sd = prev && cur.sum != null && prev.sum != null ? Math.round((cur.sum - prev.sum) * 100) / 100 : null
-  return { i, at: cur.at, no: i + 1, total: pts.length, sum: cur.sum, sumDelta: sd, rows, x: c.xs[i].x }
+  // 悬浮框贴在竖线旁边；靠右那几列往左翻，不然会顶出卡片
+  const ratio = c.xs[i].x / W
+  return {
+    i,
+    at: cur.at,
+    no: i + 1,
+    total: pts.length,
+    sum: cur.sum,
+    sumDelta: sd,
+    rows,
+    x: c.xs[i].x,
+    left: ratio * 100,
+    flip: ratio > 0.58
+  }
 })
 
 const dayText = (v) => (v ? String(v).slice(5, 10).replace('-', '/') : '')
@@ -197,6 +210,7 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
               <n-radio-button value="sum">总和</n-radio-button>
             </n-radio-group>
           </template>
+          <div class="wrap">
           <svg v-if="chart" class="chart" :viewBox="`0 0 ${W} ${H}`">
             <!-- 横向网格 + 左侧刻度 -->
             <g v-for="g in chart.grid" :key="g.v">
@@ -222,8 +236,8 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
               {{ dayText(x.at) }}
             </text>
           </svg>
-          <!-- 扫到某一列时把那次的数值列出来 -->
-          <div v-if="picked" class="tip">
+          <!-- 扫到某一列时贴着竖线弹出来；不吃鼠标事件，不然会把下面的感应区挡住 -->
+          <div v-if="picked" class="tip" :class="{ flip: picked.flip }" :style="{ left: picked.left + '%' }">
             <div class="tip-h">{{ dayText(picked.at) }} · 第 {{ picked.no }}/{{ picked.total }} 次</div>
             <div v-for="r in picked.rows" :key="r.label" class="tip-r">
               <i :style="{ borderColor: r.color }"></i>
@@ -242,7 +256,7 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
               </span>
             </div>
           </div>
-          <div v-else-if="chart" class="lab" style="text-align: center">鼠标扫过图上任意一列，看那一次的具体数值</div>
+          </div>
           <div v-if="chart" class="legend">
             <span v-for="sr in chart.series" :key="sr.key" class="lg">
               <i :style="{ borderColor: sr.color }"></i>{{ sr.label }}
@@ -252,7 +266,7 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
             至少传过两次属性才画得出走势，现在只有 {{ history.length }} 次。
           </div>
           <div v-if="chart" class="lab" style="margin-top: 6px">
-            {{ history.length }} 次记录 · {{ chart.dims ? '每一维一条线，看谁在涨' : '六维加起来的总和' }}
+            {{ history.length }} 次记录 · {{ chart.dims ? '每一维一条线' : '六维加起来的总和' }} · 鼠标扫过任意一列看具体数值
           </div>
         </n-card>
 
@@ -348,8 +362,23 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 /* 图例的点做成空心圆，和线上的标记一致 */
 .lg i { width: 9px; height: 9px; border-radius: 50%; border: 2px solid; margin-right: 5px; }
 
-/* 扫到某一列时弹出来的明细 */
-.tip { margin-top: 6px; padding: 10px 12px; border-radius: 8px; background: #fafafc; }
+/* 扫到某一列时贴着竖线弹出来的悬浮框 */
+.wrap { position: relative; }
+.tip {
+  position: absolute;
+  top: 8px;
+  margin-left: 12px;
+  min-width: 182px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #ebedf0;
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+/* 靠右那几列往左翻，不然会顶出卡片 */
+.tip.flip { transform: translateX(-100%); margin-left: -12px; }
 .tip-h { font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid #eceef2; }
 .tip-r { display: flex; align-items: center; padding: 4px 0; font-size: 12px; }
 .tip-r i { width: 8px; height: 8px; border-radius: 50%; border: 2px solid; margin-right: 8px; flex: none; }
