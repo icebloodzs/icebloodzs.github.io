@@ -60,6 +60,16 @@ const hover = ref(-1)
 /** 六维配色，顺序和 attrKeys 一致：步 → 骑 → 弓，同兵种深浅成对 */
 const BAND = ['#5b7cfa', '#9db4ff', '#12a594', '#5eead4', '#f59e0b', '#fcd34d']
 
+/*
+ * 图例和悬浮框里用两个字的简称。
+ * 接口回的是「步兵防御」这种全名，四个字排在窄框里会把数值挤掉，
+ * 和「属性排名」那张表的表头也对得上。
+ */
+const SHORT = {
+  infDef: '步防', infHp: '步生', cavAtk: '骑攻', cavBreak: '骑破', arcAtk: '弓攻', arcBreak: '弓破'
+}
+const shortOf = (key, fallback) => SHORT[key] || fallback || key
+
 /** 刻度取整：1 / 2 / 5 的倍数，标出来才是整数 */
 function ticksOf(lo, hi, n = 5) {
   const raw = (hi - lo) / n || 1
@@ -106,7 +116,7 @@ const chart = computed(() => {
   const series = dims
     ? keys.map((k, j) => ({
         key: k,
-        label: labels[j] || k,
+        label: shortOf(k, labels[j]),
         color: BAND[j % BAND.length],
         pts: pts.map((p, i) => ({ x: xAt(i), y: yAt((p.values || [])[j] || 0) }))
       }))
@@ -142,11 +152,12 @@ const picked = computed(() => {
   const labels = (data.value && data.value.labels) || []
   const prev = pts[i - 1]
   const cur = pts[i]
+  const keys = (data.value && data.value.keys) || []
   const rows = labels.map((label, j) => {
     const v = (cur.values || [])[j]
     const b = prev ? (prev.values || [])[j] : null
     const d = v != null && b != null ? Math.round((v - b) * 100) / 100 : null
-    return { label, color: BAND[j % BAND.length], value: v, delta: d }
+    return { label: shortOf(keys[j], label), color: BAND[j % BAND.length], value: v, delta: d }
   })
   const sd = prev && cur.sum != null && prev.sum != null ? Math.round((cur.sum - prev.sum) * 100) / 100 : null
   // 悬浮框贴在竖线旁边；靠右那几列往左翻，不然会顶出卡片
@@ -392,7 +403,7 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 .tip-h { font-size: 12px; font-weight: 600; padding-bottom: 6px; border-bottom: 1px solid #eceef2; white-space: nowrap; }
 .tip-r { display: flex; align-items: center; padding: 4px 0; font-size: 12px; }
 .tip-r i { width: 8px; height: 8px; border-radius: 50%; border: 2px solid; margin-right: 8px; flex: none; }
-.tip-l { width: 44px; flex: none; color: #6b7280; }
+.tip-l { flex: none; min-width: 42px; margin-right: 10px; color: #6b7280; }
 .tip-v { flex: 1; padding-right: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tip-d { flex: none; min-width: 56px; text-align: right; color: #9aa0a6; font-variant-numeric: tabular-nums; }
 .tip-d.up { color: #16a34a; font-weight: 600; }
