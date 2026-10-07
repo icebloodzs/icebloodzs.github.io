@@ -66,6 +66,7 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
 <template>
   <div class="login">
     <n-card class="box">
+      <img class="logo" src="/logo.png" alt="三冰小帮手" />
       <h1>同盟管理 · 电脑版</h1>
       <div class="sub">宽屏看统计，和小程序同一份数据</div>
 
@@ -115,6 +116,8 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
   border-radius: 16px;
   box-shadow: 0 24px 60px rgba(40, 24, 100, 0.28);
 }
+/* 图案本身四周没留白，这里靠外边距撑开 */
+.logo { display: block; width: 104px; height: auto; margin: 2px auto 12px; }
 h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; text-align: center; }
 .sub { color: #8a9099; font-size: 12px; text-align: center; margin-bottom: 20px; }
 
