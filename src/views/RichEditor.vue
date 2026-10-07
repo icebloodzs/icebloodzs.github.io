@@ -31,7 +31,12 @@ let quill = null
 let silent = false
 
 /** 几个常用色，够用就行，不摆一整个调色盘 */
-const COLORS = ['#1f2329', '#d93026', '#ea580c', '#ca8a04', '#16a34a', '#2563eb', '#6c5ce7', '#8a9099']
+/*
+ * 这几个颜色是挑过的：在小程序三种风格的底色上（白、米白、赛博的深紫）对比度都 >= 4.2。
+ * 原来那组里的近黑 #1f2329 配赛博风格只有 1.17，等于隐身；黄色 #ca8a04 配白底只有 2.94。
+ * 小程序那边还有一道兜底（utils/safecolor.js）会把不合格的推回来，这里是从源头少踩坑。
+ */
+const COLORS = ['#e23832', '#c65910', '#9b7608', '#188b42', '#3e74ea', '#8468d9', '#747981']
 
 function plainLength() {
   // Quill 的 getText 末尾永远带个换行，减掉
@@ -132,6 +137,8 @@ const fmt = (name, value) => {
     <div class="bar">
       <button class="t" type="button" title="加粗" @click="fmt('bold', true)"><b>B</b></button>
       <span class="sep"></span>
+      <!-- 默认色 = 不设颜色，交给各端自己的主题；想要黑字就用它，别去挑一个固定的黑 -->
+      <button class="t sm" type="button" title="恢复默认颜色" @click="fmt('color', false)">默认</button>
       <button
         v-for="c in COLORS"
         :key="c"
@@ -165,6 +172,7 @@ const fmt = (name, value) => {
 .dot { all: unset; cursor: pointer; width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,.08) inset; }
 .dot:hover { transform: scale(1.15); }
 .sep { width: 1px; height: 16px; background: #e4e7ea; }
+.t.sm { font-size: 12px; padding: 0 8px; }
 .n { font-size: 12px; color: #8a9099; font-variant-numeric: tabular-nums; }
 .n.over { color: #d93026; font-weight: 600; }
 .body { overflow: auto; }
