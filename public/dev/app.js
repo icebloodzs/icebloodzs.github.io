@@ -600,7 +600,7 @@ async function renderPlans() {
         .map((f) => `<li>${esc(f.label)}${f.todo ? ' <span class="tag amber">待做</span>' : ''}</li>`)
         .join('')
       return `<div class="card">
-        <h3>${esc(l.name)} <span class="muted">${money(l.price)}</span></h3>
+        <h3>${esc(l.name)} <span class="muted">${money(l.price)}/每月</span></h3>
         <p class="hint">${l.order > 1 ? '包含下面这些，外加前一档的全部' : '基础档'}</p>
         <ul style="margin:0;padding-left:18px;line-height:2">${items}</ul>
       </div>`
