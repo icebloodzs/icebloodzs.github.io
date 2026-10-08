@@ -6,7 +6,7 @@ export function big(v) {
   const n = Number(v)
   if (!isFinite(n)) return '—'
   if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '亿'
-  if (Math.abs(n) >= 1e4) return (n / 1e3).toFixed(1) + '万'
+  if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(1) + '万'
   return String(n)
 }
 
