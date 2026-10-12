@@ -1,12 +1,16 @@
 /** 数字和时间的显示规则，和小程序那边保持一致 */
 
-/** 1.01亿 / 7023万 */
-export function big(v) {
+/**
+ * 1.01亿 / 702.3万
+ * wan = 「万」这一档保留几位小数，默认 1。
+ * 四舍五入到整万会把 14.3 万和 14.5 万抹成同一个数，排行榜里就分不出谁多谁少了。
+ */
+export function big(v, wan = 1) {
   if (v === null || v === undefined || v === '') return '—'
   const n = Number(v)
   if (!isFinite(n)) return '—'
   if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '亿'
-  if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(1) + '万'
+  if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(wan) + '万'
   return String(n)
 }
 

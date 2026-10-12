@@ -12,8 +12,8 @@ export const nameCol = {
   render: (r) => h('b', r.name)
 }
 
-/** wan = 「万」那一档保留几位小数；要看出细微差别的列传 1 */
-export const bigCol = (title, key, width = 110, desc = false, wan = 0) => ({
+/** wan = 「万」那一档保留几位小数，默认 1（见 fmt.js 的 big） */
+export const bigCol = (title, key, width = 110, desc = false, wan = 1) => ({
   title,
   key,
   width,
