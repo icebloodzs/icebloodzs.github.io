@@ -23,6 +23,8 @@ const summary = ref(null)
  * 绑定和六维资料都跟着走，不用导完再合并。
  */
 const picks = ref({})
+/** 「就是新人」的哨兵值。不能用 null —— n-select 把 null 当成"没选中"，选了之后是一片空白 */
+const NEW = '__new__'
 /** 在册上限由服务端给（whoami），界面只负责显示 */
 const maxMembers = computed(() => (me.value && me.value.alliance && me.value.alliance.maxMembers) || 100)
 
@@ -45,7 +47,7 @@ async function run(dryRun) {
 
   const payload = { text: text.value, markMissingOut: markMissingOut.value, dryRun }
   const chosen = Object.entries(picks.value)
-    .filter(([, memberId]) => memberId)
+    .filter(([, memberId]) => memberId && memberId !== NEW)
     .map(([name, memberId]) => ({ name, memberId }))
   if (chosen.length) payload.confirmRenames = chosen
   if (!dryRun) {
@@ -81,7 +83,7 @@ function seedPicks(res) {
   ;(res.candidateList || []).forEach((c) => {
     if (next[c.name] !== undefined) return
     const auto = (res.suspectList || []).find((x) => x.to === c.name)
-    next[c.name] = auto ? auto.memberId : null
+    next[c.name] = auto ? auto.memberId : NEW
   })
   picks.value = next
 }
@@ -89,7 +91,7 @@ function seedPicks(res) {
 /** 候选下拉的选项：相似度高的在前，已经配给别人的标出来 */
 function optionsOf(c) {
   return [
-    { label: '— 就是新人，不是改名 —', value: null },
+    { label: '就是新人，不是改名', value: NEW },
     ...c.options.map((o) => ({
       label: `${o.name}　相似 ${o.score}%　实力 ${o.strength}　战力 ${o.power}`
         + (o.bound ? '　[已绑微信]' : '')
@@ -99,10 +101,13 @@ function optionsOf(c) {
   ]
 }
 
-const pickedCount = computed(() => Object.values(picks.value).filter(Boolean).length)
+const pickedCount = computed(() => Object.values(picks.value).filter((v) => v && v !== NEW).length)
 
-function clearPicks() {
-  picks.value = {}
+/** 全部当新人，一个改名都不认 */
+function allNew() {
+  const next = {}
+  ;(summary.value.candidateList || []).forEach((c) => { next[c.name] = NEW })
+  picks.value = next
   run(true)
 }
 
@@ -189,6 +194,10 @@ const suspectCols = [
           </n-alert>
           <n-alert v-if="summary.overLimit" type="error" :bordered="false">
             导入后在册会有 <b>{{ summary.willBeInRoster }}</b> 人，超过上限 {{ summary.maxMembers }} 人，这样是导不进去的。
+            <template v-if="!markMissingOut">
+              <b>上面「把名单里消失的人标记为已离队」没勾</b> ——
+              不勾的话名单里没有的 {{ summary.missing }} 人会一直留在册上，加起来就超了。勾上再预演一次。
+            </template>
             多半是粘错了内容，或者关掉了「把名单里消失的人标记为已离队」。
           </n-alert>
           <n-alert v-if="summary.bulkLower" type="error" :bordered="false">
@@ -220,7 +229,7 @@ const suspectCols = [
               <n-button size="small" type="primary" :loading="busy" @click="run(true)">
                 重新预演{{ pickedCount ? `（已指定 ${pickedCount} 对）` : '' }}
               </n-button>
-              <n-button v-if="pickedCount" size="small" @click="clearPicks">全部清空</n-button>
+              <n-button v-if="pickedCount" size="small" @click="allNew">都当新人</n-button>
             </n-space>
           </n-alert>
 
