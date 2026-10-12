@@ -16,6 +16,13 @@ const text = ref('')
 const markMissingOut = ref(true)
 const busy = ref(false)
 const summary = ref(null)
+/*
+ * 手动指定的改名：{ 新名字 -> 老记录 _id }。
+ * 自动配的那几对会预先填好，管理员可以改、也可以挑"就是新人"。
+ * 带着它再预演一次，服务端会按指定的配对重算；正式导入时是**原地改名**，
+ * 绑定和六维资料都跟着走，不用导完再合并。
+ */
+const picks = ref({})
 /** 在册上限由服务端给（whoami），界面只负责显示 */
 const maxMembers = computed(() => (me.value && me.value.alliance && me.value.alliance.maxMembers) || 100)
 
@@ -37,6 +44,10 @@ async function run(dryRun) {
   if (!text.value.trim()) return message.warning('先把名单粘进来')
 
   const payload = { text: text.value, markMissingOut: markMissingOut.value, dryRun }
+  const chosen = Object.entries(picks.value)
+    .filter(([, memberId]) => memberId)
+    .map(([name, memberId]) => ({ name, memberId }))
+  if (chosen.length) payload.confirmRenames = chosen
   if (!dryRun) {
     const ok = await confirmRun()
     if (!ok) return
@@ -47,6 +58,7 @@ async function run(dryRun) {
   try {
     const res = await call('roster.import', payload)
     summary.value = res
+    if (dryRun) seedPicks(res)
     if (!dryRun) {
       message.success(`导入完成：新增 ${res.created} · 更新 ${res.updated} · 改名 ${res.renamed}`)
       text.value = ''
@@ -58,6 +70,40 @@ async function run(dryRun) {
   } finally {
     busy.value = false
   }
+}
+
+/**
+ * 预演回来后，把自动认出的那几对预先选上。
+ * 已经手动改过的不覆盖 —— 否则每次重新预演都把人家的选择冲掉。
+ */
+function seedPicks(res) {
+  const next = { ...picks.value }
+  ;(res.candidateList || []).forEach((c) => {
+    if (next[c.name] !== undefined) return
+    const auto = (res.suspectList || []).find((x) => x.to === c.name)
+    next[c.name] = auto ? auto.memberId : null
+  })
+  picks.value = next
+}
+
+/** 候选下拉的选项：相似度高的在前，已经配给别人的标出来 */
+function optionsOf(c) {
+  return [
+    { label: '— 就是新人，不是改名 —', value: null },
+    ...c.options.map((o) => ({
+      label: `${o.name}　相似 ${o.score}%　实力 ${o.strength}　战力 ${o.power}`
+        + (o.bound ? '　[已绑微信]' : '')
+        + (o.takenBy && o.takenBy !== c.name ? `　(建议配给 ${o.takenBy})` : ''),
+      value: o.memberId
+    }))
+  ]
+}
+
+const pickedCount = computed(() => Object.values(picks.value).filter(Boolean).length)
+
+function clearPicks() {
+  picks.value = {}
+  run(true)
 }
 
 function confirmRun() {
@@ -149,6 +195,35 @@ const suspectCols = [
             有 {{ summary.dropped }} 人的总功勋比库里小，这份名单可能是旧的或者赛季重置了。确认导入时会再问你一次。
           </n-alert>
 
+          <!-- 手动指定改名：每个没按名字对上的新名字，挑一个它可能是谁 -->
+          <n-alert v-if="summary.candidateList && summary.candidateList.length" type="info" :bordered="false"
+            :title="`这 ${summary.candidateList.length} 个名字库里没有，可能是谁改的名`">
+            <div class="hint">
+              按火炉、实力、战力算的相似度，从最像的往下排。选好之后点「重新预演」，
+              指定的配对会在导入时<b>原地改名</b>——绑定和六维资料都跟着走，不用导完再合并。
+              确实是新人就选「就是新人」。
+            </div>
+            <div v-for="c in summary.candidateList" :key="c.key" class="cand">
+              <div class="cand-n">
+                {{ c.name }}
+                <span class="cand-s">实力 {{ c.strength }} · 战力 {{ c.power }}</span>
+              </div>
+              <n-select
+                v-model:value="picks[c.name]"
+                :options="optionsOf(c)"
+                size="small"
+                style="width: 420px"
+                placeholder="挑一个它原来叫什么"
+              />
+            </div>
+            <n-space :size="10" style="margin-top: 12px">
+              <n-button size="small" type="primary" :loading="busy" @click="run(true)">
+                重新预演{{ pickedCount ? `（已指定 ${pickedCount} 对）` : '' }}
+              </n-button>
+              <n-button v-if="pickedCount" size="small" @click="clearPicks">全部清空</n-button>
+            </n-space>
+          </n-alert>
+
           <n-alert v-if="summary.suspectList && summary.suspectList.length" type="warning" :bordered="false"
             :title="`疑似改名 ${summary.suspects} 人`">
             火炉、实力、战力都相近，但总功勋对不上。确认是同一个人就点「合并」，老记录的绑定和资料会保留。
@@ -193,6 +268,10 @@ const suspectCols = [
 </template>
 
 <style scoped>
+.hint { font-size: 12px; line-height: 1.7; color: #4b5563; }
+.cand { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.cand-n { width: 230px; flex: none; font-size: 13px; font-weight: 600; }
+.cand-s { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: #8a9099; }
 .bar { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
 .c-success { color: #16a34a; }
 .c-warning { color: #d97706; }

@@ -59,7 +59,7 @@ const troopCol = computed(() => ({
 const columns = computed(() => [
   nameCol,
   numCol('最高集结值', 'maxBonus', 2, 120),
-  bigCol('单人出征', 'maxMarch', 110),
+  bigCol('单人出征', 'maxMarch', 110, false, 1),
   troopCol.value,
   numCol('六维总和', 'attrsSum', 2, 110, true),
   timeCol('资料更新', 'attrsUpdatedAt')

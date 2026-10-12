@@ -12,13 +12,14 @@ export const nameCol = {
   render: (r) => h('b', r.name)
 }
 
-export const bigCol = (title, key, width = 110, desc = false) => ({
+/** wan = 「万」那一档保留几位小数；要看出细微差别的列传 1 */
+export const bigCol = (title, key, width = 110, desc = false, wan = 0) => ({
   title,
   key,
   width,
   sorter: sorter((r) => r[key]),
   defaultSortOrder: desc ? 'descend' : undefined,
-  render: (r) => big(r[key]),
+  render: (r) => big(r[key], wan),
   xls: (r) => (r[key] === null || r[key] === undefined ? '' : Number(r[key]))
 })
 
