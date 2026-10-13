@@ -88,7 +88,24 @@ const position = computed(() => {
   return list[i]
 })
 
-/** 原图动辄三五兆，压到长边 1280 再传 */
+/*
+ * 原图动辄三五兆，传之前压一下。
+ *
+ * 原来压到长边 1280 / 质量 0.75 —— 手机截图 1170×2532 压完只剩 591×1280，
+ * 「武将战力」那张卡的数字本来就小，再降一半就糊得认不出来了
+ * （实测失败的全是 NOTHING_RECOGNIZED）。小程序那边是原图直传，所以没这问题。
+ *
+ * 现在从清晰的那档往下退，退到够小为止：识别准确率优先，体积够用就行。
+ * 服务端上限 4MB（decode 之后），这里按 base64 的长度留足余量。
+ */
+const STEPS = [
+  { side: 2000, quality: 0.9 },
+  { side: 1600, quality: 0.85 },
+  { side: 1280, quality: 0.75 },
+  { side: 1000, quality: 0.65 }
+]
+const MAX_BASE64 = 3.2 * 1024 * 1024
+
 function compress(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -97,12 +114,20 @@ function compress(file) {
       const img = new Image()
       img.onerror = () => reject(new Error('这不是一张图片'))
       img.onload = () => {
-        const scale = Math.min(1, 1280 / Math.max(img.width, img.height))
         const canvas = document.createElement('canvas')
-        canvas.width = Math.round(img.width * scale)
-        canvas.height = Math.round(img.height * scale)
-        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-        resolve(canvas.toDataURL('image/jpeg', 0.75))
+        const ctx = canvas.getContext('2d')
+        let out = ''
+        for (const step of STEPS) {
+          // 比目标还小的图不放大，放大只会更糊
+          const scale = Math.min(1, step.side / Math.max(img.width, img.height))
+          canvas.width = Math.round(img.width * scale)
+          canvas.height = Math.round(img.height * scale)
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+          out = canvas.toDataURL('image/jpeg', step.quality)
+          if (out.length <= MAX_BASE64) break
+        }
+        resolve(out)
       }
       img.src = reader.result
     }
