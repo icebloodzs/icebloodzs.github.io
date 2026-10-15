@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 同盟公告：发布 / 看历史 / 撤销。
- * 发出去之后成员下次打开小程序或电脑版会自动弹一次，点过「知道了」就不再弹；
+ * 发出去之后，没撤销、没过期的公告成员每天打开都会弹一次，当天点过「知道了」就不再弹；
  * 到了展示期限自己停掉，不用记着来撤。
  */
 import { ref, inject, onMounted, h } from 'vue'
@@ -103,7 +103,7 @@ const leftText = (r) =>
   <n-space vertical :size="16">
     <n-card title="发布公告" :bordered="false">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        成员下次打开小程序或电脑版会自动弹一次，点过「知道了」就不再弹，但首页那张公告卡随时能再点开。
+        只要没撤销、没过期，成员每天第一次打开小程序或电脑版都会弹一次，当天点过「知道了」就不再弹，首页那张公告卡随时能再点开。
         到了展示时长会自己停止显示，不用你记着来撤。同时最多展示 {{ max }} 条（现在 {{ activeCount }} 条）。
       </n-alert>
 

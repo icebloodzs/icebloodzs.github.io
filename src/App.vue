@@ -51,7 +51,7 @@ const loginTip = ref('')
 const loginWhy = ref('')
 const netError = ref(false)
 
-/** 同盟公告：有没看过的就弹一次，关掉之后首页菜单里还能再看 */
+/** 同盟公告：今天还没看过的就弹一次（每天一次，服务端按北京时间算），关掉之后首页菜单里还能再看 */
 const notices = ref([])
 const noticeOpen = ref(false)
 const noticeIndex = ref(0)
@@ -294,7 +294,7 @@ boot()
             </div>
           </n-layout>
 
-          <!-- 公告弹窗：上线自动弹一次，关掉之后从左边「同盟公告」还能再看 -->
+          <!-- 公告弹窗：每天第一次上线自动弹一次，关掉之后从左边「同盟公告」还能再看 -->
           <n-modal
             v-model:show="noticeOpen"
             preset="card"
