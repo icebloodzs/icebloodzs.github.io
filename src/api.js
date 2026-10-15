@@ -63,7 +63,13 @@ export async function call(action, data = {}) {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action, data, token: token.value })
     })
-    const body = await r.json()
+    // 网关超时 / 502 时回的是一段 html，直接 r.json() 会报一句看不懂的「Unexpected token <」
+    let body = null
+    try {
+      body = await r.json()
+    } catch (e) {
+      throw new Error(r.ok ? '服务返回的数据不对，请稍后重试' : `服务暂时不可用（${r.status}），请稍后重试`)
+    }
     if (!body || body.code !== 0) {
       const err = new Error((body && body.message) || '请求失败')
       err.errCode = body && body.errCode

@@ -325,7 +325,7 @@ async function renderOverview() {
         <td class="num">${num(x.alliances)}</td>
         <td class="num">${num(x.codesUsed)}</td>
         <td class="num">${num(x.codesUnused)}</td>
-        <td class="num">${money((x.codesUsed || 0) * l.price)}</td>
+        <td class="num">${money(x.revenue == null ? (x.codesUsed || 0) * l.price : x.revenue)}</td>
       </tr>`
     })
     .join('')
@@ -393,8 +393,9 @@ let codeFilter = 'all'
  */
 const CODE_PRESETS = [
   // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回普通会员，不会把盟锁死
-  { label: '3 天试用', days: 3, validDays: 30, note: '试用', level: 'top' },
-  { label: '7 天试用', days: 7, validDays: 30, note: '试用', level: 'top' },
+  // 试用码单价记 0：不然总览里的收入会把每个试用码都按终极会员 648 元算进去
+  { label: '3 天试用', days: 3, validDays: 30, note: '试用', level: 'top', price: 0 },
+  { label: '7 天试用', days: 7, validDays: 30, note: '试用', level: 'top', price: 0 },
   { label: '1 个月', days: 30, validDays: 0, note: '' },
   { label: '1 年', days: 365, validDays: 0, note: '' }
 ]
@@ -459,6 +460,7 @@ async function renderCodes(refresh = true) {
       </div>
       <div class="row">
         <label class="f">等级<select id="cLevel">${opts}</select></label>
+        <label class="f">单价（元）<input id="cPrice" type="number" min="0" placeholder="按等级" style="width:90px" /></label>
         <label class="f">会员天数<input id="cDays" type="number" value="365" min="0" /></label>
         <label class="f">码有效期（天）<input id="cValid" type="number" value="0" min="0" /></label>
         <label class="f">数量<input id="cCount" type="number" value="1" min="1" max="50" /></label>
@@ -508,6 +510,8 @@ async function renderCodes(refresh = true) {
         const sel = $('cLevel')
         sel.value = sel.options[sel.options.length - 1].value
       }
+      // 试用档位填 0；别的档位清空 = 按等级标价
+      $('cPrice').value = p.price == null ? '' : p.price
     }))
 
   $('cMake').onclick = async () => {
@@ -518,6 +522,8 @@ async function renderCodes(refresh = true) {
       count: Number($('cCount').value || 1),
       note: $('cNote').value
     }
+    // 不填就不传，服务端按等级标价记
+    if ($('cPrice').value.trim() !== '') payload.price = Number($('cPrice').value)
     $('cMake').disabled = true
     try {
       const res = await call('dev.codeCreate', payload)
