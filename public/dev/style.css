@@ -133,3 +133,9 @@ label.f input, label.f select { width: 130px; }
   background: rgba(31,35,41,.92); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 14px;
   z-index: 99;
 }
+
+/* 可排序的表头：鼠标移上去给点反馈，当前排序列高亮 */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: #1f2329; background: #f3f4f6; }
+th.sort-on { color: #5b4bd1; }
+th.sortable .muted { opacity: 0.45; font-size: 11px; }

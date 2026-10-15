@@ -110,6 +110,76 @@ const stamp = () => {
 
 const size = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ? (n / 1024).toFixed(0) + ' KB' : n + ' B')
 
+/* ---------------- 表格排序 ----------------
+ * 各张表共用一套：每张表记一个 { key, dir }，表头点一下换列、再点一下反向。
+ * 列定义里给 sort(row) 就能排，不给就是不可排序的列。
+ */
+const sorts = {}
+
+function sortState(table) {
+  if (!sorts[table]) sorts[table] = { key: '', dir: -1 }
+  return sorts[table]
+}
+
+/** 表头 HTML。cols = [{ label, key?, sort?, num? }] */
+function thead(table, cols) {
+  const st = sortState(table)
+  return (
+    '<thead><tr>' +
+    cols
+      .map((c) => {
+        const cls = (c.num ? 'num' : '') + (c.sort ? ' sortable' : '')
+        if (!c.sort) return `<th class="${cls}">${c.label}</th>`
+        const on = st.key === c.key
+        const mark = on ? (st.dir === 1 ? ' ▲' : ' ▼') : ' <span class="muted">⇅</span>'
+        return `<th class="${cls}${on ? ' sort-on' : ''}" data-sort="${table}:${c.key}">${c.label}${mark}</th>`
+      })
+      .join('') +
+    '</tr></thead>'
+  )
+}
+
+/** 按当前排序状态排一份副本。空值永远垫底，不跟着升降序翻上来 */
+function applySort(table, cols, rows) {
+  const st = sortState(table)
+  const col = cols.find((c) => c.key === st.key && c.sort)
+  if (!col) return rows
+  const val = col.sort
+  return rows.slice().sort((a, b) => {
+    const x = val(a)
+    const y = val(b)
+    const xn = x === null || x === undefined || x === ''
+    const yn = y === null || y === undefined || y === ''
+    if (xn && yn) return 0
+    if (xn) return 1
+    if (yn) return -1
+    if (typeof x === 'string' || typeof y === 'string') return String(x).localeCompare(String(y), 'zh') * st.dir
+    return (x - y) * st.dir
+  })
+}
+
+/** 把表头的点击接上。rerender 是这一屏的重绘函数 */
+function bindSort(rerender) {
+  $('body')
+    .querySelectorAll('[data-sort]')
+    .forEach((th) => {
+      th.onclick = () => {
+        const [table, key] = th.dataset.sort.split(':')
+        const st = sortState(table)
+        // 点同一列就反向，换一列从降序开始（看榜通常先看最大的）
+        if (st.key === key) st.dir = -st.dir
+        else { st.key = key; st.dir = -1 }
+        rerender()
+      }
+    })
+}
+
+/** 下拉选项，value 为空的那项是「全部」 */
+const optionsOf = (list, cur, allLabel) =>
+  [`<option value="">${allLabel}</option>`]
+    .concat(list.map((v) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(v)}</option>`))
+    .join('')
+
 function copy(text) {
   navigator.clipboard
     .writeText(text)
@@ -308,12 +378,38 @@ const CODE_STATUS = {
 }
 let codeFilter = 'all'
 
+/*
+ * 常用档位，点一下把表单填好。
+ * 试用码的「码有效期」设成 30 天 —— 发出去一个月还没用就自动作废，
+ * 免得三天的试用码躺半年后被人翻出来用。
+ */
+const CODE_PRESETS = [
+  { label: '3 天试用', days: 3, validDays: 30, note: '试用' },
+  { label: '7 天试用', days: 7, validDays: 30, note: '试用' },
+  { label: '1 个月', days: 30, validDays: 0, note: '' },
+  { label: '1 年', days: 365, validDays: 0, note: '' }
+]
+
+const CODE_COLS = [
+  { label: '码', key: 'code', sort: (r) => r.code },
+  { label: '等级', key: 'level', sort: (r) => r.price },
+  { label: '单价', key: 'price', sort: (r) => r.price, num: true },
+  { label: '会员时长', key: 'days', sort: (r) => (r.days === 0 ? Infinity : r.days), num: true },
+  { label: '状态', key: 'status', sort: (r) => r.status },
+  { label: '用在哪个盟', key: 'used', sort: (r) => (r.usedAt ? new Date(r.usedAt).getTime() : null) },
+  { label: '生成', key: 'created', sort: (r) => new Date(r.createdAt).getTime() },
+  { label: '备注', key: 'note', sort: (r) => r.note },
+  { label: '' }
+]
+
 async function renderCodes() {
   const d = await call('dev.codes')
   if (!meta.levels.length) meta.levels = d.levels
 
   const opts = d.levels.map((l) => `<option value="${l.key}">${esc(l.name)} ${l.price} 元</option>`).join('')
-  const rows = d.rows.filter((r) => codeFilter === 'all' || r.status === codeFilter)
+  const picked = d.rows.filter((r) => codeFilter === 'all' || r.status === codeFilter)
+  if (!sortState('code').key) sorts.code = { key: 'created', dir: -1 }
+  const rows = applySort('code', CODE_COLS, picked)
 
   const body = rows.length
     ? rows
@@ -342,7 +438,12 @@ async function renderCodes() {
   $('body').innerHTML = `
     <div class="card">
       <h3>生成激活码</h3>
-      <p class="hint">一个码只能用一次。会员天数 = 这个码能换多少天会员，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。</p>
+      <p class="hint">一个码只能用一次。会员天数 = 这个码能换多少天会员，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
+        试用码建议配个终极会员 —— 让人把功能都摸一遍，到期自动掉回普通会员，不会把盟锁死。</p>
+      <div class="row" style="margin-bottom:10px">
+        <span class="muted tiny" style="align-self:center">常用档位</span>
+        ${CODE_PRESETS.map((p, i) => `<button class="btn ghost small" data-preset="${i}">${p.label}</button>`).join('')}
+      </div>
       <div class="row">
         <label class="f">等级<select id="cLevel">${opts}</select></label>
         <label class="f">会员天数<input id="cDays" type="number" value="365" min="0" /></label>
@@ -356,7 +457,7 @@ async function renderCodes() {
 
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <h3>全部激活码（${d.rows.length}）</h3>
+        <h3>全部激活码（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
         <div class="row">
           <select id="cFilter">
             <option value="all">全部</option>
@@ -369,7 +470,7 @@ async function renderCodes() {
         </div>
       </div>
       <table>
-        <thead><tr><th>码</th><th>等级</th><th class="num">单价</th><th class="num">会员时长</th><th>状态</th><th>用在哪个盟</th><th>生成</th><th>备注</th><th></th></tr></thead>
+        ${thead('code', CODE_COLS)}
         <tbody>${body}</tbody>
       </table>
     </div>`
@@ -379,6 +480,16 @@ async function renderCodes() {
     codeFilter = e.target.value
     renderCodes()
   }
+  bindSort(() => renderCodes())
+
+  $('body')
+    .querySelectorAll('[data-preset]')
+    .forEach((b) => (b.onclick = () => {
+      const p = CODE_PRESETS[Number(b.dataset.preset)]
+      $('cDays').value = p.days
+      $('cValid').value = p.validDays
+      if (p.note) $('cNote').value = p.note
+    }))
 
   $('cMake').onclick = async () => {
     const payload = {
@@ -441,12 +552,47 @@ async function codeAct(action, data, ask) {
 
 // ---------------- 同盟 ----------------
 
+/** 同盟那一屏的筛选条件，翻来翻去保持住 */
+const allyFilter = { server: '', name: '', status: '', level: '' }
+
+const ALLY_COLS = [
+  { label: '同盟', key: 'name', sort: (a) => a.name },
+  { label: '区', key: 'serverNo', sort: (a) => Number(a.serverNo) || a.serverNo },
+  { label: '状态', key: 'active', sort: (a) => (a.active ? 1 : 0) },
+  { label: '等级', key: 'level', sort: (a) => a.levelOrder || 0 },
+  { label: '会员到期', key: 'expire', sort: (a) => (a.memberExpiresAt ? new Date(a.memberExpiresAt).getTime() : null) },
+  { label: '成员', key: 'members', sort: (a) => a.members, num: true },
+  { label: '识别次数', key: 'calls', sort: (a) => a.vision.calls, num: true },
+  { label: 'token / 成本', key: 'tokens', sort: (a) => a.vision.tokens, num: true },
+  { label: '活跃', key: 'login', sort: (a) => (a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : null) },
+  { label: '' }
+]
+
 async function renderAlliances() {
   const d = await call('dev.alliances')
   if (!meta.levels.length) meta.levels = d.levels
+  // 等级排序要按档次高低，不是按字母
+  const order = new Map(meta.levels.map((l, i) => [l.key, i + 1]))
+  d.rows.forEach((a) => { a.levelOrder = order.get(a.level) || 0 })
 
-  const rows = d.rows.length
-    ? d.rows
+  const servers = [...new Set(d.rows.map((a) => a.serverNo).filter(Boolean))].sort(
+    (x, y) => (Number(x) || 0) - (Number(y) || 0)
+  )
+  const kw = allyFilter.name.trim().toLowerCase()
+  const picked = d.rows.filter((a) => {
+    if (allyFilter.server && a.serverNo !== allyFilter.server) return false
+    if (allyFilter.status === 'on' && !a.active) return false
+    if (allyFilter.status === 'off' && a.active) return false
+    if (allyFilter.status === 'expired' && !(a.daysLeft !== null && a.daysLeft < 0)) return false
+    if (allyFilter.status === 'soon' && !(a.daysLeft !== null && a.daysLeft >= 0 && a.daysLeft <= 14)) return false
+    if (allyFilter.level && a.level !== allyFilter.level) return false
+    if (kw && !(`${a.name} ${a.serverNo} ${a.ownerName || ''}`.toLowerCase().includes(kw))) return false
+    return true
+  })
+
+  const rows = applySort('ally', ALLY_COLS, picked)
+  const body = rows.length
+    ? rows
         .map((a) => {
           const left =
             a.daysLeft === null
@@ -459,7 +605,8 @@ async function renderAlliances() {
                   ? `<span class="tag amber">${a.daysLeft} 天</span>`
                   : `${a.daysLeft} 天`
           return `<tr>
-            <td><b>${esc(a.name)}</b><br /><span class="muted tiny">${esc(a.serverNo)} 区 · ${esc(a.season)}${a.ownerName ? ' · 盟主 ' + esc(a.ownerName) : ''}</span></td>
+            <td><b>${esc(a.name)}</b>${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
+            <td class="tiny">${esc(a.serverNo)} 区<br /><span class="muted">${esc(a.season)}</span></td>
             <td>${a.active ? '<span class="tag green">已激活</span>' : '<span class="tag red">已停用</span>'}</td>
             <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}</td>
             <td class="tiny">${a.memberExpiresAt ? day(a.memberExpiresAt) : '—'}<br />${left}</td>
@@ -474,17 +621,51 @@ async function renderAlliances() {
           </tr>`
         })
         .join('')
-    : '<tr><td colspan="9" class="empty">还没有同盟</td></tr>'
+    : '<tr><td colspan="10" class="empty">没有符合条件的同盟</td></tr>'
+
+  const levelOpts = [`<option value="">全部等级</option>`]
+    .concat(
+      meta.levels.map(
+        (l) => `<option value="${esc(l.key)}"${l.key === allyFilter.level ? ' selected' : ''}>${esc(l.name)}</option>`
+      )
+    )
+    .join('')
 
   $('body').innerHTML = `
     <div class="card">
-      <h3>同盟（${d.rows.length}）</h3>
-      <p class="hint">「授权 / 续期」不用激活码，直接给这个盟记上等级和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。</p>
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <h3>同盟（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+        <div class="row">
+          <select id="fServer">${optionsOf(servers.map(String), allyFilter.server, '全部区')}</select>
+          <select id="fStatus">
+            <option value="">全部状态</option>
+            <option value="on"${allyFilter.status === 'on' ? ' selected' : ''}>已激活</option>
+            <option value="off"${allyFilter.status === 'off' ? ' selected' : ''}>已停用</option>
+            <option value="soon"${allyFilter.status === 'soon' ? ' selected' : ''}>14 天内到期</option>
+            <option value="expired"${allyFilter.status === 'expired' ? ' selected' : ''}>已过期</option>
+          </select>
+          <select id="fLevel">${levelOpts}</select>
+          <input id="fName" placeholder="搜盟名 / 区 / 盟主" value="${esc(allyFilter.name)}" style="width:170px" />
+          ${allyFilter.server || allyFilter.status || allyFilter.level || allyFilter.name ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
+        </div>
+      </div>
+      <p class="hint">「授权 / 续期」不用激活码，直接给这个盟记上等级和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
       <table>
-        <thead><tr><th>同盟</th><th>状态</th><th>等级</th><th>会员到期</th><th class="num">成员</th><th class="num">识别次数</th><th class="num">token / 成本</th><th>活跃</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
+        ${thead('ally', ALLY_COLS)}
+        <tbody>${body}</tbody>
       </table>
     </div>`
+
+  const redraw = () => renderAlliances()
+  $('fServer').onchange = (e) => { allyFilter.server = e.target.value; redraw() }
+  $('fStatus').onchange = (e) => { allyFilter.status = e.target.value; redraw() }
+  $('fLevel').onchange = (e) => { allyFilter.level = e.target.value; redraw() }
+  // 搜索框打字时不重绘整屏（会丢焦点），回车或失焦再筛
+  const nameBox = $('fName')
+  nameBox.onchange = (e) => { allyFilter.name = e.target.value; redraw() }
+  nameBox.onkeydown = (e) => { if (e.key === 'Enter') { allyFilter.name = e.target.value; redraw() } }
+  if ($('fClear')) $('fClear').onclick = () => { Object.assign(allyFilter, { server: '', name: '', status: '', level: '' }); redraw() }
+  bindSort(redraw)
 
   $('body').querySelectorAll('[data-grant]').forEach((b) => (b.onclick = () => grant(b.dataset.grant, b.dataset.name, b.dataset.level)))
   $('body').querySelectorAll('[data-toggle]').forEach((b) => (b.onclick = () => toggle(b.dataset.toggle, b.dataset.on === '1', b.dataset.name)))
@@ -530,49 +711,115 @@ async function toggle(allianceId, active, name) {
 
 // ---------------- 识别用量 ----------------
 
+const visFilter = { server: '', ally: '', kind: '', ok: '', member: '' }
+
+const VIS_COLS = [
+  { label: '时间', key: 'at', sort: (r) => new Date(r.at).getTime() },
+  { label: '区 / 同盟', key: 'ally', sort: (r) => `${r.serverNo} ${r.allianceName}` },
+  { label: '成员', key: 'member', sort: (r) => r.memberName },
+  { label: '类型', key: 'kind', sort: (r) => r.kind },
+  { label: 'token', key: 'tokens', sort: (r) => r.totalTokens, num: true },
+  { label: '结果', key: 'ok', sort: (r) => (r.ok ? 1 : 0) },
+  { label: '模型' }
+]
+
+const MONTH_COLS = [
+  { label: '月份', key: 'month', sort: (m) => m.month },
+  { label: '调用', key: 'calls', sort: (m) => m.calls, num: true },
+  { label: '失败', key: 'failed', sort: (m) => m.failed, num: true },
+  { label: 'token', key: 'tokens', sort: (m) => m.tokens, num: true },
+  { label: '成本', key: 'cost', sort: (m) => m.cost, num: true }
+]
+
 async function renderVision() {
   const d = await call('dev.vision')
-  const months = Object.keys(d.byMonth).sort().reverse()
 
-  const mRows = months.length
-    ? months
-        .map((k) => {
-          const m = d.byMonth[k]
-          return `<tr><td>${k}</td><td class="num">${num(m.calls)}</td><td class="num">${num(m.failed)}</td><td class="num">${num(m.tokens)}</td><td class="num">${money(m.cost)}</td></tr>`
-        })
+  const months = Object.keys(d.byMonth).map((k) => ({ month: k, ...d.byMonth[k] }))
+  if (!sortState('vmonth').key) sorts.vmonth = { key: 'month', dir: -1 }
+  const mSorted = applySort('vmonth', MONTH_COLS, months)
+  const mRows = mSorted.length
+    ? mSorted
+        .map((m) => `<tr><td>${esc(m.month)}</td><td class="num">${num(m.calls)}</td><td class="num">${num(m.failed)}</td><td class="num">${num(m.tokens)}</td><td class="num">${money(m.cost)}</td></tr>`)
         .join('')
     : '<tr><td colspan="5" class="empty">还没有识别记录</td></tr>'
 
-  const rows = d.rows.length
-    ? d.rows
+  // 筛选项从这 200 条里现取，没出现过的区 / 盟不列出来
+  const servers = [...new Set(d.rows.map((r) => r.serverNo).filter(Boolean))].sort((x, y) => (Number(x) || 0) - (Number(y) || 0))
+  const allies = [...new Set(d.rows.filter((r) => !visFilter.server || r.serverNo === visFilter.server).map((r) => r.allianceName).filter(Boolean))].sort()
+  const kw = visFilter.member.trim().toLowerCase()
+  const picked = d.rows.filter((r) => {
+    if (visFilter.server && r.serverNo !== visFilter.server) return false
+    if (visFilter.ally && r.allianceName !== visFilter.ally) return false
+    if (visFilter.kind && r.kind !== visFilter.kind) return false
+    if (visFilter.ok === 'ok' && !r.ok) return false
+    if (visFilter.ok === 'fail' && r.ok) return false
+    if (kw && !String(r.memberName || '').toLowerCase().includes(kw)) return false
+    return true
+  })
+
+  if (!sortState('vis').key) sorts.vis = { key: 'at', dir: -1 }
+  const rows = applySort('vis', VIS_COLS, picked)
+  const body = rows.length
+    ? rows
         .map(
           (r) => `<tr>
             <td class="tiny">${when(r.at)}</td>
-            <td>${r.kind === 'hero' ? '武将战力' : '属性面板'}</td>
+            <td class="tiny">${r.serverNo ? esc(r.serverNo) + ' 区' : '—'}<br /><span class="muted">${esc(r.allianceName || '—')}</span></td>
             <td>${esc(r.memberName || '—')}</td>
+            <td>${r.kind === 'hero' ? '武将战力' : '属性面板'}</td>
             <td class="num">${num(r.totalTokens)}</td>
             <td>${r.ok ? '<span class="tag green">成功</span>' : '<span class="tag red">' + esc(r.errCode || '失败') + '</span>'}</td>
             <td class="muted tiny">${esc(r.model)}</td>
           </tr>`
         )
         .join('')
-    : '<tr><td colspan="6" class="empty">还没有识别记录</td></tr>'
+    : '<tr><td colspan="7" class="empty">没有符合条件的记录</td></tr>'
+
+  const dirty = visFilter.server || visFilter.ally || visFilter.kind || visFilter.ok || visFilter.member
 
   $('body').innerHTML = `
     <div class="card">
       <h3>按月</h3>
-      <p class="hint">成本按云函数环境变量 VISION_PRICE_PER_1K（元 / 千 token）算；现在用的 glm-4v-flash 是免费的，所以显示 0。换成收费模型时把单价填上就有钱数了。</p>
-      <table><thead><tr><th>月份</th><th class="num">调用</th><th class="num">失败</th><th class="num">token</th><th class="num">成本</th></tr></thead><tbody>${mRows}</tbody></table>
+      <p class="hint">成本按云函数环境变量 VISION_PRICE_PER_1K（元 / 千 token）算；现在用的 glm-4v-flash 是免费的，所以显示 0。换成收费模型时把单价填上就有钱数了。点表头可以排序。</p>
+      <table>${thead('vmonth', MONTH_COLS)}<tbody>${mRows}</tbody></table>
     </div>
     <div class="card">
-      <div class="row" style="justify-content:space-between">
-        <h3>最近 200 次</h3>
-        <button class="btn ghost small" id="vPrune">清理半年前的明细</button>
+      <div class="row" style="justify-content:space-between;align-items:flex-start">
+        <h3>最近 200 次（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+        <div class="row">
+          <select id="vServer">${optionsOf(servers.map(String), visFilter.server, '全部区')}</select>
+          <select id="vAlly">${optionsOf(allies, visFilter.ally, '全部同盟')}</select>
+          <select id="vKind">
+            <option value="">全部类型</option>
+            <option value="attrs"${visFilter.kind === 'attrs' ? ' selected' : ''}>属性面板</option>
+            <option value="hero"${visFilter.kind === 'hero' ? ' selected' : ''}>武将战力</option>
+          </select>
+          <select id="vOk">
+            <option value="">全部结果</option>
+            <option value="ok"${visFilter.ok === 'ok' ? ' selected' : ''}>成功</option>
+            <option value="fail"${visFilter.ok === 'fail' ? ' selected' : ''}>失败</option>
+          </select>
+          <input id="vMember" placeholder="搜成员名" value="${esc(visFilter.member)}" style="width:130px" />
+          ${dirty ? '<button class="btn ghost small" id="vClear">清空</button>' : ''}
+          <button class="btn ghost small" id="vPrune">清理半年前</button>
+        </div>
       </div>
-      <p class="hint">共 ${num(d.total)} 条，只取最近 200 条看。失败的也记——老是失败说明那个盟的人传的图不对，可以主动去问。
-        明细是会一直长的，清掉旧的不影响上面的按月统计（那份存在另一张汇总表里）。</p>
-      <table><thead><tr><th>时间</th><th>类型</th><th>成员</th><th class="num">token</th><th>结果</th><th>模型</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="hint">共 ${num(d.total)} 条，只取最近 200 条看，筛选和排序都是在这 200 条里做的。失败的也记 ——
+        老是失败说明那个盟的人传的图不对，按区 / 同盟筛一下就能看出是哪一家。
+        明细会一直长，清掉旧的不影响上面的按月统计（那份存在另一张汇总表里）。</p>
+      <table>${thead('vis', VIS_COLS)}<tbody>${body}</tbody></table>
     </div>`
+
+  const redraw = () => renderVision()
+  $('vServer').onchange = (e) => { visFilter.server = e.target.value; visFilter.ally = ''; redraw() }
+  $('vAlly').onchange = (e) => { visFilter.ally = e.target.value; redraw() }
+  $('vKind').onchange = (e) => { visFilter.kind = e.target.value; redraw() }
+  $('vOk').onchange = (e) => { visFilter.ok = e.target.value; redraw() }
+  const box = $('vMember')
+  box.onchange = (e) => { visFilter.member = e.target.value; redraw() }
+  box.onkeydown = (e) => { if (e.key === 'Enter') { visFilter.member = e.target.value; redraw() } }
+  if ($('vClear')) $('vClear').onclick = () => { Object.assign(visFilter, { server: '', ally: '', kind: '', ok: '', member: '' }); redraw() }
+  bindSort(redraw)
 
   $('vPrune').onclick = async () => {
     if (!confirm('删掉半年前的逐条识别记录？按月统计不受影响，删了就找不回来了。')) return
