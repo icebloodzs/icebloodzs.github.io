@@ -139,3 +139,7 @@ th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 th.sortable:hover { color: #1f2329; background: #f3f4f6; }
 th.sort-on { color: #5b4bd1; }
 th.sortable .muted { opacity: 0.45; font-size: 11px; }
+
+/* 筛选条：标题下面单独一行，靠左排；清理、导入这类操作按钮用 .push 顶到最右 */
+.filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-start; margin: 4px 0 12px; }
+.filters .push { margin-left: auto; }

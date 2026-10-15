@@ -116,6 +116,14 @@ const size = (n) => (n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n > 1024 ?
  */
 const sorts = {}
 
+/*
+ * 每一屏最近一次拉回来的数据。
+ * 排序和筛选只是换个看法，不该每点一下表头就重新请求一次服务端 ——
+ * 识别用量那一屏每请求一次都要聚合按月统计 + 查 200 条明细 + 查成员名，点几下就卡。
+ * 只有切进这一屏、或者做完增删改之后才重新拉（render 的 refresh 参数）。
+ */
+const cache = {}
+
 function sortState(table) {
   if (!sorts[table]) sorts[table] = { key: '', dir: -1 }
   return sorts[table]
@@ -384,17 +392,21 @@ let codeFilter = 'all'
  * 免得三天的试用码躺半年后被人翻出来用。
  */
 const CODE_PRESETS = [
-  { label: '3 天试用', days: 3, validDays: 30, note: '试用' },
-  { label: '7 天试用', days: 7, validDays: 30, note: '试用' },
+  // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回普通会员，不会把盟锁死
+  { label: '3 天试用', days: 3, validDays: 30, note: '试用', level: 'top' },
+  { label: '7 天试用', days: 7, validDays: 30, note: '试用', level: 'top' },
   { label: '1 个月', days: 30, validDays: 0, note: '' },
   { label: '1 年', days: 365, validDays: 0, note: '' }
 ]
+/** 档位自动填的备注；换到别的档位时只清这几个，管理员自己打的备注不动 */
+const PRESET_NOTES = new Set(CODE_PRESETS.map((p) => p.note).filter(Boolean))
 
 const CODE_COLS = [
   { label: '码', key: 'code', sort: (r) => r.code },
   { label: '等级', key: 'level', sort: (r) => r.price },
   { label: '单价', key: 'price', sort: (r) => r.price, num: true },
-  { label: '会员时长', key: 'days', sort: (r) => (r.days === 0 ? Infinity : r.days), num: true },
+  // 不限期排在最长的那头。别用 Infinity：两个不限期相减是 NaN，排序会乱
+  { label: '会员时长', key: 'days', sort: (r) => (r.days === 0 ? 1e9 : r.days), num: true },
   { label: '状态', key: 'status', sort: (r) => r.status },
   { label: '用在哪个盟', key: 'used', sort: (r) => (r.usedAt ? new Date(r.usedAt).getTime() : null) },
   { label: '生成', key: 'created', sort: (r) => new Date(r.createdAt).getTime() },
@@ -402,8 +414,9 @@ const CODE_COLS = [
   { label: '' }
 ]
 
-async function renderCodes() {
-  const d = await call('dev.codes')
+async function renderCodes(refresh = true) {
+  if (refresh || !cache.codes) cache.codes = await call('dev.codes')
+  const d = cache.codes
   if (!meta.levels.length) meta.levels = d.levels
 
   const opts = d.levels.map((l) => `<option value="${l.key}">${esc(l.name)} ${l.price} 元</option>`).join('')
@@ -458,7 +471,8 @@ async function renderCodes() {
     <div class="card">
       <div class="row" style="justify-content:space-between">
         <h3>全部激活码（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
-        <div class="row">
+      </div>
+      <div class="filters">
           <select id="cFilter">
             <option value="all">全部</option>
             <option value="unused">可用</option>
@@ -466,8 +480,7 @@ async function renderCodes() {
             <option value="void">已作废</option>
             <option value="expired">已过期</option>
           </select>
-          <button class="btn ghost small" id="cImport">导入旧激活码</button>
-        </div>
+          <button class="btn ghost small push" id="cImport">导入旧激活码</button>
       </div>
       <table>
         ${thead('code', CODE_COLS)}
@@ -478,9 +491,9 @@ async function renderCodes() {
   $('cFilter').value = codeFilter
   $('cFilter').onchange = (e) => {
     codeFilter = e.target.value
-    renderCodes()
+    renderCodes(false)
   }
-  bindSort(() => renderCodes())
+  bindSort(() => renderCodes(false))
 
   $('body')
     .querySelectorAll('[data-preset]')
@@ -488,7 +501,13 @@ async function renderCodes() {
       const p = CODE_PRESETS[Number(b.dataset.preset)]
       $('cDays').value = p.days
       $('cValid').value = p.validDays
+      // 从「试用」换到「1 年」时把自动填的「试用」清掉，不然一年期的码也被标成试用
       if (p.note) $('cNote').value = p.note
+      else if (PRESET_NOTES.has($('cNote').value.trim())) $('cNote').value = ''
+      if (p.level === 'top') {
+        const sel = $('cLevel')
+        sel.value = sel.options[sel.options.length - 1].value
+      }
     }))
 
   $('cMake').onclick = async () => {
@@ -503,12 +522,17 @@ async function renderCodes() {
     try {
       const res = await call('dev.codeCreate', payload)
       const text = res.codes.join('\n')
+      /*
+       * 先重绘整屏（列表里要出现新码），再把刚生成的码贴出来。
+       * 原来顺序是反的：先贴码、再重绘 —— 重绘会把整屏换掉，刚贴上的码一闪就没了，
+       * 只剩一句 toast，想复制还得去下面列表里一个个找。
+       */
+      await renderCodes()
       $('madeBox').innerHTML =
         `<div class="codes">${res.codes.map(esc).join('<br />')}</div>` +
         `<div class="row" style="margin-top:10px"><button class="btn small" id="copyAll">全部复制</button><span class="muted tiny">发给买家即可，用掉之后这里会显示是哪个盟用的</span></div>`
       $('copyAll').onclick = () => copy(text)
       toast('生成了 ' + res.codes.length + ' 个')
-      await renderCodes()
     } catch (e) {
       toast(e.message)
     } finally {
@@ -568,8 +592,9 @@ const ALLY_COLS = [
   { label: '' }
 ]
 
-async function renderAlliances() {
-  const d = await call('dev.alliances')
+async function renderAlliances(refresh = true) {
+  if (refresh || !cache.ally) cache.ally = await call('dev.alliances')
+  const d = cache.ally
   if (!meta.levels.length) meta.levels = d.levels
   // 等级排序要按档次高低，不是按字母
   const order = new Map(meta.levels.map((l, i) => [l.key, i + 1]))
@@ -580,7 +605,7 @@ async function renderAlliances() {
   )
   const kw = allyFilter.name.trim().toLowerCase()
   const picked = d.rows.filter((a) => {
-    if (allyFilter.server && a.serverNo !== allyFilter.server) return false
+    if (allyFilter.server && String(a.serverNo) !== allyFilter.server) return false
     if (allyFilter.status === 'on' && !a.active) return false
     if (allyFilter.status === 'off' && a.active) return false
     if (allyFilter.status === 'expired' && !(a.daysLeft !== null && a.daysLeft < 0)) return false
@@ -633,9 +658,8 @@ async function renderAlliances() {
 
   $('body').innerHTML = `
     <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <h3>同盟（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
-        <div class="row">
+      <h3>同盟（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+      <div class="filters">
           <select id="fServer">${optionsOf(servers.map(String), allyFilter.server, '全部区')}</select>
           <select id="fStatus">
             <option value="">全部状态</option>
@@ -647,7 +671,6 @@ async function renderAlliances() {
           <select id="fLevel">${levelOpts}</select>
           <input id="fName" placeholder="搜盟名 / 区 / 盟主" value="${esc(allyFilter.name)}" style="width:170px" />
           ${allyFilter.server || allyFilter.status || allyFilter.level || allyFilter.name ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
-        </div>
       </div>
       <p class="hint">「授权 / 续期」不用激活码，直接给这个盟记上等级和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
       <table>
@@ -656,7 +679,7 @@ async function renderAlliances() {
       </table>
     </div>`
 
-  const redraw = () => renderAlliances()
+  const redraw = () => renderAlliances(false)
   $('fServer').onchange = (e) => { allyFilter.server = e.target.value; redraw() }
   $('fStatus').onchange = (e) => { allyFilter.status = e.target.value; redraw() }
   $('fLevel').onchange = (e) => { allyFilter.level = e.target.value; redraw() }
@@ -731,8 +754,9 @@ const MONTH_COLS = [
   { label: '成本', key: 'cost', sort: (m) => m.cost, num: true }
 ]
 
-async function renderVision() {
-  const d = await call('dev.vision')
+async function renderVision(refresh = true) {
+  if (refresh || !cache.vis) cache.vis = await call('dev.vision')
+  const d = cache.vis
 
   const months = Object.keys(d.byMonth).map((k) => ({ month: k, ...d.byMonth[k] }))
   if (!sortState('vmonth').key) sorts.vmonth = { key: 'month', dir: -1 }
@@ -745,10 +769,10 @@ async function renderVision() {
 
   // 筛选项从这 200 条里现取，没出现过的区 / 盟不列出来
   const servers = [...new Set(d.rows.map((r) => r.serverNo).filter(Boolean))].sort((x, y) => (Number(x) || 0) - (Number(y) || 0))
-  const allies = [...new Set(d.rows.filter((r) => !visFilter.server || r.serverNo === visFilter.server).map((r) => r.allianceName).filter(Boolean))].sort()
+  const allies = [...new Set(d.rows.filter((r) => !visFilter.server || String(r.serverNo) === visFilter.server).map((r) => r.allianceName).filter(Boolean))].sort()
   const kw = visFilter.member.trim().toLowerCase()
   const picked = d.rows.filter((r) => {
-    if (visFilter.server && r.serverNo !== visFilter.server) return false
+    if (visFilter.server && String(r.serverNo) !== visFilter.server) return false
     if (visFilter.ally && r.allianceName !== visFilter.ally) return false
     if (visFilter.kind && r.kind !== visFilter.kind) return false
     if (visFilter.ok === 'ok' && !r.ok) return false
@@ -784,9 +808,8 @@ async function renderVision() {
       <table>${thead('vmonth', MONTH_COLS)}<tbody>${mRows}</tbody></table>
     </div>
     <div class="card">
-      <div class="row" style="justify-content:space-between;align-items:flex-start">
-        <h3>最近 200 次（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
-        <div class="row">
+      <h3>最近 200 次（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+      <div class="filters">
           <select id="vServer">${optionsOf(servers.map(String), visFilter.server, '全部区')}</select>
           <select id="vAlly">${optionsOf(allies, visFilter.ally, '全部同盟')}</select>
           <select id="vKind">
@@ -801,8 +824,7 @@ async function renderVision() {
           </select>
           <input id="vMember" placeholder="搜成员名" value="${esc(visFilter.member)}" style="width:130px" />
           ${dirty ? '<button class="btn ghost small" id="vClear">清空</button>' : ''}
-          <button class="btn ghost small" id="vPrune">清理半年前</button>
-        </div>
+          <button class="btn ghost small push" id="vPrune">清理半年前</button>
       </div>
       <p class="hint">共 ${num(d.total)} 条，只取最近 200 条看，筛选和排序都是在这 200 条里做的。失败的也记 ——
         老是失败说明那个盟的人传的图不对，按区 / 同盟筛一下就能看出是哪一家。
@@ -810,7 +832,7 @@ async function renderVision() {
       <table>${thead('vis', VIS_COLS)}<tbody>${body}</tbody></table>
     </div>`
 
-  const redraw = () => renderVision()
+  const redraw = () => renderVision(false)
   $('vServer').onchange = (e) => { visFilter.server = e.target.value; visFilter.ally = ''; redraw() }
   $('vAlly').onchange = (e) => { visFilter.ally = e.target.value; redraw() }
   $('vKind').onchange = (e) => { visFilter.kind = e.target.value; redraw() }
