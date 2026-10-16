@@ -931,6 +931,8 @@ async function renderPlans() {
 
 // ---------------- 演示环境 ----------------
 
+const ROLE_NAME = { super: '超管', admin: '管理员', member: '成员' }
+
 async function renderDemo() {
   const d = await call('demo.status')
   const demo = d.demo
@@ -962,15 +964,21 @@ async function renderDemo() {
     <div class="card">
       <h3>我现在在哪</h3>
       <p class="hint">
-        一个微信同时只能属于一个盟，所以要在小程序里看演示数据，得把自己临时挪过去。
-        原来的归属和绑定存在服务端，切回来完整还原。
-        <b>小程序里也能切</b>：管理页顶上有个「演示环境」卡片，录视频时在那儿切更顺手。
+        一个微信同时只能属于一个盟，所以要在小程序里看演示数据、或者从头测流程，得把自己临时挪走。
+        原来的归属、绑着的全部成员和角色都存在服务端，点「回到我自己的盟」完整还原。
+        <br /><b>离开当前同盟</b> = 变回没进任何盟的新用户：小程序里能从头测建盟（直接免费版）、凭邀请链接加入、输激活码换档。
+        离开期间真盟里绑的成员不解绑，别人绑不走。测试时新建的盟回家后就没超管了，测完可以在小程序「同盟信息」里删掉（只有空盟能删）。
       </p>
       <div class="row">
-        <span class="tag ${d.inDemo ? 'amber' : 'green'}">${d.inDemo ? '正在演示盟' : '在自己的盟' + (d.home ? '' : '')}</span>
-        ${d.home ? `<span class="muted tiny">原归属：${esc(d.home.name || '—')}</span>` : ''}
+        <span class="tag ${!d.here ? 'red' : d.inDemo ? 'amber' : d.atHome ? 'green' : 'purple'}">${
+          !d.here ? '没进任何盟' : d.inDemo ? '正在演示盟' : d.atHome ? '在自己的盟' : '在测试的盟'
+        }</span>
+        ${d.here ? `<span class="muted tiny">${esc(d.here.serverNo)} 区 · ${esc(d.here.name)} · ${esc(ROLE_NAME[d.here.role] || d.here.role)}</span>` : ''}
+        ${d.home && !d.atHome ? `<span class="muted tiny">原归属：${esc(d.home.name || '—')}</span>` : ''}
         <div style="flex:1"></div>
-        ${demo ? `<button class="btn ${d.inDemo ? 'ghost' : ''}" id="dSwitch">${d.inDemo ? '回到我自己的盟' : '切到演示同盟'}</button>` : ''}
+        ${d.here ? '<button class="btn ghost" id="dLeave">离开当前同盟</button>' : ''}
+        ${demo && !d.inDemo ? '<button class="btn ghost" id="dSwitch">切到演示同盟</button>' : ''}
+        ${!d.atHome ? '<button class="btn" id="dBack">回到我自己的盟</button>' : ''}
       </div>
     </div>`
 
@@ -1014,19 +1022,28 @@ async function renderDemo() {
     }
   }
 
-  if ($('dSwitch')) {
-    $('dSwitch').onclick = async () => {
-      const back = d.inDemo
-      if (!confirm(back ? '回到你自己的盟，绑定和权限原样还原。' : '把你自己临时挪到演示盟，随时能切回来。')) return
+  const act = (id, ask, action, payload, done) => {
+    if (!$(id)) return
+    $(id).onclick = async () => {
+      if (!confirm(ask)) return
       try {
-        await call('demo.switch', { back })
-        toast(back ? '回来了' : '切过去了')
+        await call(action, payload)
+        toast(done)
         renderDemo()
       } catch (e) {
         toast(e.message)
       }
     }
   }
+  act('dSwitch', '把你自己临时挪到演示盟，随时能切回来。', 'demo.switch', {}, '切过去了')
+  act('dBack', '回到你自己的盟，绑定和权限原样还原。', 'demo.switch', { back: true }, '回来了')
+  act(
+    'dLeave',
+    '离开当前同盟，变成没进任何盟的新用户。\n小程序重新打开就是「创建 / 加入同盟」那一屏。\n原来的归属存着，随时点「回到我自己的盟」还原。',
+    'demo.leave',
+    {},
+    '已离开，去小程序里从头测吧'
+  )
 }
 
 // ---------------- 备份 ----------------
