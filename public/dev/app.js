@@ -392,7 +392,7 @@ let codeFilter = 'all'
  * 免得三天的试用码躺半年后被人翻出来用。
  */
 const CODE_PRESETS = [
-  // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回普通会员，不会把盟锁死
+  // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回基础会员，不会把盟锁死
   // 试用码单价记 0：不然总览里的收入会把每个试用码都按终极会员 648 元算进去
   { label: '3 天试用', days: 3, validDays: 30, note: '试用', level: 'top', price: 0 },
   { label: '7 天试用', days: 7, validDays: 30, note: '试用', level: 'top', price: 0 },
@@ -453,7 +453,7 @@ async function renderCodes(refresh = true) {
     <div class="card">
       <h3>生成激活码</h3>
       <p class="hint">一个码只能用一次。会员天数 = 这个码能换多少天会员，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
-        试用码建议配个终极会员 —— 让人把功能都摸一遍，到期自动掉回普通会员，不会把盟锁死。</p>
+        试用码建议配个终极会员 —— 让人把功能都摸一遍，到期自动掉回基础会员，不会把盟锁死。</p>
       <div class="row" style="margin-bottom:10px">
         <span class="muted tiny" style="align-self:center">常用档位</span>
         ${CODE_PRESETS.map((p, i) => `<button class="btn ghost small" data-preset="${i}">${p.label}</button>`).join('')}
@@ -548,7 +548,7 @@ async function renderCodes(refresh = true) {
   }
 
   $('cImport').onclick = async () => {
-    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老激活码搬进库，按「普通会员 365 天」记。库里已有的会跳过。')) return
+    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老激活码搬进库，按「基础会员 365 天」记。库里已有的会跳过。')) return
     try {
       const res = await call('dev.codeImportEnv', { level: 'basic', days: 365 })
       toast(`导入 ${res.added.length} 个，跳过 ${res.skipped.length} 个`)
@@ -639,7 +639,7 @@ async function renderAlliances(refresh = true) {
             <td><b>${esc(a.name)}</b>${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
             <td class="tiny">${esc(a.serverNo)} 区<br /><span class="muted">${esc(a.season)}</span></td>
             <td>${a.active ? '<span class="tag green">已激活</span>' : '<span class="tag red">已停用</span>'}</td>
-            <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}</td>
+            <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}${extrasText(a)}</td>
             <td class="tiny">${a.memberExpiresAt ? day(a.memberExpiresAt) : '—'}<br />${left}</td>
             <td class="num">${num(a.members)}<br /><span class="muted tiny">绑定 ${a.bound}</span></td>
             <td class="num">${num(a.vision.calls)}<br /><span class="muted tiny">本月 ${a.vision.monthCalls}</span></td>
@@ -647,6 +647,7 @@ async function renderAlliances(refresh = true) {
             <td class="tiny">${ago(a.lastLoginAt)}<br /><span class="muted">导入 ${a.imports} 次</span></td>
             <td style="white-space:nowrap">
               <button class="btn link" data-grant="${esc(a._id)}" data-name="${esc(a.name)}" data-level="${esc(a.level || '')}">授权 / 续期</button>
+              <button class="btn link" data-extras="${esc(a._id)}" data-name="${esc(a.name)}">附加功能</button>
               <button class="btn link ${a.active ? 'danger' : ''}" data-toggle="${esc(a._id)}" data-on="${a.active ? '0' : '1'}" data-name="${esc(a.name)}">${a.active ? '停用' : '启用'}</button>
             </td>
           </tr>`
@@ -698,6 +699,41 @@ async function renderAlliances(refresh = true) {
 
   $('body').querySelectorAll('[data-grant]').forEach((b) => (b.onclick = () => grant(b.dataset.grant, b.dataset.name, b.dataset.level)))
   $('body').querySelectorAll('[data-toggle]').forEach((b) => (b.onclick = () => toggle(b.dataset.toggle, b.dataset.on === '1', b.dataset.name)))
+  $('body').querySelectorAll('[data-extras]').forEach((b) => (b.onclick = () => editExtras(b.dataset.extras, b.dataset.name)))
+}
+
+/** 等级之外单独开着的功能，在等级标签下面列一行 */
+function extrasText(a) {
+  const opts = (cache.ally && cache.ally.extraOptions) || []
+  const list = (a.extraFeatures || []).map((k) => {
+    const o = opts.find((x) => x.key === k)
+    return o ? o.label.replace(/（.*$/, '') : k
+  })
+  return list.length ? `<br /><span class="tag amber tiny" title="等级之外单独开的">+ ${esc(list.join('、'))}</span>` : ''
+}
+
+/**
+ * 单独加开 / 收回功能。用编号勾选：输入要开着的编号，空着回车 = 全部收回。
+ * 主要给调整分级时的老客户用（比如之前高级会员带电脑版，现在电脑版挪到终极了）。
+ */
+async function editExtras(allianceId, name) {
+  const d = cache.ally
+  const a = d.rows.find((x) => x._id === allianceId)
+  const opts = d.extraOptions || []
+  const cur = (a && a.extraFeatures) || []
+  const lines = opts.map((o, i) => `${i + 1}. ${o.label}（${o.levelName}）${cur.includes(o.key) ? '  ✔ 已开' : ''}`).join('\n')
+  const now = cur.map((k) => opts.findIndex((o) => o.key === k) + 1).filter((n) => n > 0).join(',')
+  const pick = prompt(`「${name}」等级之外单独开哪些功能？\n\n${lines}\n\n填编号，逗号隔开；清空回车 = 全部收回`, now)
+  if (pick === null) return
+  const nums = pick.split(/[,，\s]+/).filter(Boolean).map(Number)
+  if (nums.some((n) => !(n >= 1 && n <= opts.length))) return toast('编号填错了')
+  try {
+    const res = await call('dev.allianceExtras', { allianceId, features: nums.map((n) => opts[n - 1].key) })
+    toast(res.extraFeatures.length ? '已单独开通 ' + res.extraFeatures.length + ' 项' : '已全部收回')
+    renderAlliances()
+  } catch (e) {
+    toast(e.message)
+  }
 }
 
 async function grant(allianceId, name, level) {
@@ -870,9 +906,11 @@ async function renderPlans() {
   }
   const cards = meta.levels
     .map((l) => {
-      const mine = meta.features.filter((f) => f.level === l.key)
+      // hidden 的（留言板）不在会员介绍里列；客服时效、定制这类服务承诺跟在后面
+      const mine = meta.features.filter((f) => f.level === l.key && !f.hidden)
       const items = mine
         .map((f) => `<li>${esc(f.label)}${f.todo ? ' <span class="tag amber">待做</span>' : ''}</li>`)
+        .concat((l.perks || []).map((p) => `<li class="muted">${esc(p)}</li>`))
         .join('')
       return `<div class="card">
         <h3>${esc(l.name)} <span class="muted">${money(l.price)}/每月</span></h3>
@@ -885,7 +923,8 @@ async function renderPlans() {
   $('body').innerHTML = `
     <div class="card">
       <h3>会员方案</h3>
-      <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里和激活码的下拉都会跟着变。小程序端暂时不展示会员信息。</p>
+      <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里和激活码的下拉都会跟着变。小程序端暂时不展示会员信息。
+        个别盟要在等级之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
     </div>
     <div class="grid g3">${cards}</div>`
 }

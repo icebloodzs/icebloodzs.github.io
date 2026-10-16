@@ -8,7 +8,8 @@ import { useMessage } from 'naive-ui'
 import { call } from '../api'
 import { big, num, when } from '../fmt'
 
-const { me, season, reload, refreshMe } = inject('app')
+// can 是会员功能开关；没注入（比如自检脚本里）就当全开
+const { me, season, reload, refreshMe, can = () => true } = inject('app')
 const message = useMessage()
 
 const ARMS = [['inf', '步兵'], ['cav', '骑兵'], ['arc', '弓兵']]
@@ -252,8 +253,8 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       </n-grid>
     </n-card>
 
-    <!-- 赛季评分 -->
-    <n-card :bordered="false" :title="'赛季评分 · ' + ((season && season.label) || '')">
+    <!-- 赛季评分（高级会员才有） -->
+    <n-card v-if="can('season')" :bordered="false" :title="'赛季评分 · ' + ((season && season.label) || '')">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         评分 = 成员实力 − 武将战力。武将战力同样只能靠截图识别，传战力面板截图即可。
       </n-alert>

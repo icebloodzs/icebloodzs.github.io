@@ -90,6 +90,9 @@ const can = (key) => {
   const f = me.value && me.value.alliance && me.value.alliance.features
   return !f || f[key] !== false
 }
+/** 菜单项对应的会员功能：等级不够（或者老客户单独没开）的就不摆出来 */
+const VIEW_FEATURE = { season: 'season', placement: 'placement', shape: 'shape', board: 'forum' }
+const shown = (k) => !VIEW_FEATURE[k] || can(VIEW_FEATURE[k])
 const menuOptions = computed(() => [
   {
     type: 'group',
@@ -101,7 +104,7 @@ const menuOptions = computed(() => [
     type: 'group',
     label: '成员数据',
     key: 'g1',
-    children: ['roster', 'import', 'bonus', 'attrs', 'missing', 'season'].map((k) => ({
+    children: ['roster', 'import', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
       label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon)
     }))
   },
@@ -110,7 +113,7 @@ const menuOptions = computed(() => [
     label: '指挥工具',
     key: 'g2',
     children: ['rally', 'placement', 'shape', 'notice', 'board']
-      .filter((k) => k !== 'board' || can('forum'))
+      .filter(shown)
       .map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
   { type: 'group', label: '账号', key: 'g3', children: [{ label: VIEWS.users.label, key: 'users', icon: icon('👥') }] }
@@ -135,7 +138,7 @@ const attrKeys = computed(() => {
   const a = me.value && me.value.alliance
   return (a && a.attrKeys) || ['infDef', 'infHp', 'cavAtk', 'cavBreak', 'arcAtk', 'arcBreak']
 })
-provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices })
+provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can })
 
 async function boot() {
   if (!token.value) {
@@ -162,7 +165,7 @@ async function boot() {
     } else {
       loginWhy.value =
         e.errCode === 'FEATURE_LOCKED'
-          ? '电脑版是高级会员及以上才有的功能，升级后再扫码'
+          ? '电脑版是终极会员才有的功能，升级后再扫码'
           : `上次的登录态被服务器拒了：${e.errCode || '未知'}，存在 ${store.how === 'cookie' ? 'cookie' : 'localStorage'}，已清掉`
       loginTip.value = e.message || '登录已失效，请重新扫码'
       setToken('')
