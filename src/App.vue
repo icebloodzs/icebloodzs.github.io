@@ -91,7 +91,7 @@ const can = (key) => {
   return !f || f[key] !== false
 }
 /** 菜单项对应的会员功能：等级不够（或者老客户单独没开）的就不摆出来 */
-const VIEW_FEATURE = { season: 'season', placement: 'placement', shape: 'shape', board: 'forum' }
+const VIEW_FEATURE = { season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice' }
 const shown = (k) => !VIEW_FEATURE[k] || can(VIEW_FEATURE[k])
 const menuOptions = computed(() => [
   {

@@ -913,8 +913,8 @@ async function renderPlans() {
         .concat((l.perks || []).map((p) => `<li class="muted">${esc(p)}</li>`))
         .join('')
       return `<div class="card">
-        <h3>${esc(l.name)} <span class="muted">${money(l.price)}/每月</span></h3>
-        <p class="hint">${l.order > 1 ? '包含下面这些，外加前一档的全部' : '基础档'}</p>
+        <h3>${esc(l.name)} <span class="muted">${l.price ? money(l.price) + '/每月' : '免费'}</span></h3>
+        <p class="hint">${l.order > 0 ? '包含下面这些，外加前一档的全部' : '建盟就是这一档，不用激活码；会员到期也掉回这一档'}</p>
         <ul style="margin:0;padding-left:18px;line-height:2">${items}</ul>
       </div>`
     })
@@ -923,10 +923,10 @@ async function renderPlans() {
   $('body').innerHTML = `
     <div class="card">
       <h3>会员方案</h3>
-      <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里和激活码的下拉都会跟着变。小程序端暂时不展示会员信息。
+      <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、激活码的下拉、小程序「管理 → 会员」页都会跟着变。
         个别盟要在等级之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
     </div>
-    <div class="grid g3">${cards}</div>`
+    <div class="grid g4">${cards}</div>`
 }
 
 // ---------------- 演示环境 ----------------
