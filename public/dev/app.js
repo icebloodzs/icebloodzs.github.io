@@ -392,8 +392,8 @@ let codeFilter = 'all'
  * 免得三天的试用码躺半年后被人翻出来用。
  */
 const CODE_PRESETS = [
-  // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回基础会员，不会把盟锁死
-  // 试用码单价记 0：不然总览里的收入会把每个试用码都按终极会员 648 元算进去
+  // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死
+  // 试用码单价记 0：不然总览里的收入会把每个试用码都按终极版 648 元算进去
   { label: '3 天试用', days: 3, validDays: 30, note: '试用', level: 'top', price: 0 },
   { label: '7 天试用', days: 7, validDays: 30, note: '试用', level: 'top', price: 0 },
   { label: '1 个月', days: 30, validDays: 0, note: '' },
@@ -453,7 +453,7 @@ async function renderCodes(refresh = true) {
     <div class="card">
       <h3>生成激活码</h3>
       <p class="hint">一个码只能用一次。会员天数 = 这个码能换多少天会员，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
-        试用码建议配个终极会员 —— 让人把功能都摸一遍，到期自动掉回基础会员，不会把盟锁死。</p>
+        试用码建议配个终极版 —— 让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死。</p>
       <div class="row" style="margin-bottom:10px">
         <span class="muted tiny" style="align-self:center">常用档位</span>
         ${CODE_PRESETS.map((p, i) => `<button class="btn ghost small" data-preset="${i}">${p.label}</button>`).join('')}
@@ -548,7 +548,7 @@ async function renderCodes(refresh = true) {
   }
 
   $('cImport').onclick = async () => {
-    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老激活码搬进库，按「基础会员 365 天」记。库里已有的会跳过。')) return
+    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老激活码搬进库，按「基础版 365 天」记。库里已有的会跳过。')) return
     try {
       const res = await call('dev.codeImportEnv', { level: 'basic', days: 365 })
       toast(`导入 ${res.added.length} 个，跳过 ${res.skipped.length} 个`)
@@ -714,7 +714,7 @@ function extrasText(a) {
 
 /**
  * 单独加开 / 收回功能。用编号勾选：输入要开着的编号，空着回车 = 全部收回。
- * 主要给调整分级时的老客户用（比如之前高级会员带电脑版，现在电脑版挪到终极了）。
+ * 主要给调整分级时的老客户用（比如之前高级版带电脑版，现在电脑版挪到终极了）。
  */
 async function editExtras(allianceId, name) {
   const d = cache.ally
