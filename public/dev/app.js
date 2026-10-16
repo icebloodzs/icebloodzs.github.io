@@ -1,7 +1,7 @@
 /**
  * 三冰小帮手 · 开发者后台。
  *
- * 只给开发者自己用：管激活码（等级 / 有效期 / 用没用）和各个盟的会员状态与模型用量。
+ * 只给开发者自己用：管兑换码（等级 / 有效期 / 用没用）和各个盟的会员状态与模型用量。
  * 身份走和电脑版一样的「电脑出码、小程序扫码」换 token，再由云函数校验白名单（devAdmins）。
  *
  * 没有构建步骤：三个文件丢到静态托管就能跑，改完刷新即可。
@@ -264,7 +264,7 @@ function logout() {
 
 const VIEWS = [
   { key: 'overview', title: '总览', render: renderOverview },
-  { key: 'codes', title: '激活码', render: renderCodes },
+  { key: 'codes', title: '兑换码', render: renderCodes },
   { key: 'alliances', title: '同盟', render: renderAlliances },
   { key: 'vision', title: '识别用量', render: renderVision },
   { key: 'plans', title: '会员方案', render: renderPlans },
@@ -346,14 +346,14 @@ async function renderOverview() {
     <div class="grid g5" style="margin-bottom:16px">
       ${statCard('同盟', num(d.alliances.total), `已激活 ${d.alliances.active} · 待激活 ${d.alliances.inactive}`)}
       ${statCard('累计收入', money(d.revenue.total), `本月 ${money(d.revenue.month)}`)}
-      ${statCard('可用激活码', num(d.codes.unused), `已用 ${d.codes.used} · 作废 ${d.codes.void + d.codes.expired}`)}
+      ${statCard('可用兑换码', num(d.codes.unused), `已用 ${d.codes.used} · 作废 ${d.codes.void + d.codes.expired}`)}
       ${statCard('图片识别', num(d.vision.calls) + ' 次', `本月 ${d.vision.monthCalls} 次 · ${num(d.vision.tokens)} token`)}
       ${statCard('模型成本', money(d.vision.cost), d.vision.pricePer1k ? `按 ${d.vision.pricePer1k} 元/千 token` : '当前模型免费，未计价')}
     </div>
 
     <div class="card">
       <h3>按等级</h3>
-      <p class="hint">收入按「激活码被用掉」的时间记，没发出去的码不算钱。</p>
+      <p class="hint">收入按「兑换码被用掉」的时间记，没发出去的码不算钱。</p>
       <table>
         <thead><tr><th>等级</th><th class="num">单价</th><th class="num">在用同盟</th><th class="num">已用码</th><th class="num">未用码</th><th class="num">累计收入</th></tr></thead>
         <tbody>${lv}</tbody>
@@ -376,7 +376,7 @@ async function renderOverview() {
     </div>`
 }
 
-// ---------------- 激活码 ----------------
+// ---------------- 兑换码 ----------------
 
 const CODE_STATUS = {
   unused: '<span class="tag green">可用</span>',
@@ -447,11 +447,11 @@ async function renderCodes(refresh = true) {
         </tr>`
         )
         .join('')
-    : '<tr><td colspan="9" class="empty">没有符合条件的激活码</td></tr>'
+    : '<tr><td colspan="9" class="empty">没有符合条件的兑换码</td></tr>'
 
   $('body').innerHTML = `
     <div class="card">
-      <h3>生成激活码</h3>
+      <h3>生成兑换码</h3>
       <p class="hint">一个码只能用一次。会员天数 = 这个码能换多少天会员，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
         试用码建议配个终极版 —— 让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死。</p>
       <div class="row" style="margin-bottom:10px">
@@ -472,7 +472,7 @@ async function renderCodes(refresh = true) {
 
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <h3>全部激活码（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+        <h3>全部兑换码（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
       </div>
       <div class="filters">
           <select id="cFilter">
@@ -482,7 +482,7 @@ async function renderCodes(refresh = true) {
             <option value="void">已作废</option>
             <option value="expired">已过期</option>
           </select>
-          <button class="btn ghost small push" id="cImport">导入旧激活码</button>
+          <button class="btn ghost small push" id="cImport">导入旧兑换码</button>
       </div>
       <table>
         ${thead('code', CODE_COLS)}
@@ -548,7 +548,7 @@ async function renderCodes(refresh = true) {
   }
 
   $('cImport').onclick = async () => {
-    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老激活码搬进库，按「基础版 365 天」记。库里已有的会跳过。')) return
+    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老兑换码搬进库，按「基础版 365 天」记。库里已有的会跳过。')) return
     try {
       const res = await call('dev.codeImportEnv', { level: 'basic', days: 365 })
       toast(`导入 ${res.added.length} 个，跳过 ${res.skipped.length} 个`)
@@ -679,7 +679,7 @@ async function renderAlliances(refresh = true) {
           <input id="fName" placeholder="搜盟名 / 区 / 盟主" value="${esc(allyFilter.name)}" style="width:170px" />
           ${allyFilter.server || allyFilter.status || allyFilter.level || allyFilter.name ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
       </div>
-      <p class="hint">「授权 / 续期」不用激活码，直接给这个盟记上等级和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
+      <p class="hint">「授权 / 续期」不用兑换码，直接给这个盟记上等级和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
       <table>
         ${thead('ally', ALLY_COLS)}
         <tbody>${body}</tbody>
@@ -914,7 +914,7 @@ async function renderPlans() {
         .join('')
       return `<div class="card">
         <h3>${esc(l.name)} <span class="muted">${l.price ? money(l.price) + '/每月' : '免费'}</span></h3>
-        <p class="hint">${l.order > 0 ? '包含下面这些，外加前一档的全部' : '建盟就是这一档，不用激活码；会员到期也掉回这一档'}</p>
+        <p class="hint">${l.order > 0 ? '包含下面这些，外加前一档的全部' : '建盟就是这一档，不用兑换码；会员到期也掉回这一档'}</p>
         <ul style="margin:0;padding-left:18px;line-height:2">${items}</ul>
       </div>`
     })
@@ -923,7 +923,7 @@ async function renderPlans() {
   $('body').innerHTML = `
     <div class="card">
       <h3>会员方案</h3>
-      <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、激活码的下拉、小程序「管理 → 会员」页都会跟着变。
+      <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、兑换码的下拉、小程序「管理 → 版本」页都会跟着变。
         个别盟要在等级之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
     </div>
     <div class="grid g4">${cards}</div>`
@@ -966,7 +966,7 @@ async function renderDemo() {
       <p class="hint">
         一个微信同时只能属于一个盟，所以要在小程序里看演示数据、或者从头测流程，得把自己临时挪走。
         原来的归属、绑着的全部成员和角色都存在服务端，点「回到我自己的盟」完整还原。
-        <br /><b>离开当前同盟</b> = 变回没进任何盟的新用户：小程序里能从头测建盟（直接免费版）、凭邀请链接加入、输激活码换档。
+        <br /><b>离开当前同盟</b> = 变回没进任何盟的新用户：小程序里能从头测建盟（直接免费版）、凭邀请链接加入、输兑换码换档。
         离开期间真盟里绑的成员不解绑，别人绑不走。测试时新建的盟回家后就没超管了，测完可以在小程序「同盟信息」里删掉（只有空盟能删）。
       </p>
       <div class="row">
@@ -1147,11 +1147,11 @@ async function renderBackup() {
 // ---------------- 操作日志 ----------------
 
 const LOG_NAME = {
-  codeCreate: '生成激活码',
-  codeVoid: '作废激活码',
-  codeRestore: '恢复激活码',
-  codeDelete: '删除激活码',
-  codeImportEnv: '导入旧激活码',
+  codeCreate: '生成兑换码',
+  codeVoid: '作废兑换码',
+  codeRestore: '恢复兑换码',
+  codeDelete: '删除兑换码',
+  codeImportEnv: '导入旧兑换码',
   allianceGrant: '授权 / 续期',
   allianceEnable: '启用同盟',
   allianceDisable: '停用同盟'
