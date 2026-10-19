@@ -90,7 +90,7 @@ const can = (key) => {
   const f = me.value && me.value.alliance && me.value.alliance.features
   return !f || f[key] !== false
 }
-/** 菜单项对应的会员功能：等级不够（或者老客户单独没开）的就不摆出来 */
+/** 菜单项对应的付费功能：等级不够（或者老客户单独没开）的就不摆出来 */
 const VIEW_FEATURE = { season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice' }
 const shown = (k) => !VIEW_FEATURE[k] || can(VIEW_FEATURE[k])
 const menuOptions = computed(() => [
@@ -156,7 +156,7 @@ async function boot() {
     refreshNotices()
   } catch (e) {
     // 服务端明确说登录态不能用才清掉；网络抖一下保留，给个重试
-    // FEATURE_LOCKED = 这个盟的会员等级不够用电脑版，token 留着也没用，一起清掉
+    // FEATURE_LOCKED = 这个盟的版本不够用电脑版，token 留着也没用，一起清掉
     const dead = e.errCode === 'WEB_UNAUTHED' || e.errCode === 'FORBIDDEN' || e.errCode === 'FEATURE_LOCKED' || e.fatal
     if (!dead) {
       netError.value = true

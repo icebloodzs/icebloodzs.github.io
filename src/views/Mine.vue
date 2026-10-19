@@ -8,7 +8,7 @@ import { useMessage } from 'naive-ui'
 import { call } from '../api'
 import { big, num, when } from '../fmt'
 
-// can 是会员功能开关；没注入（比如自检脚本里）就当全开
+// can 是付费功能开关；没注入（比如自检脚本里）就当全开
 const { me, season, reload, refreshMe, can = () => true } = inject('app')
 const message = useMessage()
 

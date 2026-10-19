@@ -1,7 +1,7 @@
 /**
  * 三冰小帮手 · 开发者后台。
  *
- * 只给开发者自己用：管兑换码（等级 / 有效期 / 用没用）和各个盟的版本状态与模型用量。
+ * 只给开发者自己用：管兑换码（版本 / 有效期 / 用没用）和各个盟的版本状态与模型用量。
  * 身份走和电脑版一样的「电脑出码、小程序扫码」换 token，再由云函数校验白名单（devAdmins）。
  *
  * 没有构建步骤：三个文件丢到静态托管就能跑，改完刷新即可。
@@ -275,7 +275,7 @@ const VIEWS = [
 // 当前页记在地址栏 hash 里，刷新 / 收藏都停在原地
 let view = (location.hash || '').replace('#', '') || 'overview'
 if (!VIEWS.some((v) => v.key === view)) view = 'overview'
-/** 总览拉到的等级 / 功能表，别的页面直接复用，不用重复请求 */
+/** 总览拉到的版本 / 功能表，别的页面直接复用，不用重复请求 */
 let meta = { levels: [], features: [] }
 
 function buildNav() {
@@ -316,16 +316,19 @@ async function renderOverview() {
   const d = await call('dev.overview')
   meta = { levels: d.levels, features: d.features }
 
+  // 下架的版本只在 byLevel 里（有历史码才有），接在现行版本后面
+  const retired = Object.keys(d.byLevel).filter((k) => d.byLevel[k].retired).map((k) => ({ key: k, name: d.byLevel[k].name, price: null }))
   const lv = d.levels
+    .concat(retired)
     .map((l) => {
       const x = d.byLevel[l.key] || {}
       return `<tr>
-        <td><span class="tag purple">${esc(l.name)}</span></td>
-        <td class="num">${money(l.price)}</td>
+        <td><span class="tag${l.price == null ? '' : ' purple'}">${esc(l.name)}</span></td>
+        <td class="num">${l.price == null ? '—' : money(l.price)}</td>
         <td class="num">${num(x.alliances)}</td>
         <td class="num">${num(x.codesUsed)}</td>
         <td class="num">${num(x.codesUnused)}</td>
-        <td class="num">${money(x.revenue == null ? (x.codesUsed || 0) * l.price : x.revenue)}</td>
+        <td class="num">${money(x.revenue == null ? (x.codesUsed || 0) * (l.price || 0) : x.revenue)}</td>
       </tr>`
     })
     .join('')
@@ -352,10 +355,10 @@ async function renderOverview() {
     </div>
 
     <div class="card">
-      <h3>按等级</h3>
+      <h3>按版本</h3>
       <p class="hint">收入按「兑换码被用掉」的时间记，没发出去的码不算钱。</p>
       <table>
-        <thead><tr><th>等级</th><th class="num">单价</th><th class="num">在用同盟</th><th class="num">已用码</th><th class="num">未用码</th><th class="num">累计收入</th></tr></thead>
+        <thead><tr><th>版本</th><th class="num">单价</th><th class="num">在用同盟</th><th class="num">已用码</th><th class="num">未用码</th><th class="num">累计收入</th></tr></thead>
         <tbody>${lv}</tbody>
       </table>
     </div>
@@ -363,7 +366,7 @@ async function renderOverview() {
     <div class="card">
       <h3>快到期的同盟</h3>
       <p class="hint">14 天内到期或已过期的排在这里，提前去催续费。</p>
-      <table><thead><tr><th>同盟</th><th>等级</th><th class="num">剩余</th></tr></thead><tbody>${exp}</tbody></table>
+      <table><thead><tr><th>同盟</th><th>版本</th><th class="num">剩余</th></tr></thead><tbody>${exp}</tbody></table>
     </div>
 
     <div class="card">
@@ -404,7 +407,7 @@ const PRESET_NOTES = new Set(CODE_PRESETS.map((p) => p.note).filter(Boolean))
 
 const CODE_COLS = [
   { label: '码', key: 'code', sort: (r) => r.code },
-  { label: '等级', key: 'level', sort: (r) => r.price },
+  { label: '版本', key: 'level', sort: (r) => r.price },
   { label: '单价', key: 'price', sort: (r) => r.price, num: true },
   // 不限期排在最长的那头。别用 Infinity：两个不限期相减是 NaN，排序会乱
   { label: '可用天数', key: 'days', sort: (r) => (r.days === 0 ? 1e9 : r.days), num: true },
@@ -459,8 +462,8 @@ async function renderCodes(refresh = true) {
         ${CODE_PRESETS.map((p, i) => `<button class="btn ghost small" data-preset="${i}">${p.label}</button>`).join('')}
       </div>
       <div class="row">
-        <label class="f">等级<select id="cLevel">${opts}</select></label>
-        <label class="f">单价（元）<input id="cPrice" type="number" min="0" placeholder="按等级" style="width:90px" /></label>
+        <label class="f">版本<select id="cLevel">${opts}</select></label>
+        <label class="f">单价（元）<input id="cPrice" type="number" min="0" placeholder="按版本" style="width:90px" /></label>
         <label class="f">可用天数<input id="cDays" type="number" value="365" min="0" /></label>
         <label class="f">码有效期（天）<input id="cValid" type="number" value="0" min="0" /></label>
         <label class="f">数量<input id="cCount" type="number" value="1" min="1" max="50" /></label>
@@ -510,7 +513,7 @@ async function renderCodes(refresh = true) {
         const sel = $('cLevel')
         sel.value = sel.options[sel.options.length - 1].value
       }
-      // 试用档位填 0；别的档位清空 = 按等级标价
+      // 试用档位填 0；别的档位清空 = 按版本标价
       $('cPrice').value = p.price == null ? '' : p.price
     }))
 
@@ -522,7 +525,7 @@ async function renderCodes(refresh = true) {
       count: Number($('cCount').value || 1),
       note: $('cNote').value
     }
-    // 不填就不传，服务端按等级标价记
+    // 不填就不传，服务端按版本标价记
     if ($('cPrice').value.trim() !== '') payload.price = Number($('cPrice').value)
     $('cMake').disabled = true
     try {
@@ -548,9 +551,9 @@ async function renderCodes(refresh = true) {
   }
 
   $('cImport').onclick = async () => {
-    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老兑换码搬进库，按「基础版 365 天」记。库里已有的会跳过。')) return
+    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老兑换码搬进库，按「高级版 365 天」记。库里已有的会跳过。')) return
     try {
-      const res = await call('dev.codeImportEnv', { level: 'basic', days: 365 })
+      const res = await call('dev.codeImportEnv', { level: 'plus', days: 365 })
       toast(`导入 ${res.added.length} 个，跳过 ${res.skipped.length} 个`)
       renderCodes()
     } catch (e) {
@@ -589,7 +592,7 @@ const ALLY_COLS = [
   { label: '同盟', key: 'name', sort: (a) => a.name },
   { label: '区', key: 'serverNo', sort: (a) => Number(a.serverNo) || a.serverNo },
   { label: '状态', key: 'active', sort: (a) => (a.active ? 1 : 0) },
-  { label: '等级', key: 'level', sort: (a) => a.levelOrder || 0 },
+  { label: '版本', key: 'level', sort: (a) => a.levelOrder || 0 },
   { label: '到期', key: 'expire', sort: (a) => (a.memberExpiresAt ? new Date(a.memberExpiresAt).getTime() : null) },
   { label: '成员', key: 'members', sort: (a) => a.members, num: true },
   { label: '识别次数', key: 'calls', sort: (a) => a.vision.calls, num: true },
@@ -602,7 +605,7 @@ async function renderAlliances(refresh = true) {
   if (refresh || !cache.ally) cache.ally = await call('dev.alliances')
   const d = cache.ally
   if (!meta.levels.length) meta.levels = d.levels
-  // 等级排序要按档次高低，不是按字母
+  // 版本排序要按档次高低，不是按字母
   const order = new Map(meta.levels.map((l, i) => [l.key, i + 1]))
   d.rows.forEach((a) => { a.levelOrder = order.get(a.level) || 0 })
 
@@ -655,7 +658,7 @@ async function renderAlliances(refresh = true) {
         .join('')
     : '<tr><td colspan="10" class="empty">没有符合条件的同盟</td></tr>'
 
-  const levelOpts = [`<option value="">全部等级</option>`]
+  const levelOpts = [`<option value="">全部版本</option>`]
     .concat(
       meta.levels.map(
         (l) => `<option value="${esc(l.key)}"${l.key === allyFilter.level ? ' selected' : ''}>${esc(l.name)}</option>`
@@ -679,7 +682,7 @@ async function renderAlliances(refresh = true) {
           <input id="fName" placeholder="搜盟名 / 区 / 盟主" value="${esc(allyFilter.name)}" style="width:170px" />
           ${allyFilter.server || allyFilter.status || allyFilter.level || allyFilter.name ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
       </div>
-      <p class="hint">「授权 / 续期」不用兑换码，直接给这个盟记上等级和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
+      <p class="hint">「授权 / 续期」不用兑换码，直接给这个盟记上版本和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
       <table>
         ${thead('ally', ALLY_COLS)}
         <tbody>${body}</tbody>
@@ -702,14 +705,14 @@ async function renderAlliances(refresh = true) {
   $('body').querySelectorAll('[data-extras]').forEach((b) => (b.onclick = () => editExtras(b.dataset.extras, b.dataset.name)))
 }
 
-/** 等级之外单独开着的功能，在等级标签下面列一行 */
+/** 版本之外单独开着的功能，在版本标签下面列一行 */
 function extrasText(a) {
   const opts = (cache.ally && cache.ally.extraOptions) || []
   const list = (a.extraFeatures || []).map((k) => {
     const o = opts.find((x) => x.key === k)
     return o ? o.label.replace(/（.*$/, '') : k
   })
-  return list.length ? `<br /><span class="tag amber tiny" title="等级之外单独开的">+ ${esc(list.join('、'))}</span>` : ''
+  return list.length ? `<br /><span class="tag amber tiny" title="版本之外单独开的">+ ${esc(list.join('、'))}</span>` : ''
 }
 
 /**
@@ -723,7 +726,7 @@ async function editExtras(allianceId, name) {
   const cur = (a && a.extraFeatures) || []
   const lines = opts.map((o, i) => `${i + 1}. ${o.label}（${o.levelName}）${cur.includes(o.key) ? '  ✔ 已开' : ''}`).join('\n')
   const now = cur.map((k) => opts.findIndex((o) => o.key === k) + 1).filter((n) => n > 0).join(',')
-  const pick = prompt(`「${name}」等级之外单独开哪些功能？\n\n${lines}\n\n填编号，逗号隔开；清空回车 = 全部收回`, now)
+  const pick = prompt(`「${name}」版本之外单独开哪些功能？\n\n${lines}\n\n填编号，逗号隔开；清空回车 = 全部收回`, now)
   if (pick === null) return
   const nums = pick.split(/[,，\s]+/).filter(Boolean).map(Number)
   if (nums.some((n) => !(n >= 1 && n <= opts.length))) return toast('编号填错了')
@@ -738,10 +741,10 @@ async function editExtras(allianceId, name) {
 
 async function grant(allianceId, name, level) {
   const levels = meta.levels.map((l, i) => `${i + 1}=${l.name}`).join('  ')
-  const pick = prompt(`给「${name}」授权\n\n选等级：${levels}\n（直接回车保持现在的等级）`, '')
+  const pick = prompt(`给「${name}」授权\n\n选版本：${levels}\n（直接回车保持现在的版本）`, '')
   if (pick === null) return
   const idx = Number(pick)
-  const lv = idx >= 1 && idx <= meta.levels.length ? meta.levels[idx - 1].key : level || 'basic'
+  const lv = idx >= 1 && idx <= meta.levels.length ? meta.levels[idx - 1].key : level || 'plus'
 
   const days = prompt(`加多少天？\n\n正数=续期，负数=扣回去，0=设成不限期`, '365')
   if (days === null) return
@@ -924,7 +927,7 @@ async function renderPlans() {
     <div class="card">
       <h3>版本方案</h3>
       <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、兑换码的下拉、小程序「管理 → 版本」页都会跟着变。
-        个别盟要在等级之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
+        个别盟要在版本之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
     </div>
     <div class="grid g4">${cards}</div>`
 }
