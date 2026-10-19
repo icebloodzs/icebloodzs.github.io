@@ -639,7 +639,7 @@ async function renderAlliances(refresh = true) {
                   ? `<span class="tag amber">${a.daysLeft} 天</span>`
                   : `${a.daysLeft} 天`
           return `<tr>
-            <td><b>${esc(a.name)}</b>${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
+            <td><b>${esc(a.name)}</b>${a.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${a.isDemo ? ' <span class="tag tiny">演示</span>' : ''}${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
             <td class="tiny">${esc(a.serverNo)} 区<br /><span class="muted">${esc(a.season)}</span></td>
             <td>${a.active ? '<span class="tag green">已激活</span>' : '<span class="tag red">已停用</span>'}</td>
             <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}${extrasText(a)}</td>
@@ -652,6 +652,8 @@ async function renderAlliances(refresh = true) {
               <button class="btn link" data-grant="${esc(a._id)}" data-name="${esc(a.name)}" data-level="${esc(a.level || '')}">授权 / 续期</button>
               <button class="btn link" data-extras="${esc(a._id)}" data-name="${esc(a.name)}">附加功能</button>
               <button class="btn link ${a.active ? 'danger' : ''}" data-toggle="${esc(a._id)}" data-on="${a.active ? '0' : '1'}" data-name="${esc(a.name)}">${a.active ? '停用' : '启用'}</button>
+              ${a.isDemo ? '' : `<br /><button class="btn link" data-test="${esc(a._id)}" data-on="${a.isTest ? '0' : '1'}" data-name="${esc(a.name)}">${a.isTest ? '取消测试' : '标为测试'}</button>`}
+              ${a.isTest ? `<button class="btn link danger" data-del="${esc(a._id)}" data-name="${esc(a.name)}">删除</button>` : ''}
             </td>
           </tr>`
         })
@@ -682,7 +684,7 @@ async function renderAlliances(refresh = true) {
           <input id="fName" placeholder="搜盟名 / 区 / 盟主" value="${esc(allyFilter.name)}" style="width:170px" />
           ${allyFilter.server || allyFilter.status || allyFilter.level || allyFilter.name ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
       </div>
-      <p class="hint">「授权 / 续期」不用兑换码，直接给这个盟记上版本和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。点表头可以排序。</p>
+      <p class="hint">「授权 / 续期」不用兑换码，直接给这个盟记上版本和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。自己建来测试的盟先「标为测试」，就能「删除」。点表头可以排序。</p>
       <table>
         ${thead('ally', ALLY_COLS)}
         <tbody>${body}</tbody>
@@ -703,6 +705,8 @@ async function renderAlliances(refresh = true) {
   $('body').querySelectorAll('[data-grant]').forEach((b) => (b.onclick = () => grant(b.dataset.grant, b.dataset.name, b.dataset.level)))
   $('body').querySelectorAll('[data-toggle]').forEach((b) => (b.onclick = () => toggle(b.dataset.toggle, b.dataset.on === '1', b.dataset.name)))
   $('body').querySelectorAll('[data-extras]').forEach((b) => (b.onclick = () => editExtras(b.dataset.extras, b.dataset.name)))
+  $('body').querySelectorAll('[data-test]').forEach((b) => (b.onclick = () => markTest(b.dataset.test, b.dataset.on === '1', b.dataset.name)))
+  $('body').querySelectorAll('[data-del]').forEach((b) => (b.onclick = () => removeAlliance(b.dataset.del, b.dataset.name)))
 }
 
 /** 版本之外单独开着的功能，在版本标签下面列一行 */
@@ -771,6 +775,30 @@ async function toggle(allianceId, active, name) {
   try {
     await call('dev.allianceActive', { allianceId, active })
     toast('好了')
+    renderAlliances()
+  } catch (e) {
+    toast(e.message)
+  }
+}
+
+/** 标成测试盟才能删：多一步，免得在一长串同盟里点错删掉真客户 */
+async function markTest(allianceId, test, name) {
+  try {
+    await call('dev.allianceTest', { allianceId, test })
+    toast(test ? `「${name}」已标为测试，可以删除了` : '已取消测试标记')
+    renderAlliances()
+  } catch (e) {
+    toast(e.message)
+  }
+}
+
+async function removeAlliance(allianceId, name) {
+  const typed = prompt(`删除测试盟「${name}」\n\n名单、快照、公告、绑定记录会全部删掉，盟里的人变回「没进任何盟」，不能恢复。\n\n确认的话输入盟名：`, '')
+  if (typed === null) return
+  if (typed.trim() !== name) return toast('盟名没对上，没删')
+  try {
+    const res = await call('dev.allianceDelete', { allianceId, confirmName: typed.trim() })
+    toast(`已删除「${name}」` + (res.users ? `，${res.users} 个人变回无盟` : ''))
     renderAlliances()
   } catch (e) {
     toast(e.message)
@@ -1157,7 +1185,10 @@ const LOG_NAME = {
   codeImportEnv: '导入旧兑换码',
   allianceGrant: '授权 / 续期',
   allianceEnable: '启用同盟',
-  allianceDisable: '停用同盟'
+  allianceDisable: '停用同盟',
+  allianceMarkTest: '标为测试盟',
+  allianceUnmarkTest: '取消测试盟',
+  allianceDelete: '删除测试盟'
 }
 
 async function renderLogs() {
