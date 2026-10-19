@@ -1,7 +1,7 @@
 /**
  * 三冰小帮手 · 开发者后台。
  *
- * 只给开发者自己用：管兑换码（等级 / 有效期 / 用没用）和各个盟的会员状态与模型用量。
+ * 只给开发者自己用：管兑换码（等级 / 有效期 / 用没用）和各个盟的版本状态与模型用量。
  * 身份走和电脑版一样的「电脑出码、小程序扫码」换 token，再由云函数校验白名单（devAdmins）。
  *
  * 没有构建步骤：三个文件丢到静态托管就能跑，改完刷新即可。
@@ -267,7 +267,7 @@ const VIEWS = [
   { key: 'codes', title: '兑换码', render: renderCodes },
   { key: 'alliances', title: '同盟', render: renderAlliances },
   { key: 'vision', title: '识别用量', render: renderVision },
-  { key: 'plans', title: '会员方案', render: renderPlans },
+  { key: 'plans', title: '版本方案', render: renderPlans },
   { key: 'demo', title: '演示环境', render: renderDemo },
   { key: 'backup', title: '备份', render: renderBackup },
   { key: 'logs', title: '操作日志', render: renderLogs }
@@ -407,7 +407,7 @@ const CODE_COLS = [
   { label: '等级', key: 'level', sort: (r) => r.price },
   { label: '单价', key: 'price', sort: (r) => r.price, num: true },
   // 不限期排在最长的那头。别用 Infinity：两个不限期相减是 NaN，排序会乱
-  { label: '会员时长', key: 'days', sort: (r) => (r.days === 0 ? 1e9 : r.days), num: true },
+  { label: '可用天数', key: 'days', sort: (r) => (r.days === 0 ? 1e9 : r.days), num: true },
   { label: '状态', key: 'status', sort: (r) => r.status },
   { label: '用在哪个盟', key: 'used', sort: (r) => (r.usedAt ? new Date(r.usedAt).getTime() : null) },
   { label: '生成', key: 'created', sort: (r) => new Date(r.createdAt).getTime() },
@@ -452,7 +452,7 @@ async function renderCodes(refresh = true) {
   $('body').innerHTML = `
     <div class="card">
       <h3>生成兑换码</h3>
-      <p class="hint">一个码只能用一次。会员天数 = 这个码能换多少天会员，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
+      <p class="hint">一个码只能用一次。可用天数 = 兑换后这个版本能用多少天，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
         试用码建议配个终极版 —— 让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死。</p>
       <div class="row" style="margin-bottom:10px">
         <span class="muted tiny" style="align-self:center">常用档位</span>
@@ -461,7 +461,7 @@ async function renderCodes(refresh = true) {
       <div class="row">
         <label class="f">等级<select id="cLevel">${opts}</select></label>
         <label class="f">单价（元）<input id="cPrice" type="number" min="0" placeholder="按等级" style="width:90px" /></label>
-        <label class="f">会员天数<input id="cDays" type="number" value="365" min="0" /></label>
+        <label class="f">可用天数<input id="cDays" type="number" value="365" min="0" /></label>
         <label class="f">码有效期（天）<input id="cValid" type="number" value="0" min="0" /></label>
         <label class="f">数量<input id="cCount" type="number" value="1" min="1" max="50" /></label>
         <label class="f" style="flex:1">备注<input id="cNote" placeholder="卖给谁 / 什么渠道" style="width:100%" /></label>
@@ -590,7 +590,7 @@ const ALLY_COLS = [
   { label: '区', key: 'serverNo', sort: (a) => Number(a.serverNo) || a.serverNo },
   { label: '状态', key: 'active', sort: (a) => (a.active ? 1 : 0) },
   { label: '等级', key: 'level', sort: (a) => a.levelOrder || 0 },
-  { label: '会员到期', key: 'expire', sort: (a) => (a.memberExpiresAt ? new Date(a.memberExpiresAt).getTime() : null) },
+  { label: '到期', key: 'expire', sort: (a) => (a.memberExpiresAt ? new Date(a.memberExpiresAt).getTime() : null) },
   { label: '成员', key: 'members', sort: (a) => a.members, num: true },
   { label: '识别次数', key: 'calls', sort: (a) => a.vision.calls, num: true },
   { label: 'token / 成本', key: 'tokens', sort: (a) => a.vision.tokens, num: true },
@@ -743,7 +743,7 @@ async function grant(allianceId, name, level) {
   const idx = Number(pick)
   const lv = idx >= 1 && idx <= meta.levels.length ? meta.levels[idx - 1].key : level || 'basic'
 
-  const days = prompt(`加多少天会员？\n\n正数=续期，负数=扣回去，0=设成不限期`, '365')
+  const days = prompt(`加多少天？\n\n正数=续期，负数=扣回去，0=设成不限期`, '365')
   if (days === null) return
   const n = Number(days)
   if (!Number.isFinite(n)) return toast('天数填错了')
@@ -897,7 +897,7 @@ async function renderVision(refresh = true) {
   }
 }
 
-// ---------------- 会员方案 ----------------
+// ---------------- 版本方案 ----------------
 
 async function renderPlans() {
   if (!meta.levels.length) {
@@ -906,7 +906,7 @@ async function renderPlans() {
   }
   const cards = meta.levels
     .map((l) => {
-      // hidden 的（留言板）不在会员介绍里列；客服时效、定制这类服务承诺跟在后面
+      // hidden 的（留言板）不在版本介绍里列；客服时效、定制这类服务承诺跟在后面
       const mine = meta.features.filter((f) => f.level === l.key && !f.hidden)
       const items = mine
         .map((f) => `<li>${esc(f.label)}${f.todo ? ' <span class="tag amber">待做</span>' : ''}</li>`)
@@ -914,7 +914,7 @@ async function renderPlans() {
         .join('')
       return `<div class="card">
         <h3>${esc(l.name)} <span class="muted">${l.price ? money(l.price) + '/每月' : '免费'}</span></h3>
-        <p class="hint">${l.order > 0 ? '包含下面这些，外加前一档的全部' : '建盟就是这一档，不用兑换码；会员到期也掉回这一档'}</p>
+        <p class="hint">${l.order > 0 ? '包含下面这些，外加前一档的全部' : '建盟就是这一档，不用兑换码；付费版本到期也掉回这一档'}</p>
         <ul style="margin:0;padding-left:18px;line-height:2">${items}</ul>
       </div>`
     })
@@ -922,7 +922,7 @@ async function renderPlans() {
 
   $('body').innerHTML = `
     <div class="card">
-      <h3>会员方案</h3>
+      <h3>版本方案</h3>
       <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、兑换码的下拉、小程序「管理 → 版本」页都会跟着变。
         个别盟要在等级之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
     </div>
