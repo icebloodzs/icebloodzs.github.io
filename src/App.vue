@@ -4,7 +4,7 @@
  * 数据只拉一次（成员名单 + 赛季 + 登录用户），各页在前端自己算。
  */
 import { ref, computed, h, provide } from 'vue'
-import { NIcon } from 'naive-ui'
+import { NIcon, zhCN, dateZhCN } from 'naive-ui'
 import { call, token, setToken, store, inflight, fatal } from './api'
 import { when } from './fmt'
 import Login from './views/Login.vue'
@@ -22,6 +22,7 @@ import MyAttrs from './views/MyAttrs.vue'
 import Users from './views/Users.vue'
 import Notice from './views/Notice.vue'
 import Board from './views/Board.vue'
+import Attendance from './views/Attendance.vue'
 
 const VIEWS = {
   mine: { label: '我的信息', icon: '👤', comp: Mine },
@@ -31,6 +32,7 @@ const VIEWS = {
   attrs: { label: '属性排名', icon: '📊', comp: Attrs },
   missing: { label: '遗漏排查', icon: '🔍', comp: Missing },
   season: { label: '赛季评分', icon: '🏅', comp: Season },
+  attendance: { label: '考勤功勋', icon: '🗓️', comp: Attendance },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
   shape: { label: '摆图形', icon: '🔠', comp: Shape },
@@ -91,7 +93,7 @@ const can = (key) => {
   return !f || f[key] !== false
 }
 /** 菜单项对应的付费功能：等级不够（或者老客户单独没开）的就不摆出来 */
-const VIEW_FEATURE = { season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice' }
+const VIEW_FEATURE = { attendance: 'attendance', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice' }
 const shown = (k) => !VIEW_FEATURE[k] || can(VIEW_FEATURE[k])
 const menuOptions = computed(() => [
   {
@@ -104,7 +106,7 @@ const menuOptions = computed(() => [
     type: 'group',
     label: '成员数据',
     key: 'g1',
-    children: ['roster', 'import', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
+    children: ['roster', 'import', 'attendance', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
       label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon)
     }))
   },
@@ -227,7 +229,8 @@ boot()
 </script>
 
 <template>
-  <n-config-provider :theme-overrides="themeOverrides">
+  <!-- 中文：日期选择器、分页这些组件默认是英文 -->
+  <n-config-provider :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
     <n-message-provider>
       <n-loading-bar-provider>
         <n-dialog-provider>

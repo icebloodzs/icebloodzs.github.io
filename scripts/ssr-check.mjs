@@ -40,7 +40,7 @@ const app = {
   loginBy: () => {}, reload: async () => {}, refreshMe: async () => {}, refreshNotices: async () => {}
 }
 
-const views = ['Mine', 'Roster', 'ImportList', 'Bonus', 'Attrs', 'Missing', 'Season', 'Rally', 'Placement', 'Shape', 'MyAttrs', 'Users', 'Notice', 'Board', 'Login']
+const views = ['Mine', 'Roster', 'ImportList', 'Attendance', 'Bonus', 'Attrs', 'Missing', 'Season', 'Rally', 'Placement', 'Shape', 'MyAttrs', 'Users', 'Notice', 'Board', 'Login']
 let bad = 0
 for (const v of views) {
   try {
