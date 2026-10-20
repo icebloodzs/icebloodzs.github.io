@@ -178,9 +178,28 @@ async function saveTag(col, cell, body) {
   }
 }
 
+/** 手动记的那几天：没有功勋，只有出勤（绿）/ 缺勤（红），点一下改 */
+function manualCell(col, row) {
+  const cell = row.cells[col.id]
+  const body = h('div', { class: ['att-cell', cell.ok ? 'att-ok' : 'att-no'] }, cell.ok ? '出勤' : '缺勤')
+  if (!isCurrent.value) return body
+  const options = [{ label: cell.ok ? '改成缺勤' : '改成出勤', key: cell.ok ? 'no' : 'yes' }]
+  return h(NDropdown, { trigger: 'click', options, onSelect: (k) => saveMark(col, row, k === 'yes') }, () => h('span', [body]))
+}
+
+async function saveMark(col, row, ok) {
+  try {
+    await call('attendance.mark', { id: col.id, names: [row.name, ...row.formerNames], ok })
+    await load()
+  } catch (e) {
+    message.error(e.message)
+  }
+}
+
 function dayCell(col, row) {
   const cell = row.cells[col.id]
   if (!cell) return h('span', { class: 'att-blank' }, '—')
+  if (cell.manual) return manualCell(col, row)
   const text = showMerit.value ? big(cell.merit) : cell.ok ? '✓' : '✗'
   const tag = cell.tag ? h(NTag, { size: 'tiny', bordered: false, color: TAG_COLOR[cell.tag] || { color: '#e0f2f1', textColor: '#00695c' }, style: 'margin-left:4px' }, () => cell.tag) : null
   const body = h('div', { class: ['att-cell', cell.ok ? 'att-ok' : 'att-no'] }, [h('span', text), tag])
@@ -227,7 +246,7 @@ const columns = computed(() => {
     key: c.id,
     width: DAY_W,
     align: 'center',
-    sorter: sorter((r) => (r.cells[c.id] ? r.cells[c.id].merit : null)),
+    sorter: sorter((r) => (r.cells[c.id] ? (c.kind === 'manual' ? Number(r.cells[c.id].ok) : r.cells[c.id].merit) : null)),
     title: () => h(NTooltip, { placement: 'top' }, {
       // 表头是渲染函数现造的，scoped 样式挂不上，直接写内联
       trigger: () => h('span', { style: 'white-space:nowrap;font-weight:600' }, [
@@ -235,11 +254,14 @@ const columns = computed(() => {
         h('span', { style: 'color:#8b4513;margin-left:5px' }, c.label || '—'),
         h('span', { style: 'color:#1f3864;font-size:12px;font-weight:400;margin-left:5px' }, pct(c.rate)),
         c.partial ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '残') : null,
-        c.reset ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '重') : null
+        c.reset ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '重') : null,
+        c.kind === 'manual' ? h('span', { style: 'color:#6c5ce7;font-size:11px;margin-left:3px' }, '手') : null
       ]),
       default: () => `${md(c.at)}${c.label ? '（' + c.label + '）' : ''}　当天出勤 ${c.attended}/${c.counted}（${pct(c.rate)}）`
         + (c.partial ? '　残缺名单：没有总功勋，按周功勋算' : '')
         + (c.reset ? '　跨了赛季重置，功勋直接取总功勋' : '')
+        + (c.kind === 'manual' ? `　手动记的（勾的是${c.mode === 'absent' ? '缺勤' : '出勤'}的人），点格子能改` : '')
+        + (c.unmatched && c.unmatched.length ? `　有 ${c.unmatched.length} 个名字没对上：${c.unmatched.join('、')}` : '')
     }),
     render: (r) => dayCell(c, r)
   }))
@@ -294,7 +316,7 @@ async function exportExcel() {
           line.push('—')
           st.push(4)
         } else {
-          line.push(cell.tag ? `${cell.merit} ${cell.tag}` : cell.merit)
+          line.push(cell.manual ? (cell.ok ? '出勤' : '缺勤') : cell.tag ? `${cell.merit} ${cell.tag}` : cell.merit)
           st.push(cell.tag ? 5 : cell.ok ? 2 : 3)
         }
       })
@@ -354,7 +376,10 @@ const add = ref(null)
 const adding = ref(false)
 
 function openAdd() {
-  add.value = { at: Date.now(), label: '', hidden: false, mode: 'file', reading: false, fileName: '', sheets: [], sheet: null, text: '' }
+  add.value = {
+    type: 'import', at: Date.now(), label: '', hidden: false, mode: 'file', reading: false, fileName: '', sheets: [], sheet: null, text: '',
+    markMode: 'present', names: []
+  }
   addOpen.value = true
 }
 
@@ -385,8 +410,33 @@ function applyGuess() {
 
 const addSheet = computed(() => add.value && add.value.sheets.find((x) => x.sheet === add.value.sheet))
 
+/** 手动记出勤能勾的人：在队的在前，离队的放后面（补记以前的日子时可能要勾他们） */
+const peopleOptions = computed(() => {
+  const list = ((data.value && data.value.rows) || []).slice().sort((a, b) => Number(b.inRoster) - Number(a.inRoster) || a.name.localeCompare(b.name, 'zh'))
+  return list.map((r) => ({ label: r.inRoster ? r.name : `${r.name}（已离队）`, value: r.name }))
+})
+const rosterSize = computed(() => ((data.value && data.value.rows) || []).filter((r) => r.inRoster).length)
+
+async function submitManual() {
+  const a = add.value
+  if (!a.label.trim()) return message.warning('写一句描述（比如 集结 / 活动），表头上要显示')
+  if (a.markMode === 'present' && !a.names.length) return message.warning('还没勾出勤的人')
+  adding.value = true
+  try {
+    const res = await call('attendance.create', { kind: 'manual', at: a.at, label: a.label.trim(), mode: a.markMode, names: a.names })
+    message.success(`已加上 ${md(res.record.at)}（${res.record.label}），勾了 ${res.record.count} 人`)
+    addOpen.value = false
+    await load()
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    adding.value = false
+  }
+}
+
 async function submitAdd() {
   const a = add.value
+  if (a.type === 'manual') return submitManual()
   if (a.mode === 'file' && !addSheet.value) return message.warning('先选表格文件')
   if (a.mode === 'text' && !a.text.trim()) return message.warning('先把名单粘进来')
   if (!a.hidden && !a.label.trim()) return message.warning('写一句描述（比如 攻城 / 守城），隐藏的可以不写')
@@ -524,9 +574,15 @@ const recColumns = [
     title: '人数',
     key: 'count',
     width: 90,
-    render: (r) => [String(r.count), r.partial ? h(NTag, { size: 'tiny', bordered: false, type: 'warning', style: 'margin-left:4px' }, () => '残缺') : null]
+    render: (r) => (r.kind === 'manual'
+      ? `勾了 ${r.count} 人`
+      : [String(r.count), r.partial ? h(NTag, { size: 'tiny', bordered: false, type: 'warning', style: 'margin-left:4px' }, () => '残缺') : null])
   },
-  { title: '来源', key: 'sheet', render: (r) => r.sheet || '粘贴' },
+  {
+    title: '来源',
+    key: 'sheet',
+    render: (r) => (r.kind === 'manual' ? `手动（勾的是${r.mode === 'absent' ? '缺勤' : '出勤'}的人）` : r.sheet || '粘贴')
+  },
   {
     title: '',
     key: 'op',
@@ -552,6 +608,7 @@ function help() {
       h('p', '当天功勋 = 这份名单的总功勋 − 时间上前一份的总功勋，够达标线就算出勤；第一份没得减，直接取周功勋。'),
       h('p', '打之前先导一份「隐藏」的当基准，打完再导一份写上描述 —— 隐藏的不出列、不计有效天数，只当后一份的起点。'),
       h('p', '改名、离队又回来、名字转手、赛季重置都会自动认，历史出勤跟着人走。点表格里某一天的格子可以标「缺勤 / 摸鱼 / 请假」，标签只是备注，不改判定。'),
+      h('p', '没有名单的活动可以「手动记出勤」：选时间，勾出勤（或缺勤）的人，表里只显示绿色出勤 / 红色缺勤，点格子能改。'),
       h('p', '出勤率 = 出勤天数 / 有效天数；入队前的那几天显示 —，也算在分母里（跟以前的出勤表一样）。')
     ])
   })
@@ -622,8 +679,14 @@ function help() {
     </n-card>
 
     <!-- 新增一条 -->
-    <n-modal v-model:show="addOpen" preset="card" title="新增考勤" :style="{ width: '600px' }">
+    <n-modal v-model:show="addOpen" preset="card" title="新增考勤" :style="{ width: add && add.type === 'manual' ? '720px' : '600px' }">
       <n-form v-if="add" label-placement="left" label-width="80">
+        <n-form-item label="方式">
+          <n-radio-group v-model:value="add.type">
+            <n-radio-button value="import">导入名单（按功勋算）</n-radio-button>
+            <n-radio-button value="manual">手动记出勤</n-radio-button>
+          </n-radio-group>
+        </n-form-item>
         <n-form-item label="时间">
           <n-date-picker v-model:value="add.at" type="datetime" style="width: 220px" />
         </n-form-item>
@@ -635,11 +698,36 @@ function help() {
             </n-space>
           </n-space>
         </n-form-item>
-        <n-form-item label="隐藏">
+        <template v-if="add.type === 'manual'">
+          <n-form-item label="记法">
+            <n-radio-group v-model:value="add.markMode">
+              <n-radio value="present">勾出勤的人（没勾的算缺勤）</n-radio>
+              <n-radio value="absent">勾缺勤的人（没勾的算出勤）</n-radio>
+            </n-radio-group>
+          </n-form-item>
+          <n-form-item label="人员">
+            <n-space vertical :size="6" style="width: 100%">
+              <n-transfer
+                v-model:value="add.names"
+                :options="peopleOptions"
+                source-filterable
+                source-filter-placeholder="搜名字"
+                :source-title="`全部成员`"
+                :target-title="add.markMode === 'absent' ? '缺勤的人' : '出勤的人'"
+                style="height: 340px"
+              />
+              <span class="att-hint" style="margin-left:0">
+                在队 {{ rosterSize }} 人：{{ add.markMode === 'absent' ? `缺勤 ${add.names.length}，其余算出勤` : `出勤 ${add.names.length}，其余算缺勤` }}。
+                「在队」按这个时间之前最近的一份名单算，那时还没进盟的人显示 —。
+              </span>
+            </n-space>
+          </n-form-item>
+        </template>
+        <n-form-item v-if="add.type === 'import'" label="隐藏">
           <n-switch v-model:value="add.hidden" />
           <span class="att-hint">隐藏的不出列，只当下一份的基准（开打前导一份）</span>
         </n-form-item>
-        <n-form-item label="成员数据">
+        <n-form-item v-if="add.type === 'import'" label="成员数据">
           <n-space vertical :size="8" style="width: 100%">
             <n-radio-group v-model:value="add.mode" size="small">
               <n-radio-button value="file">上传表格</n-radio-button>
