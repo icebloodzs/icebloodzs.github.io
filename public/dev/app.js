@@ -433,7 +433,7 @@ async function renderCodes(refresh = true) {
         .map(
           (r) => `<tr>
           <td><code>${esc(r.code)}</code> <button class="btn link small" data-copy="${esc(r.code)}">复制</button></td>
-          <td><span class="tag purple">${esc(r.levelName)}</span></td>
+          <td>${meta.levels.some((l) => l.key === r.level) ? `<span class="tag purple">${esc(r.levelName)}</span>` : `<span class="tag" title="这一档已经下架，兑换时按现行版本算">${esc(r.levelName)}（已下架）</span>`}</td>
           <td class="num">${money(r.price)}</td>
           <td class="num">${r.days ? r.days + ' 天' : '不限期'}</td>
           <td>${CODE_STATUS[r.status] || r.status}</td>
@@ -712,7 +712,12 @@ async function renderAlliances(refresh = true) {
 /** 版本之外单独开着的功能，在版本标签下面列一行 */
 function extrasText(a) {
   const opts = (cache.ally && cache.ally.extraOptions) || []
-  const list = (a.extraFeatures || []).map((k) => {
+  // 只列现在还单独开着、版本本身又不含的那几项（调整分级后有的已经并进版本了，再列就是噪音）
+  const rank = (key) => meta.levels.findIndex((l) => l.key === key)
+  const list = (a.extraFeatures || []).filter((k) => {
+    const o = opts.find((x) => x.key === k)
+    return o && rank(o.level) > rank(a.level)
+  }).map((k) => {
     const o = opts.find((x) => x.key === k)
     return o ? o.label.replace(/（.*$/, '') : k
   })
@@ -936,7 +941,7 @@ async function renderPlans() {
     meta = { levels: d.levels, features: d.features }
   }
   const cards = meta.levels
-    .map((l) => {
+    .map((l, i) => {
       // hidden 的（留言板）不在版本介绍里列；客服时效、定制这类服务承诺跟在后面
       const mine = meta.features.filter((f) => f.level === l.key && !f.hidden)
       const items = mine
@@ -945,7 +950,7 @@ async function renderPlans() {
         .join('')
       return `<div class="card">
         <h3>${esc(l.name)} <span class="muted">${l.price ? money(l.price) + '/每月' : '免费'}</span></h3>
-        <p class="hint">${l.order > 0 ? '包含下面这些，外加前一档的全部' : '建盟就是这一档，不用兑换码；付费版本到期也掉回这一档'}</p>
+        <p class="hint">${i > 0 ? `${esc(meta.levels[i - 1].name)}的全部，再加下面这些` : '建盟就是这一档，不用兑换码；付费版本到期也掉回这一档'}</p>
         <ul style="margin:0;padding-left:18px;line-height:2">${items}</ul>
       </div>`
     })
@@ -955,9 +960,9 @@ async function renderPlans() {
     <div class="card">
       <h3>版本方案</h3>
       <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、兑换码的下拉、小程序「管理 → 版本」页都会跟着变。
-        个别盟要在版本之外多开某项（比如老客户保留电脑版），去「同盟」那页点「附加功能」。</p>
+        个别盟要在版本之外多开某项（比如免费版的盟单独开电脑版），去「同盟」那页点「附加功能」。</p>
     </div>
-    <div class="grid g4">${cards}</div>`
+    <div class="grid ${meta.levels.length >= 4 ? 'g4' : meta.levels.length === 3 ? 'g3' : 'g2'}">${cards}</div>`
 }
 
 // ---------------- 演示环境 ----------------

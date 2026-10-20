@@ -89,6 +89,7 @@ nav button.on { background: #efecff; color: var(--brand); font-weight: 600; }
 .g5 { grid-template-columns: repeat(5, 1fr); }
 .g4 { grid-template-columns: repeat(4, 1fr); }
 .g3 { grid-template-columns: repeat(3, 1fr); }
+.g2 { grid-template-columns: repeat(2, 1fr); }
 
 .stat { background: #fff; border-radius: 14px; padding: 16px 18px; }
 .stat b { display: block; font-size: 26px; line-height: 1.3; }
