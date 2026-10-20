@@ -396,7 +396,7 @@ let codeFilter = 'all'
  */
 const CODE_PRESETS = [
   // 试用默认给最高那一档：让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死
-  // 试用码单价记 0：不然总览里的收入会把每个试用码都按终极版 648 元算进去
+  // 试用码单价记 0：不然总览里的收入会把每个试用码都按开发版标价算进去
   { label: '3 天试用', days: 3, validDays: 30, note: '试用', level: 'top', price: 0 },
   { label: '7 天试用', days: 7, validDays: 30, note: '试用', level: 'top', price: 0 },
   { label: '1 个月', days: 30, validDays: 0, note: '' },
@@ -456,7 +456,7 @@ async function renderCodes(refresh = true) {
     <div class="card">
       <h3>生成兑换码</h3>
       <p class="hint">一个码只能用一次。可用天数 = 兑换后这个版本能用多少天，填 0 表示不限期；码有效期 = 这个码自己多久不用就作废，填 0 表示一直有效。
-        试用码建议配个终极版 —— 让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死。</p>
+        试用码建议配开发版 —— 让人把功能都摸一遍，到期自动掉回免费版，不会把盟锁死。</p>
       <div class="row" style="margin-bottom:10px">
         <span class="muted tiny" style="align-self:center">常用档位</span>
         ${CODE_PRESETS.map((p, i) => `<button class="btn ghost small" data-preset="${i}">${p.label}</button>`).join('')}
@@ -551,9 +551,9 @@ async function renderCodes(refresh = true) {
   }
 
   $('cImport').onclick = async () => {
-    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老兑换码搬进库，按「高级版 365 天」记。库里已有的会跳过。')) return
+    if (!confirm('把云函数环境变量 ACTIVATION_CODES 里的老兑换码搬进库，按「开发版 365 天」记。库里已有的会跳过。')) return
     try {
-      const res = await call('dev.codeImportEnv', { level: 'plus', days: 365 })
+      const res = await call('dev.codeImportEnv', { level: 'ultra', days: 365 })
       toast(`导入 ${res.added.length} 个，跳过 ${res.skipped.length} 个`)
       renderCodes()
     } catch (e) {
@@ -721,7 +721,7 @@ function extrasText(a) {
 
 /**
  * 单独加开 / 收回功能。用编号勾选：输入要开着的编号，空着回车 = 全部收回。
- * 主要给调整分级时的老客户用（比如之前高级版带电脑版，现在电脑版挪到终极了）。
+ * 主要给调整分级时的老客户用（比如某样功能挪到更高一档后，之前买的盟还能用）。
  */
 async function editExtras(allianceId, name) {
   const d = cache.ally
@@ -748,7 +748,7 @@ async function grant(allianceId, name, level) {
   const pick = prompt(`给「${name}」授权\n\n选版本：${levels}\n（直接回车保持现在的版本）`, '')
   if (pick === null) return
   const idx = Number(pick)
-  const lv = idx >= 1 && idx <= meta.levels.length ? meta.levels[idx - 1].key : level || 'plus'
+  const lv = idx >= 1 && idx <= meta.levels.length ? meta.levels[idx - 1].key : level || 'ultra'
 
   const days = prompt(`加多少天？\n\n正数=续期，负数=扣回去，0=设成不限期`, '365')
   if (days === null) return

@@ -165,7 +165,7 @@ async function boot() {
     } else {
       loginWhy.value =
         e.errCode === 'FEATURE_LOCKED'
-          ? '电脑版是终极版才有的功能，升级后再扫码'
+          ? '电脑版是开发版才有的功能，升级后再扫码'
           : `上次的登录态被服务器拒了：${e.errCode || '未知'}，存在 ${store.how === 'cookie' ? 'cookie' : 'localStorage'}，已清掉`
       loginTip.value = e.message || '登录已失效，请重新扫码'
       setToken('')

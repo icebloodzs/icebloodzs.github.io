@@ -253,7 +253,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       </n-grid>
     </n-card>
 
-    <!-- 赛季评分（高级版才有） -->
+    <!-- 赛季评分（按版本开放） -->
     <n-card v-if="can('season')" :bordered="false" :title="'赛季评分 · ' + ((season && season.label) || '')">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         评分 = 成员实力 − 武将战力。武将战力同样只能靠截图识别，传战力面板截图即可。
