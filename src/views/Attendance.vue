@@ -12,6 +12,7 @@ import { useMessage, useDialog, NTag, NTooltip, NDropdown, NSwitch, NButton, NPo
 import { call } from '../api'
 import { big, when, sorter } from '../fmt'
 import { buildStyledExcel } from '../xlsx'
+import { readWorkbook } from '../sheet'
 
 const { me } = inject('app')
 const message = useMessage()
@@ -124,6 +125,12 @@ function pct(v) {
   return v == null ? '—' : (v * 100).toFixed(1).replace(/\.0$/, '') + '%'
 }
 
+/** 表头用的短日期：10/19 */
+function mdShort(iso) {
+  const d = new Date(iso)
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}
+
 function md(iso) {
   const d = new Date(iso)
   return `${d.getMonth() + 1}月${d.getDate()}号`
@@ -183,52 +190,62 @@ function dayCell(col, row) {
   return h(NDropdown, { trigger: 'click', options: tagMenu(col, row), onSelect: (k) => onTag(col, row, k) }, () => h('span', [withTip]))
 }
 
+/** 每天一列的宽度：日期 / 描述 / 出勤率挤在一行，格子里「12.60亿 摸鱼」也是一行 */
+const DAY_W = 136
+const FIXED_W = { idx: 46, name: 112, power: 74, strength: 74, rate: 66, days: 74, total: 80 }
+
 const columns = computed(() => {
   const fixed = [
+    { title: '序号', key: 'idx', width: FIXED_W.idx, fixed: 'left', align: 'center', render: (_r, i) => i + 1 },
     {
       title: '成员名称',
       key: 'name',
-      width: 150,
+      width: FIXED_W.name,
       fixed: 'left',
+      ellipsis: { tooltip: true },
       sorter: sorter((r) => r.name),
-      render: (r) => h('div', { class: 'att-name' }, [
-        h('span', { style: r.inRoster ? '' : 'color:#9ca3af' }, r.name),
-        r.inRoster ? null : h(NTag, { size: 'tiny', bordered: false, style: 'margin-left:4px' }, () => '已离队'),
-        r.formerNames.length ? h('div', { class: 'att-former' }, '曾用 ' + r.formerNames.join('、')) : null
+      render: (r) => h('span', { style: r.inRoster ? '' : 'color:#9ca3af' }, [
+        r.name,
+        r.inRoster ? null : h(NTag, { size: 'tiny', bordered: false, style: 'margin-left:4px' }, () => '离队'),
+        r.formerNames.length ? h('span', { style: 'font-size:11px;color:#9ca3af' }, ` 曾用 ${r.formerNames.join('、')}`) : null
       ])
     },
-    { title: '战力', key: 'power', width: 92, sorter: sorter((r) => r.power), render: (r) => big(r.power) },
-    { title: '实力', key: 'strength', width: 92, sorter: sorter((r) => r.strength), render: (r) => big(r.strength) },
+    { title: '战力', key: 'power', width: FIXED_W.power, sorter: sorter((r) => r.power), render: (r) => big(r.power) },
+    { title: '实力', key: 'strength', width: FIXED_W.strength, sorter: sorter((r) => r.strength), render: (r) => big(r.strength) },
     {
       title: '出勤率',
       key: 'viewRate',
-      width: 84,
+      width: FIXED_W.rate,
       sorter: sorter((r) => r.viewRate),
       defaultSortOrder: 'descend',
       render: (r) => h('b', { style: `color:${r.viewRate === 1 ? '#16a34a' : r.viewRate < 0.6 ? '#dc2626' : '#374151'}` }, pct(r.viewRate))
     },
-    { title: '出勤天数', key: 'viewDays', width: 84, sorter: sorter((r) => r.viewDays), render: (r) => `${r.viewDays} / ${shownCols.value.length}` },
-    { title: '总功勋', key: 'total', width: 100, sorter: sorter((r) => r.total), render: (r) => big(r.total) }
+    { title: '出勤天数', key: 'viewDays', width: FIXED_W.days, sorter: sorter((r) => r.viewDays), render: (r) => `${r.viewDays}/${shownCols.value.length}` },
+    { title: '总功勋', key: 'total', width: FIXED_W.total, sorter: sorter((r) => r.total), render: (r) => big(r.total) }
   ]
   const days = shownCols.value.map((c) => ({
     key: c.id,
-    width: 118,
+    width: DAY_W,
     align: 'center',
     sorter: sorter((r) => (r.cells[c.id] ? r.cells[c.id].merit : null)),
-    title: () => h('div', { class: 'att-head' }, [
-      h('div', md(c.at)),
-      h('div', { class: 'att-label' }, c.label || '—'),
-      h('div', { class: 'att-rate' }, [
-        pct(c.rate),
-        c.partial ? h(NTag, { size: 'tiny', bordered: false, type: 'warning', style: 'margin-left:4px' }, () => '残缺') : null,
-        c.reset ? h(NTag, { size: 'tiny', bordered: false, type: 'info', style: 'margin-left:4px' }, () => '重置') : null
-      ])
-    ]),
+    title: () => h(NTooltip, { placement: 'top' }, {
+      // 表头是渲染函数现造的，scoped 样式挂不上，直接写内联
+      trigger: () => h('span', { style: 'white-space:nowrap;font-weight:600' }, [
+        h('span', mdShort(c.at)),
+        h('span', { style: 'color:#8b4513;margin-left:5px' }, c.label || '—'),
+        h('span', { style: 'color:#1f3864;font-size:12px;font-weight:400;margin-left:5px' }, pct(c.rate)),
+        c.partial ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '残') : null,
+        c.reset ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '重') : null
+      ]),
+      default: () => `${md(c.at)}${c.label ? '（' + c.label + '）' : ''}　当天出勤 ${c.attended}/${c.counted}（${pct(c.rate)}）`
+        + (c.partial ? '　残缺名单：没有总功勋，按周功勋算' : '')
+        + (c.reset ? '　跨了赛季重置，功勋直接取总功勋' : '')
+    }),
     render: (r) => dayCell(c, r)
   }))
   return fixed.concat(days)
 })
-const scrollX = computed(() => 602 + shownCols.value.length * 118)
+const scrollX = computed(() => Object.values(FIXED_W).reduce((a, b) => a + b, 0) + shownCols.value.length * DAY_W)
 
 // ---------------- 人员变动 ----------------
 
@@ -318,13 +335,15 @@ async function saveThreshold() {
 
 // ---------------- 读文件 ----------------
 
-function readFile(file) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader()
-    fr.onload = () => resolve(String(fr.result).replace(/^data:[^,]*,/, ''))
-    fr.onerror = () => reject(new Error('文件读不出来'))
-    fr.readAsDataURL(file)
-  })
+/**
+ * 读 Excel 并让云函数逐张核对：猜日期 / 描述 / 隐藏、数人数、看导没导过。
+ * 文件在浏览器里解析，一张表一个请求（整本传会超网关的 100KB 上限）。
+ */
+async function inspect(file) {
+  const sheets = await readWorkbook(file)
+  if (!sheets.length) throw new Error('这个文件里没有工作表')
+  const infos = await Promise.all(sheets.map((s, i) => call('attendance.parse', { sheet: s.sheet, aoa: s.aoa, index: i })))
+  return sheets.map((s, i) => ({ ...infos[i], sheet: s.sheet, aoa: s.aoa }))
 }
 
 // ---------------- 新增一条 ----------------
@@ -335,7 +354,7 @@ const add = ref(null)
 const adding = ref(false)
 
 function openAdd() {
-  add.value = { at: Date.now(), label: '', hidden: false, mode: 'file', base64: '', fileName: '', sheets: [], sheet: null, text: '' }
+  add.value = { at: Date.now(), label: '', hidden: false, mode: 'file', reading: false, fileName: '', sheets: [], sheet: null, text: '' }
   addOpen.value = true
 }
 
@@ -343,15 +362,16 @@ async function pickAddFile(e) {
   const file = e.target.files && e.target.files[0]
   e.target.value = ''
   if (!file) return
+  add.value.reading = true
   try {
-    const base64 = await readFile(file)
-    const res = await call('attendance.parse', { base64 })
-    const sheets = res.sheets.filter((s) => s.kind === 'roster')
+    const sheets = (await inspect(file)).filter((s) => s.kind === 'roster')
     if (!sheets.length) return message.error('这个表格里没有带「成员名称」表头的工作表')
-    Object.assign(add.value, { base64, fileName: file.name, sheets, sheet: sheets[sheets.length - 1].sheet })
+    Object.assign(add.value, { fileName: file.name, sheets, sheet: sheets[sheets.length - 1].sheet })
     applyGuess()
   } catch (err) {
     message.error(err.message)
+  } finally {
+    add.value.reading = false
   }
 }
 
@@ -367,13 +387,13 @@ const addSheet = computed(() => add.value && add.value.sheets.find((x) => x.shee
 
 async function submitAdd() {
   const a = add.value
-  if (a.mode === 'file' && !a.base64) return message.warning('先选表格文件')
+  if (a.mode === 'file' && !addSheet.value) return message.warning('先选表格文件')
   if (a.mode === 'text' && !a.text.trim()) return message.warning('先把名单粘进来')
   if (!a.hidden && !a.label.trim()) return message.warning('写一句描述（比如 攻城 / 守城），隐藏的可以不写')
   adding.value = true
   try {
     const body = { at: a.at, label: a.label.trim(), hidden: a.hidden }
-    if (a.mode === 'file') Object.assign(body, { base64: a.base64, sheet: a.sheet })
+    if (a.mode === 'file') Object.assign(body, { sheet: addSheet.value.sheet, aoa: addSheet.value.aoa })
     else body.text = a.text
     const res = await call('attendance.create', body)
     message.success(`已加上 ${md(res.record.at)}${res.record.label ? '（' + res.record.label + '）' : ''}，${res.record.count} 人`)
@@ -391,9 +411,10 @@ async function submitAdd() {
 const bookOpen = ref(false)
 const book = ref(null)
 const importing = ref(false)
+const progress = ref('')
 
 function openBook() {
-  book.value = { base64: '', fileName: '', sheets: [] }
+  book.value = { reading: false, fileName: '', sheets: [] }
   bookOpen.value = true
 }
 
@@ -401,13 +422,13 @@ async function pickBookFile(e) {
   const file = e.target.files && e.target.files[0]
   e.target.value = ''
   if (!file) return
+  book.value.reading = true
   try {
-    const base64 = await readFile(file)
-    const res = await call('attendance.parse', { base64 })
+    const sheets = await inspect(file)
     book.value = {
-      base64,
+      reading: false,
       fileName: file.name,
-      sheets: res.sheets.map((s) => ({
+      sheets: sheets.map((s) => ({
         ...s,
         pick: s.kind === 'roster' && !s.exists && Boolean(s.guess),
         at: s.guess ? new Date(s.guess.at).getTime() : Date.now(),
@@ -416,28 +437,43 @@ async function pickBookFile(e) {
       }))
     }
   } catch (err) {
+    book.value.reading = false
     message.error(err.message)
   }
 }
 
 const bookPicked = computed(() => (book.value ? book.value.sheets.filter((s) => s.pick) : []))
 
+/** 一张一张导：中间哪张失败不影响别的，最后汇总告诉人 */
 async function submitBook() {
   if (!bookPicked.value.length) return message.warning('没勾要导入的工作表')
   importing.value = true
+  const picked = bookPicked.value.slice()
+  let added = 0
+  const failed = []
   try {
-    const res = await call('attendance.importBook', {
-      base64: book.value.base64,
-      picks: bookPicked.value.map((s) => ({ sheet: s.sheet, at: s.at, label: s.label, hidden: s.hidden }))
-    })
-    const skipped = res.skipped.length ? `，跳过 ${res.skipped.length} 张（${res.skipped.map((x) => x.sheet + '：' + x.why).join('；')}）` : ''
-    message.success(`导入了 ${res.added.length} 张${skipped}`, { duration: 6000 })
-    bookOpen.value = false
+    for (let i = 0; i < picked.length; i += 1) {
+      const s = picked[i]
+      progress.value = `${i + 1} / ${picked.length}`
+      try {
+        await call('attendance.create', { sheet: s.sheet, aoa: s.aoa, at: s.at, label: s.label, hidden: s.hidden, skipExisting: true })
+        s.pick = false
+        s.exists = true
+        added += 1
+      } catch (e) {
+        failed.push(`${s.sheet}：${e.message}`)
+      }
+    }
+    if (failed.length) {
+      dialog.warning({ title: `导入了 ${added} 张，${failed.length} 张没导进去`, content: failed.join('\n'), positiveText: '知道了' })
+    } else {
+      message.success(`导入了 ${added} 张`)
+      bookOpen.value = false
+    }
     await load()
-  } catch (e) {
-    message.error(e.message)
   } finally {
     importing.value = false
+    progress.value = ''
   }
 }
 
@@ -578,6 +614,7 @@ function help() {
         :row-key="(r) => r.pid"
         :scroll-x="scrollX"
         :max-height="'calc(100vh - 420px)'"
+        class="att-table"
         :bordered="false"
         size="small"
         striped
@@ -611,7 +648,7 @@ function help() {
             <template v-if="add.mode === 'file'">
               <label class="att-file">
                 <input type="file" accept=".xlsx,.xls,.csv" hidden @change="pickAddFile" />
-                <n-button tag="span" size="small">{{ add.fileName ? '换一个文件' : '选择 Excel 文件' }}</n-button>
+                <n-button tag="span" size="small" :loading="add.reading">{{ add.fileName ? '换一个文件' : '选择 Excel 文件' }}</n-button>
                 <span v-if="add.fileName" class="att-hint">{{ add.fileName }}</span>
               </label>
               <n-select
@@ -651,7 +688,7 @@ function help() {
       </n-alert>
       <label class="att-file">
         <input type="file" accept=".xlsx,.xls" hidden @change="pickBookFile" />
-        <n-button tag="span">{{ book && book.fileName ? '换一个文件' : '选择源数据表' }}</n-button>
+        <n-button tag="span" :loading="book && book.reading">{{ book && book.fileName ? '换一个文件' : '选择源数据表' }}</n-button>
         <span v-if="book && book.fileName" class="att-hint">{{ book.fileName }}</span>
       </label>
       <n-table v-if="book && book.sheets.length" size="small" :bordered="false" style="margin-top: 12px">
@@ -676,7 +713,7 @@ function help() {
       <template #footer>
         <n-space justify="end">
           <n-button @click="bookOpen = false">取消</n-button>
-          <n-button type="primary" :loading="importing" :disabled="!bookPicked.length" @click="submitBook">导入 {{ bookPicked.length }} 张</n-button>
+          <n-button type="primary" :loading="importing" :disabled="!bookPicked.length" @click="submitBook">{{ importing ? `导入中 ${progress}` : `导入 ${bookPicked.length} 张` }}</n-button>
         </n-space>
       </template>
     </n-modal>
@@ -731,12 +768,9 @@ function help() {
 .att-count { color: #6b7280; font-size: 13px; }
 .att-hint { color: #6b7280; font-size: 12px; margin-left: 8px; }
 .att-file { display: inline-flex; align-items: center; cursor: pointer; }
-.att-name { line-height: 1.3; }
-.att-former { font-size: 11px; color: #9ca3af; }
-.att-head { line-height: 1.35; font-weight: 600; }
-.att-label { color: #8b4513; font-size: 12px; }
-.att-rate { color: #1f3864; font-size: 12px; font-weight: 400; }
-:deep(.att-cell) { border-radius: 6px; padding: 3px 4px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-width: 88px; }
+/* 表头、格子一律不换行，天数多了靠横向滚动 */
+:deep(.att-table .n-data-table-th), :deep(.att-table .n-data-table-td) { white-space: nowrap; padding-left: 6px; padding-right: 6px; }
+:deep(.att-cell) { border-radius: 6px; padding: 2px 6px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; min-width: 84px; white-space: nowrap; }
 :deep(.att-ok) { background: #e8f5e9; color: #1b5e20; }
 :deep(.att-no) { background: #ffebee; color: #b71c1c; }
 :deep(.att-blank) { color: #c0c4cc; }
