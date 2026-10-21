@@ -123,7 +123,7 @@ async function exportExcel() {
       </n-alert>
 
       <n-form label-placement="left" :label-width="90" size="small">
-        <n-grid :cols="4" :x-gap="16">
+        <n-grid cols="1 s:2 l:4" responsive="screen" :x-gap="16">
           <n-gi><n-form-item label="模式"><n-select v-model:value="opt.mode" :options="MODES" /></n-form-item></n-gi>
           <n-gi><n-form-item label="组数"><n-input-number v-model:value="opt.groups" :min="1" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="attack"><n-form-item label="每组副车"><n-input-number v-model:value="opt.subs" :min="0" :max="5" :step="1" style="width:100%" /></n-form-item></n-gi>
@@ -133,7 +133,7 @@ async function exportExcel() {
           <n-gi v-if="!attack"><n-form-item label="第一组车身"><n-input-number v-model:value="opt.firstBody" :min="0" :max="30" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi><n-form-item label="车头依据"><n-select v-model:value="opt.headBy" :options="BY" /></n-form-item></n-gi>
           <n-gi><n-form-item label="车身排法"><n-select v-model:value="opt.bodyBy" :options="BODY" /></n-form-item></n-gi>
-          <n-gi :span="2"><n-form-item label="标题"><n-input v-model:value="opt.title" :placeholder="attack ? '攻城集结分配' : '守城集结分配'" /></n-form-item></n-gi>
+          <n-gi span="1 s:2"><n-form-item label="标题"><n-input v-model:value="opt.title" :placeholder="attack ? '攻城集结分配' : '守城集结分配'" /></n-form-item></n-gi>
         </n-grid>
       </n-form>
     </n-card>

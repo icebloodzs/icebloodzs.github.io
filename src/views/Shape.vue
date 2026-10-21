@@ -194,8 +194,8 @@ function savePng() {
       </n-alert>
 
       <n-form label-placement="left" :label-width="90" size="small">
-        <n-grid :cols="4" :x-gap="16">
-          <n-gi :span="4">
+        <n-grid cols="1 s:2 l:4" responsive="screen" :x-gap="16">
+          <n-gi span="1 s:2 l:4">
             <n-form-item label="参照坐标">
               <n-space :size="8" align="center">
                 <n-input v-model:value="baseX" placeholder="X 如 521" style="width: 120px" />
@@ -214,7 +214,7 @@ function savePng() {
 
       <n-space align="center" :size="14">
         <span class="lab">格子大小</span>
-        <n-slider v-model:value="D" :min="20" :max="80" :step="2" style="width: 180px" />
+        <n-slider v-model:value="D" :min="20" :max="80" :step="2" style="width: 160px" />
         <span v-if="corner" class="lab">
           顶角 {{ corner.top }} · 底角 {{ corner.bottom }}
         </span>
@@ -272,4 +272,8 @@ function savePng() {
 <style scoped>
 .wrap { overflow: auto; text-align: center; }
 .lab { font-size: 13px; color: #8a9099; }
+/* 手机：整张图缩到屏幕宽度（要看细节双指放大）；下载图片读的是 svg 自身尺寸，不受影响 */
+@media (max-width: 767px) {
+  #shape-map { width: 100%; height: auto; }
+}
 </style>

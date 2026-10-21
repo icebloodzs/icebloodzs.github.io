@@ -221,7 +221,7 @@ const suspectCols = [
                 v-model:value="picks[c.name]"
                 :options="optionsOf(c)"
                 size="small"
-                style="width: 420px"
+                style="width: 420px; max-width: 100%"
                 placeholder="挑一个它原来叫什么"
               />
             </div>
@@ -280,8 +280,13 @@ const suspectCols = [
 .hint { font-size: 12px; line-height: 1.7; color: #4b5563; }
 .cand { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
 .cand-n { width: 230px; flex: none; font-size: 13px; font-weight: 600; }
+/* 手机：新名字一行、下拉框一行 */
+@media (max-width: 767px) {
+  .cand { flex-direction: column; align-items: stretch; gap: 6px; }
+  .cand-n { width: auto; }
+}
 .cand-s { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: #8a9099; }
-.bar { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+.bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
 .c-success { color: #16a34a; }
 .c-warning { color: #d97706; }
 .c-error { color: #dc2626; }

@@ -55,6 +55,8 @@ const navOpen = ref(false)
 if (typeof window !== 'undefined') {
   window.addEventListener('resize', () => { narrow.value = window.innerWidth < NARROW_PX })
 }
+/* 根节点挂个 narrow class：各页「整页定高、表格自己滚」的写法在手机上一并取消（见 style.css） */
+watch(narrow, (v) => { if (typeof document !== 'undefined') document.documentElement.classList.toggle('narrow', v) }, { immediate: true })
 const view = ref('mine')
 const me = ref(null)
 const members = ref([])

@@ -171,8 +171,8 @@ function savePng() {
       </n-alert>
 
       <n-space align="center">
-        <n-select v-model:value="preset" :options="PRESETS" style="width: 220px" />
-        <n-input v-model:value="cityName" placeholder="城池名字，如 丹阳" maxlength="8" clearable style="width: 180px" />
+        <n-select v-model:value="preset" :options="PRESETS" style="width: 220px; max-width: 100%" />
+        <n-input v-model:value="cityName" placeholder="城池名字，如 丹阳" maxlength="8" clearable style="width: 180px; max-width: 100%" />
         <n-checkbox v-model:checked="battle">留出斗阵位</n-checkbox>
         <n-checkbox v-model:checked="pairWeak">人多时强带弱</n-checkbox>
         <span class="m">在册成员 {{ members.length }} 人</span>
@@ -241,5 +241,9 @@ function savePng() {
 
 <style scoped>
 .wrap { overflow: auto; text-align: center; }
+/* 手机：整张格子图缩到屏幕宽度（要看细节双指放大）；导出图片读的是 svg 自身尺寸，不受影响 */
+@media (max-width: 767px) {
+  #map { width: 100%; height: auto; }
+}
 .m { font-size: 13px; color: #8a9099; }
 </style>

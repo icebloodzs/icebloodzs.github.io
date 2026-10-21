@@ -4,3 +4,10 @@ body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   background: #f5f6fa;
 }
+
+/*
+ * 手机（窄屏）：电脑上各列表页是「整页不滚、表格在卡片里自己滚」，靠 --page-h 定高；
+ * 手机上屏幕矮，定高会挤得只剩几行，所以改成整页跟着滚、页面按内容长（表格改用 max-height，见 TableCard）。
+ */
+html.narrow { --page-h: auto; }
+html.narrow .page { min-height: 0 !important; }

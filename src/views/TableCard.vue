@@ -6,7 +6,7 @@
  * 列定义就是 naive-ui 那套，额外认一个 xls(row, index)：导出时这一列取什么值，不写就按 key 取。
  * index 是**当前排序后**的行号，和表格里看到的序号一致。
  */
-import { ref, computed } from 'vue'
+import { ref, computed, inject } from 'vue'
 import { useMessage } from 'naive-ui'
 import { buildExcel } from '../xlsx'
 
@@ -20,6 +20,8 @@ const props = defineProps({
 })
 
 const message = useMessage()
+// 手机：搜索框和导出挪到标题下面一整行，表格不撑满整页高、改成最多七成屏高
+const { narrow = ref(false) } = inject('app', {})
 const keyword = ref('')
 const busy = ref(false)
 
@@ -57,26 +59,31 @@ async function exportExcel() {
     :bordered="false"
     content-style="display:flex;flex-direction:column;min-height:0"
   >
-    <template #header-extra>
+    <template v-if="!narrow" #header-extra>
       <n-space align="center">
         <n-input v-if="search" v-model:value="keyword" placeholder="搜成员名" clearable style="width: 180px" />
         <n-button :loading="busy" @click="exportExcel">导出 Excel</n-button>
       </n-space>
     </template>
+    <div v-if="narrow" class="tc-bar">
+      <n-input v-if="search" v-model:value="keyword" placeholder="搜成员名" clearable size="small" />
+      <n-button size="small" :loading="busy" @click="exportExcel">导出</n-button>
+    </div>
 
     <n-alert v-if="desc" type="info" :bordered="false" style="margin-bottom: 14px">{{ desc }}</n-alert>
     <slot name="filters" />
 
     <!-- flex-height：表格自己占满剩下的高度，表头钉住、只有表体滚 -->
     <n-data-table
+      :flex-height="!narrow"
+      :max-height="narrow ? '70vh' : undefined"
       :columns="columns"
       :data="shown"
       :bordered="false"
       size="small"
       :scroll-x="scrollX || undefined"
-      flex-height
       striped
-      style="flex: 1; min-height: 0"
+      :style="narrow ? '' : 'flex: 1; min-height: 0'"
     />
     <div class="count">共 {{ shown.length }} 人</div>
   </n-card>
@@ -86,5 +93,7 @@ async function exportExcel() {
 /* 撑满外面给的高度；外面没给确定高度时退化成原来那样跟着内容长 */
 .tc { height: 100%; display: flex; flex-direction: column; }
 .tc :deep(.n-card__content) { min-height: 0; }
+.tc-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+.tc-bar > :first-child { flex: 1; }
 .count { margin-top: 10px; color: #8a9099; font-size: 12px; flex: none; }
 </style>

@@ -109,4 +109,9 @@ const bands = computed(() => {
 .page > * + * { margin-top: 16px; }
 .rest { flex: 1; min-height: 0; }
 .lab { font-size: 13px; color: #8a9099; }
+/* 手机：定位筛选一排放不下，横着滑 */
+@media (max-width: 767px) {
+  .page :deep(.n-radio-group) { display: flex; max-width: 100%; overflow-x: auto; }
+  .page :deep(.n-radio-button) { flex: none; }
+}
 </style>
