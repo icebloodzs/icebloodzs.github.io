@@ -261,8 +261,7 @@ const selfTip = computed(() => {
   const who = me.value || {}
   const free = who.alliance && who.alliance.level !== 'ultra'
   if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：浏览器版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
-  if (who.role === 'admin' || who.role === 'super') return '用登录 ID 进来只能用「我的信息」「我的属性」。要用管理功能，请退出后用小程序扫码登录。'
-  return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只有开发版的管理员扫码才能用。'
+  return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只对开发版的管理员开放。'
 })
 const ally = computed(() => (me.value && me.value.alliance) || {})
 

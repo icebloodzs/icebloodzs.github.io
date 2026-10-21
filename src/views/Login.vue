@@ -1,10 +1,9 @@
 <script setup>
 /**
- * 两种登法：
+ * 两种登法，进去能用的功能一样（按身份和版本算，见云函数 lib/webAccess.js）：
  *   扫码 —— 这边出票据画二维码，用小程序扫完确认，这边轮询拿 token。
  *            个人主体没有开放平台网站应用，做不了「微信扫一扫登网页」，所以反着来。
- *   登录 ID —— 给用不了小程序扫码的人（手机浏览器、平板）：ID 在小程序首页复制，
- *            进来只有「我的信息」「我的属性」。
+ *   登录 ID —— 给用不了小程序扫码的设备（手机浏览器、平板）：ID 在小程序首页复制。
  */
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { call } from '../api'
@@ -140,8 +139,8 @@ watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() }
         <div v-if="keyMsg" class="key-err">{{ keyMsg }}</div>
         <div class="hint">
           登录 ID 在小程序<b>首页 →「浏览器版」</b>里，点「复制」。<br />
-          用 ID 登录只有「我的信息」「我的属性」。<br />
-          开发版的管理员要用管理功能，请改用小程序扫码。
+          能用的功能和扫码登录一样：开发版的管理员是全部管理功能，<br />
+          其余是「我的信息」「我的属性」。
         </div>
       </template>
 
