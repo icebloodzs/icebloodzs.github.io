@@ -9,7 +9,7 @@ import { call } from '../api'
 import { big, num, when } from '../fmt'
 
 // can 是付费功能开关；没注入（比如自检脚本里）就当全开
-const { me, season, reload, refreshMe, can = () => true } = inject('app')
+const { me, season, reload, refreshMe, can = () => true, narrow = ref(false) } = inject('app')
 const message = useMessage()
 
 const ARMS = [['inf', '步兵'], ['cav', '骑兵'], ['arc', '弓兵']]
@@ -227,7 +227,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
         数值只认截图识别的结果，不支持手动修改。传一张游戏里的「属性加成」面板截图就会自动识别入库。
       </n-alert>
 
-      <n-grid :cols="3" :x-gap="14">
+      <n-grid cols="1 s:3" responsive="screen" :x-gap="14" :y-gap="10">
         <n-gi v-for="[arm, items] in SIX" :key="arm">
           <n-card size="small" :title="arm" embedded :bordered="false">
             <div v-for="[k, label] in items" :key="k" class="row">
@@ -238,7 +238,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
         </n-gi>
       </n-grid>
 
-      <n-descriptions :column="2" style="margin-top: 14px" label-placement="left" size="small" bordered>
+      <n-descriptions :column="narrow ? 1 : 2" style="margin-top: 14px" label-placement="left" size="small" bordered>
         <n-descriptions-item label="六维总和">{{ num(member.attrsSum, 2) }}</n-descriptions-item>
         <n-descriptions-item label="最后更新">{{ member.attrsUpdatedAt ? when(member.attrsUpdatedAt) : '从未上传' }}</n-descriptions-item>
       </n-descriptions>
@@ -252,7 +252,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 
     <!-- 和上次比 -->
     <n-card v-if="diff" :bordered="false" title="和上次比">
-      <n-grid :cols="3" :x-gap="14">
+      <n-grid cols="1 s:3" responsive="screen" :x-gap="14" :y-gap="10">
         <n-gi v-for="g in diff" :key="g.arm">
           <n-card size="small" :title="g.arm" embedded :bordered="false">
             <div v-for="it in g.items" :key="it.label" class="row">
@@ -274,7 +274,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         评分 = 成员实力 − 武将战力。武将战力同样只能靠截图识别，传战力面板截图即可。
       </n-alert>
-      <n-descriptions :column="5" bordered size="small">
+      <n-descriptions :column="narrow ? 1 : 5" :label-placement="narrow ? 'left' : 'top'" bordered size="small">
         <n-descriptions-item label="成员实力">{{ big(member.strength) }}</n-descriptions-item>
         <n-descriptions-item label="武将战力">{{ member.heroPower == null ? '未录入' : big(member.heroPower) }}</n-descriptions-item>
         <n-descriptions-item label="赛季评分">{{ big(member.seasonScore) }}</n-descriptions-item>
@@ -302,7 +302,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       </n-alert>
 
       <n-form label-placement="left" :label-width="110" size="small">
-        <n-grid :cols="2" :x-gap="20">
+        <n-grid cols="1 s:2" responsive="screen" :x-gap="20">
           <n-gi>
             <n-form-item label="最高集结值">
               <n-input-number v-model:value="form.maxBonus" :min="0" :step="1" placeholder="如 28.50" style="width: 100%">

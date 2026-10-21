@@ -3,7 +3,7 @@
  * 外壳：开机转圈 → 扫码登录 → 主体三选一，左边菜单钉住不跟着滚。
  * 数据只拉一次（成员名单 + 赛季 + 登录用户），各页在前端自己算。
  */
-import { ref, computed, h, provide } from 'vue'
+import { ref, computed, h, provide, watch } from 'vue'
 import { NIcon, zhCN, dateZhCN } from 'naive-ui'
 import { call, token, setToken, store, inflight, fatal } from './api'
 import { when } from './fmt'
@@ -23,6 +23,7 @@ import Users from './views/Users.vue'
 import Notice from './views/Notice.vue'
 import Board from './views/Board.vue'
 import Attendance from './views/Attendance.vue'
+import SideNav from './views/SideNav.vue'
 
 const VIEWS = {
   mine: { label: '我的信息', icon: '👤', comp: Mine },
@@ -43,6 +44,17 @@ const VIEWS = {
 }
 
 const screen = ref(token.value ? 'boot' : 'login')
+
+/**
+ * 手机适配：窄于 768 像素就把左边菜单收进抽屉、内容区留白收窄。
+ * 浏览器版要兼容所有端（手机浏览器、平板、电脑），用不了小程序的人主要在手机上打开。
+ */
+const NARROW_PX = 768
+const narrow = ref(typeof window !== 'undefined' && window.innerWidth < NARROW_PX)
+const navOpen = ref(false)
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', () => { narrow.value = window.innerWidth < NARROW_PX })
+}
 const view = ref('mine')
 const me = ref(null)
 const members = ref([])
@@ -152,7 +164,9 @@ const attrKeys = computed(() => {
   const a = me.value && me.value.alliance
   return (a && a.attrKeys) || ['infDef', 'infHp', 'cavAtk', 'cavBreak', 'arcAtk', 'arcBreak']
 })
-provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can, selfOnly })
+provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can, selfOnly, narrow })
+// 手机上点了菜单就把抽屉收起来
+watch(view, () => { navOpen.value = false })
 
 async function boot() {
   if (!token.value) {
@@ -179,7 +193,7 @@ async function boot() {
     } else {
       loginWhy.value =
         e.errCode === 'FEATURE_LOCKED'
-          ? '电脑版是开发版才有的功能，升级后再扫码'
+          ? '浏览器版管理功能是开发版才有的，升级后再扫码'
           : `上次的登录态被服务器拒了：${e.errCode || '未知'}，存在 ${store.how === 'cookie' ? 'cookie' : 'localStorage'}，已清掉`
       loginTip.value = e.message || '登录已失效，请重新扫码'
       setToken('')
@@ -246,9 +260,9 @@ const title = computed(() => VIEWS[view.value].label)
 const selfTip = computed(() => {
   const who = me.value || {}
   const free = who.alliance && who.alliance.level !== 'ultra'
-  if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：电脑版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
+  if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：浏览器版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
   if (who.role === 'admin' || who.role === 'super') return '用登录 ID 进来只能用「我的信息」「我的属性」。要用管理功能，请退出后用小程序扫码登录。'
-  return '电脑版里普通成员可以用「我的信息」「我的属性」，管理功能只有管理员能用。'
+  return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只有开发版的管理员扫码才能用。'
 })
 const ally = computed(() => (me.value && me.value.alliance) || {})
 
@@ -278,34 +292,25 @@ boot()
           />
 
           <n-layout v-else has-sider position="absolute">
-            <n-layout-sider bordered :width="212" :native-scrollbar="false" content-style="display:flex;flex-direction:column">
-              <div class="brand">
-                <n-avatar round :size="34" color="#6c5ce7">{{ (ally.name || '盟').slice(0, 1) }}</n-avatar>
-                <div>
-                  <div class="brand-n">{{ ally.name }}</div>
-                  <div class="brand-s">{{ ally.serverNo }} 区 · {{ ally.season }}</div>
-                </div>
-              </div>
-              <n-menu v-model:value="view" :options="menuOptions" :indent="18" style="flex: 1" />
-              <div class="who">
-                <n-avatar round :size="26" color="#e8e4ff" style="color:#6c5ce7">
-                  {{ (me.nickname || '管').slice(0, 1) }}
-                </n-avatar>
-                <div class="who-t">
-                  <div class="who-n">{{ me.nickname || '管理员' }}</div>
-                  <div class="who-r">{{ me.role === 'super' ? '超级管理员' : '管理员' }}</div>
-                </div>
-              </div>
+            <n-layout-sider v-if="!narrow" bordered :width="212" :native-scrollbar="false" content-style="height:100%">
+              <SideNav v-model:value="view" :ally="ally" :me="me" :options="menuOptions" />
             </n-layout-sider>
+            <!-- 手机：菜单收进抽屉，左上角 ☰ 打开 -->
+            <n-drawer v-else v-model:show="navOpen" placement="left" :width="240">
+              <SideNav v-model:value="view" :ally="ally" :me="me" :options="menuOptions" />
+            </n-drawer>
 
             <!-- 外面套一层 relative 的壳：里面那层是 absolute 定位的，
                  没有这层壳它会贴到最外层 n-layout 上，把左边侧栏盖住 -->
             <div class="right">
               <n-layout position="absolute">
-                <n-layout-header bordered position="absolute" class="top">
-                  <h3>{{ title }}</h3>
+                <n-layout-header bordered position="absolute" class="top" :class="{ narrow }">
+                  <div class="top-l">
+                    <n-button v-if="narrow" quaternary size="small" class="burger" @click="navOpen = true">☰</n-button>
+                    <h3>{{ title }}</h3>
+                  </div>
                   <n-space align="center" :size="10">
-                    <n-button size="small" secondary :loading="loading" @click="reload">刷新数据</n-button>
+                    <n-button size="small" secondary :loading="loading" @click="reload">{{ narrow ? '刷新' : '刷新数据' }}</n-button>
                     <n-popconfirm @positive-click="logout">
                       <template #trigger><n-button size="small" quaternary>退出</n-button></template>
                       退出后需要重新扫码登录
@@ -317,7 +322,7 @@ boot()
                   position="absolute"
                   style="top: 64px"
                   :native-scrollbar="false"
-                  content-style="padding: 20px 24px 40px; min-height: 100%"
+                  :content-style="narrow ? 'padding: 12px 10px 32px; min-height: 100%' : 'padding: 20px 24px 40px; min-height: 100%'"
                 >
                   <n-alert v-if="selfOnly" type="info" :bordered="false" style="margin-bottom: 16px">{{ selfTip }}</n-alert>
                   <n-spin :show="loading && !members.length && !selfOnly">
@@ -332,7 +337,7 @@ boot()
           <n-modal
             v-model:show="noticeOpen"
             preset="card"
-            :style="{ width: '560px' }"
+            :style="{ width: narrow ? '92vw' : '560px' }"
             :mask-closable="false"
             :title="notices[noticeIndex] ? notices[noticeIndex].title : '同盟公告'"
             @close="closeNotice"
@@ -411,28 +416,6 @@ boot()
 }
 .boot-t { color: #fff; opacity: 0.9; font-size: 14px; }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 64px;
-  box-sizing: border-box;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--n-border-color, #efeff5);
-}
-.brand-n { font-size: 15px; font-weight: 600; line-height: 1.2; }
-.brand-s { font-size: 12px; color: #8a9099; margin-top: 2px; }
-
-.who {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--n-border-color, #efeff5);
-}
-.who-n { font-size: 13px; font-weight: 600; line-height: 1.2; }
-.who-r { font-size: 11px; color: #8a9099; margin-top: 2px; }
-
 .top {
   display: flex;
   align-items: center;
@@ -442,7 +425,11 @@ boot()
   height: 64px;
   background: #fff;
 }
-.top h3 { margin: 0; font-size: 18px; font-weight: 600; }
+.top h3 { margin: 0; font-size: 18px; font-weight: 600; white-space: nowrap; }
+.top-l { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.top.narrow { padding: 0 10px; }
+.top.narrow h3 { font-size: 16px; }
+.burger { font-size: 18px; }
 /* 侧栏右边剩下的地方，给里面的 absolute 布局当定位参照 */
 .right { position: relative; flex: 1; min-width: 0; }
 /* 内容区单独一层 absolute，从顶栏下面开始；顶栏因此滚不动 */

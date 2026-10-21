@@ -440,4 +440,16 @@ const signed = (v, digits = 2) => (v == null ? '—' : (v > 0 ? '+' : '') + num(
 .g-me { margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: #6c5ce7; color: #fff; font-size: 11px; }
 .g-d { font-size: 14px; font-weight: 700; color: #16a34a; font-variant-numeric: tabular-nums; }
 .g-p { width: 64px; text-align: right; font-size: 12px; color: #8a9099; font-variant-numeric: tabular-nums; }
+
+/* 手机：并排的两张卡上下排，顶部数字换行，整页跟着外层滚（不再自己定高） */
+@media (max-width: 767px) {
+  .page { height: auto; min-height: 0; overflow: visible; }
+  .top { flex-wrap: wrap; gap: 14px; }
+  .rank { flex-basis: 100%; }
+  .sum, .jump { text-align: left; }
+  .cols { flex-direction: column; }
+  .nb { flex-direction: column; }
+  .chart { height: 200px; }
+  .tip { width: 190px; }
+}
 </style>

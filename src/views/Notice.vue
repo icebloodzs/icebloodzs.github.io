@@ -103,7 +103,7 @@ const leftText = (r) =>
   <n-space vertical :size="16">
     <n-card title="发布公告" :bordered="false">
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        只要没撤销、没过期，成员每天第一次打开小程序或电脑版都会弹一次，当天点过「知道了」就不再弹，首页那张公告卡随时能再点开。
+        只要没撤销、没过期，成员每天第一次打开小程序或浏览器版都会弹一次，当天点过「知道了」就不再弹，首页那张公告卡随时能再点开。
         到了展示时长会自己停止显示，不用你记着来撤。同时最多展示 {{ max }} 条（现在 {{ activeCount }} 条）。
       </n-alert>
 

@@ -120,8 +120,8 @@ watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() }
   <div class="login">
     <n-card class="box">
       <img class="logo" src="/logo.png" alt="三冰小帮手" />
-      <h1>同盟管理 · 电脑版</h1>
-      <div class="sub">宽屏看统计，和小程序同一份数据</div>
+      <h1>同盟管理 · 浏览器版</h1>
+      <div class="sub">手机、电脑、平板都能用，和小程序同一份数据</div>
 
       <n-tabs v-model:value="mode" type="segment" size="small" style="margin-bottom: 18px">
         <n-tab name="scan">小程序扫码</n-tab>
@@ -139,9 +139,9 @@ watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() }
         <n-button type="primary" block size="large" :loading="keyBusy" style="margin-top: 12px" @click="keyLogin">登录</n-button>
         <div v-if="keyMsg" class="key-err">{{ keyMsg }}</div>
         <div class="hint">
-          登录 ID 在小程序<b>首页 →「电脑版」</b>里，点「复制」。<br />
-          用 ID 登录能看、能改自己的数据（我的信息 / 我的属性）；<br />
-          管理功能请用小程序扫码登录。
+          登录 ID 在小程序<b>首页 →「浏览器版」</b>里，点「复制」。<br />
+          用 ID 登录只有「我的信息」「我的属性」。<br />
+          开发版的管理员要用管理功能，请改用小程序扫码。
         </div>
       </template>
 
@@ -164,7 +164,7 @@ watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() }
           <div class="st">{{ t }}</div>
         </div>
       </div>
-      <div class="hint">小程序首页或「管理」页 →「电脑版」→ 扫码 · 七天内不用再扫</div>
+      <div class="hint">小程序首页或「管理」页 →「浏览器版」→ 扫码 · 七天内不用再扫</div>
       </template>
 
       <n-alert v-if="tip" :type="retry ? 'warning' : 'info'" :bordered="false" style="margin-top: 14px">
@@ -189,7 +189,8 @@ watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() }
   background: linear-gradient(140deg, #7b6ef0 0%, #6c5ce7 55%, #5a4bd1 100%);
 }
 .box {
-  width: 372px;
+  /* 手机上留点边，别贴满屏 */
+  width: min(372px, calc(100vw - 32px));
   border-radius: 16px;
   box-shadow: 0 24px 60px rgba(40, 24, 100, 0.28);
 }

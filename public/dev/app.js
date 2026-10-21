@@ -966,7 +966,7 @@ async function renderPlans() {
     <div class="card">
       <h3>版本方案</h3>
       <p class="hint">改价钱或调整哪档包含什么，改云函数的 <code>lib/membership.js</code>，这里、兑换码的下拉、小程序「管理 → 版本」页都会跟着变。
-        个别盟要在版本之外多开某项（比如免费版的盟单独开电脑版），去「同盟」那页点「附加功能」。</p>
+        个别盟要在版本之外多开某项（比如免费版的盟单独开浏览器版管理），去「同盟」那页点「附加功能」。</p>
     </div>
     <div class="grid ${meta.levels.length >= 4 ? 'g4' : meta.levels.length === 3 ? 'g3' : 'g2'}">${cards}</div>`
 }
