@@ -23,8 +23,26 @@ let timer = null
 let dieAt = 0
 
 function stop() {
-  if (timer) clearInterval(timer)
+  if (timer) clearTimeout(timer)
   timer = null
+}
+
+/**
+ * 轮询间隔：刚出码的半分钟里 1.5 秒问一次（扫得快的人不用等），之后放慢到 3 秒；
+ * 网页切到后台（看不见）时只 10 秒问一次。每问一次都是一次云函数调用，开着不管的登录页最费额度。
+ */
+let bornAt = 0
+/** 正在等的那张票：换了新码之后，旧码那条还在路上的轮询回来就不再续了 */
+let liveTicket = ''
+function nextDelay() {
+  if (typeof document !== 'undefined' && document.hidden) return 10000
+  return Date.now() - bornAt < 30000 ? 1500 : 3000
+}
+function schedule(ticket) {
+  timer = setTimeout(async () => {
+    await poll(ticket)
+    if (timer && ticket === liveTicket) schedule(ticket)
+  }, nextDelay())
 }
 
 async function newTicket() {
@@ -36,7 +54,10 @@ async function newTicket() {
     qr.value = await QRCode.toDataURL(res.ticket, { width: 440, margin: 1 })
     state.value = 'ready'
     dieAt = Date.now() + res.expiresIn * 1000
-    timer = setInterval(() => poll(res.ticket), 1500)
+    bornAt = Date.now()
+    liveTicket = res.ticket
+    timer = -1
+    schedule(res.ticket)
   } catch (e) {
     state.value = 'error'
     msg.value = e.message

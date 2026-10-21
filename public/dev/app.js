@@ -226,6 +226,12 @@ async function newTicket() {
   }
 }
 
+/** 前 30 秒 1.5 秒问一次，之后 3 秒；页面在后台时 10 秒一次（每问一次都是一次云函数调用） */
+function pollDelay(deadline) {
+  if (document.hidden) return 10000
+  return deadline - Date.now() > 150 * 1000 ? 1500 : 3000
+}
+
 function poll(ticket, deadline) {
   pollTimer = setTimeout(async () => {
     if (Date.now() > deadline) {
@@ -248,7 +254,7 @@ function poll(ticket, deadline) {
       // 轮询失败不打断，下一次接着问
     }
     poll(ticket, deadline)
-  }, 1500)
+  }, pollDelay(deadline))
 }
 
 function logout() {
