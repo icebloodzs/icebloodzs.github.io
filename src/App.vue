@@ -197,7 +197,7 @@ async function boot() {
         e.errCode === 'FEATURE_LOCKED'
           ? '浏览器版管理功能是开发版才有的，升级后再扫码'
           : `上次的登录态被服务器拒了：${e.errCode || '未知'}，存在 ${store.how === 'cookie' ? 'cookie' : 'localStorage'}，已清掉`
-      loginTip.value = e.message || '登录已失效，请重新扫码'
+      loginTip.value = e.message || '登录已失效，请重新登录'
       setToken('')
       netError.value = false
     }
@@ -314,7 +314,7 @@ boot()
                     <n-button size="small" secondary :loading="loading" @click="reload">{{ narrow ? '刷新' : '刷新数据' }}</n-button>
                     <n-popconfirm @positive-click="logout">
                       <template #trigger><n-button size="small" quaternary>退出</n-button></template>
-                      退出后需要重新扫码登录
+                      退出后需要重新登录
                     </n-popconfirm>
                   </n-space>
                 </n-layout-header>
