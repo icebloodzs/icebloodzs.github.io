@@ -105,7 +105,8 @@ const STEPS = [
   { side: 1280, quality: 0.75 },
   { side: 1000, quality: 0.65 }
 ]
-const MAX_BASE64 = 3.2 * 1024 * 1024
+// 再大也没必要：分块传，块越多越慢；1.5MB 足够识别清楚
+const MAX_BASE64 = 1.5 * 1024 * 1024
 
 function compress(file) {
   return new Promise((resolve, reject) => {
@@ -136,13 +137,28 @@ function compress(file) {
   })
 }
 
+/**
+ * 图片切成小块逐块传：云开发 HTTP 网关一次请求只收 100KB 左右，一张截图压完常有几百 KB，
+ * 整张发会被网关直接 413 掉。传完再让 uploadShot 带着 uploadId 去拼。
+ */
+const CHUNK = 60 * 1024
+async function sendChunks(dataUrl) {
+  const raw = dataUrl.replace(/^data:[^,]*,/, '')
+  const uploadId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+  const total = Math.ceil(raw.length / CHUNK)
+  for (let i = 0; i < total; i += 1) {
+    await call('web.uploadChunk', { uploadId, index: i, data: raw.slice(i * CHUNK, (i + 1) * CHUNK) })
+  }
+  return { uploadId, total }
+}
+
 async function upload({ file }, kind) {
   if (busy.value) return
   busy.value = kind
   before.value = kind === 'attrs' ? member.value : null
   try {
     const base64 = await compress(file.file)
-    const res = await call('web.uploadShot', { kind, base64, ext: 'jpg' })
+    const res = await call('web.uploadShot', { kind, ...(await sendChunks(base64)), ext: 'jpg' })
     await refreshMe()
     await reload()
     const done = kind === 'attrs'

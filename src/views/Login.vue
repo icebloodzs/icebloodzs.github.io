@@ -1,7 +1,10 @@
 <script setup>
 /**
- * 扫码登录：这边出票据画二维码，管理员用小程序扫完确认，这边轮询拿 token。
- * 个人主体没有开放平台网站应用，做不了「微信扫一扫登网页」，所以反着来。
+ * 两种登法：
+ *   扫码 —— 这边出票据画二维码，用小程序扫完确认，这边轮询拿 token。
+ *            个人主体没有开放平台网站应用，做不了「微信扫一扫登网页」，所以反着来。
+ *   登录 ID —— 给用不了小程序扫码的人（手机浏览器、平板）：ID 在小程序首页复制，
+ *            进来只有「我的信息」「我的属性」。
  */
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { call } from '../api'
@@ -58,9 +61,38 @@ async function poll(ticket) {
   } catch (e) { /* 轮询失败就等下一次 */ }
 }
 
+const mode = ref('scan')
+const keyText = ref('')
+const keyBusy = ref(false)
+const keyMsg = ref('')
+
+/** 切到登录 ID 就别再轮询了，切回来重新出码 */
+watch(mode, (m) => {
+  if (m === 'key') stop()
+  else newTicket()
+})
+
+async function keyLogin() {
+  const key = keyText.value.trim()
+  if (!key) {
+    keyMsg.value = '先把登录 ID 粘进来'
+    return
+  }
+  keyBusy.value = true
+  keyMsg.value = ''
+  try {
+    const res = await call('web.keyLogin', { key })
+    emit('done', res.token)
+  } catch (e) {
+    keyMsg.value = e.message
+  } finally {
+    keyBusy.value = false
+  }
+}
+
 onMounted(() => { if (!props.retry) newTicket() })
 onUnmounted(stop)
-watch(() => props.retry, (v) => { if (!v) newTicket() })
+watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() })
 </script>
 
 <template>
@@ -70,6 +102,29 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
       <h1>同盟管理 · 电脑版</h1>
       <div class="sub">宽屏看统计，和小程序同一份数据</div>
 
+      <n-tabs v-model:value="mode" type="segment" size="small" style="margin-bottom: 18px">
+        <n-tab name="scan">小程序扫码</n-tab>
+        <n-tab name="key">登录 ID</n-tab>
+      </n-tabs>
+
+      <template v-if="mode === 'key'">
+        <n-input
+          v-model:value="keyText"
+          size="large"
+          placeholder="粘贴登录 ID，如 ABCD EFGH JKLM"
+          clearable
+          @keyup.enter="keyLogin"
+        />
+        <n-button type="primary" block size="large" :loading="keyBusy" style="margin-top: 12px" @click="keyLogin">登录</n-button>
+        <div v-if="keyMsg" class="key-err">{{ keyMsg }}</div>
+        <div class="hint">
+          登录 ID 在小程序<b>首页 →「电脑版」</b>里，点「复制」。<br />
+          用 ID 登录能看、能改自己的数据（我的信息 / 我的属性）；<br />
+          管理功能请用小程序扫码登录。
+        </div>
+      </template>
+
+      <template v-else>
       <div class="qr">
         <n-spin v-if="state === 'loading'" size="large" />
         <img v-else-if="state === 'ready'" :src="qr" alt="登录二维码" />
@@ -88,14 +143,15 @@ watch(() => props.retry, (v) => { if (!v) newTicket() })
           <div class="st">{{ t }}</div>
         </div>
       </div>
-      <div class="hint">小程序里走「管理 → 登录电脑版」· 登录后七天内不用再扫</div>
+      <div class="hint">小程序首页或「管理」页 →「电脑版」→ 扫码 · 七天内不用再扫</div>
+      </template>
 
       <n-alert v-if="tip" :type="retry ? 'warning' : 'info'" :bordered="false" style="margin-top: 14px">
         {{ tip }}
         <div v-if="why" class="why">{{ why }}</div>
       </n-alert>
       <div class="foot">
-        <n-button v-if="state === 'ready'" tertiary round size="small" class="rf" @click="newTicket">
+        <n-button v-if="mode === 'scan' && state === 'ready'" tertiary round size="small" class="rf" @click="newTicket">
           <span class="rf-i">↻</span> 换一个二维码
         </n-button>
       </div>
@@ -184,5 +240,6 @@ h1 { margin: 0 0 4px; font-size: 16px; font-weight: 600; text-align: center; col
 .foot { margin-top: 16px; text-align: center; }
 .rf-i { display: inline-block; margin-right: 2px; font-size: 13px; }
 .rf:hover .rf-i { transform: rotate(180deg); transition: transform 0.35s ease; }
+.key-err { margin-top: 10px; color: #d03050; font-size: 13px; text-align: center; }
 .why { margin-top: 6px; font-size: 11px; opacity: 0.75; word-break: break-all; }
 </style>

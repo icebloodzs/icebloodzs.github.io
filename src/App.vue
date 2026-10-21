@@ -95,7 +95,19 @@ const can = (key) => {
 /** 菜单项对应的付费功能：等级不够（或者老客户单独没开）的就不摆出来 */
 const VIEW_FEATURE = { attendance: 'attendance', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice' }
 const shown = (k) => !VIEW_FEATURE[k] || can(VIEW_FEATURE[k])
-const menuOptions = computed(() => [
+/**
+ * 电脑版能用到什么程度（服务端在 whoami 里给，见云函数 lib/webAccess.js）：
+ * full = 开发版的管理员扫码进来，全部菜单；self = 其余情况，只有「我的」两页。
+ */
+const selfOnly = computed(() => !me.value || me.value.webScope !== 'full')
+const menuOptions = computed(() => selfOnly.value
+  ? [{
+      type: 'group',
+      label: '我的',
+      key: 'g0',
+      children: ['mine', 'myattrs'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
+    }]
+  : [
   {
     type: 'group',
     label: '我的',
@@ -140,7 +152,7 @@ const attrKeys = computed(() => {
   const a = me.value && me.value.alliance
   return (a && a.attrKeys) || ['infDef', 'infHp', 'cavAtk', 'cavBreak', 'arcAtk', 'arcBreak']
 })
-provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can })
+provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can, selfOnly })
 
 async function boot() {
   if (!token.value) {
@@ -151,8 +163,8 @@ async function boot() {
   try {
     const who = await call('identity.whoami')
     if (!who.alliance || !who.alliance.active) throw fatal('这个账号还没加入已激活的同盟')
-    if (who.role !== 'admin' && who.role !== 'super') throw fatal('只有管理员能用电脑版')
     me.value = who
+    if (who.webScope !== 'full' && !['mine', 'myattrs'].includes(view.value)) view.value = 'mine'
     screen.value = 'app'
     await reload()
     refreshNotices()
@@ -180,6 +192,13 @@ async function boot() {
 async function reload() {
   loading.value = true
   try {
+    // 只有「我的」两页时用不着全盟名单（服务端也不让拉），只要赛季配置
+    if (selfOnly.value) {
+      const seasonRes = await call('season.list', {})
+      season.value = seasonRes.season
+      members.value = []
+      return
+    }
     const [list, seasonRes, users] = await Promise.all([
       call('admin.memberList', { roster: 'in', sort: 'powerDesc', page: 1, pageSize: 200 }),
       call('season.list', {}),
@@ -223,6 +242,14 @@ async function logout() {
 }
 
 const title = computed(() => VIEWS[view.value].label)
+/** 只有「我的」两页时，告诉人为什么、怎么才能用全部 */
+const selfTip = computed(() => {
+  const who = me.value || {}
+  const free = who.alliance && who.alliance.level !== 'ultra'
+  if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：电脑版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
+  if (who.role === 'admin' || who.role === 'super') return '用登录 ID 进来只能用「我的信息」「我的属性」。要用管理功能，请退出后用小程序扫码登录。'
+  return '电脑版里普通成员可以用「我的信息」「我的属性」，管理功能只有管理员能用。'
+})
 const ally = computed(() => (me.value && me.value.alliance) || {})
 
 boot()
@@ -292,7 +319,8 @@ boot()
                   :native-scrollbar="false"
                   content-style="padding: 20px 24px 40px; min-height: 100%"
                 >
-                  <n-spin :show="loading && !members.length">
+                  <n-alert v-if="selfOnly" type="info" :bordered="false" style="margin-bottom: 16px">{{ selfTip }}</n-alert>
+                  <n-spin :show="loading && !members.length && !selfOnly">
                     <component :is="VIEWS[view].comp" />
                   </n-spin>
                 </n-layout>
