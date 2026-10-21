@@ -138,9 +138,7 @@ watch(() => props.retry, (v) => { if (!v && mode.value === 'scan') newTicket() }
         <n-button type="primary" block size="large" :loading="keyBusy" style="margin-top: 12px" @click="keyLogin">登录</n-button>
         <div v-if="keyMsg" class="key-err">{{ keyMsg }}</div>
         <div class="hint">
-          登录 ID 在小程序<b>首页 →「浏览器版」</b>里，点「复制」。<br />
-          能用的功能和扫码登录一样：开发版的管理员是全部管理功能，<br />
-          其余是「我的信息」「我的属性」。
+          登录 ID 在小程序<b>首页 →「浏览器版」</b>里，点「复制」。
         </div>
       </template>
 
