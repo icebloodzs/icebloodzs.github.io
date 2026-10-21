@@ -14,7 +14,7 @@ import { big, when, sorter } from '../fmt'
 import { buildStyledExcel } from '../xlsx'
 import { readWorkbook } from '../sheet'
 
-const { me } = inject('app')
+const { me, narrow = ref(false) } = inject('app')
 const message = useMessage()
 const dialog = useDialog()
 
@@ -46,6 +46,9 @@ const labels = ref([])
 const range = ref(null)
 const showLeft = ref(false)
 const showMerit = ref(true)
+/** 手机上筛选默认收起；用了筛选按钮上标一下，免得收起来后忘了还开着 */
+const filtersOpen = ref(false)
+const filterActive = computed(() => status.value !== 'all' || labels.value.length > 0 || Boolean(range.value) || showLeft.value)
 
 const STATUS = [
   { label: '全部', value: 'all' },
@@ -212,6 +215,13 @@ function dayCell(col, row) {
 /** 每天一列的宽度：日期 / 描述 / 出勤率挤在一行，格子里「12.60亿 摸鱼」也是一行 */
 const DAY_W = 136
 const FIXED_W = { idx: 46, name: 112, power: 74, strength: 74, rate: 66, days: 74, total: 80 }
+/*
+ * 手机：只留 序号 / 名字 / 出勤率 三列固定在左边（战力实力总功勋点名字看不到也不要紧），
+ * 每天一列收窄，剩下的横着滑。
+ */
+const DAY_W_NARROW = 108
+const FIXED_W_NARROW = { idx: 34, name: 86, rate: 58 }
+const dayW = computed(() => (narrow.value ? DAY_W_NARROW : DAY_W))
 
 const columns = computed(() => {
   const fixed = [
@@ -244,12 +254,12 @@ const columns = computed(() => {
   ]
   const days = shownCols.value.map((c) => ({
     key: c.id,
-    width: DAY_W,
+    width: dayW.value,
     align: 'center',
     sorter: sorter((r) => (r.cells[c.id] ? (c.kind === 'manual' ? Number(r.cells[c.id].ok) : r.cells[c.id].merit) : null)),
     title: () => h(NTooltip, { placement: 'top' }, {
       // 表头是渲染函数现造的，scoped 样式挂不上，直接写内联
-      trigger: () => h('span', { style: 'white-space:nowrap;font-weight:600' }, [
+      trigger: () => h('span', { style: `white-space:nowrap;font-weight:600;${narrow.value ? 'font-size:12px' : ''}` }, [
         h('span', mdShort(c.at)),
         h('span', { style: 'color:#8b4513;margin-left:5px' }, c.label || '—'),
         h('span', { style: 'color:#1f3864;font-size:12px;font-weight:400;margin-left:5px' }, pct(c.rate)),
@@ -265,9 +275,20 @@ const columns = computed(() => {
     }),
     render: (r) => dayCell(c, r)
   }))
-  return fixed.concat(days)
+  if (!narrow.value) return fixed.concat(days)
+  const keep = fixed
+    .filter((c) => FIXED_W_NARROW[c.key === 'viewRate' ? 'rate' : c.key])
+    .map((c) => ({
+      ...c,
+      width: FIXED_W_NARROW[c.key === 'viewRate' ? 'rate' : c.key],
+      fixed: 'left',
+      ...(c.key === 'idx' ? { title: '#' } : c.key === 'viewRate' ? { title: '出勤' } : c.key === 'name' ? { title: '成员' } : {})
+    }))
+  return keep.concat(days)
 })
-const scrollX = computed(() => Object.values(FIXED_W).reduce((a, b) => a + b, 0) + shownCols.value.length * DAY_W)
+const scrollX = computed(() => (narrow.value
+  ? Object.values(FIXED_W_NARROW).reduce((a, b) => a + b, 0)
+  : Object.values(FIXED_W).reduce((a, b) => a + b, 0)) + shownCols.value.length * dayW.value)
 
 // ---------------- 人员变动 ----------------
 
@@ -650,15 +671,23 @@ function help() {
 
     <n-card :bordered="false">
       <div class="att-filters">
-        <n-input v-model:value="keyword" placeholder="搜成员名（含曾用名）" clearable style="width: 190px" />
-        <n-select v-model:value="status" :options="STATUS" style="width: 140px" />
-        <n-input-number v-if="status === 'below'" v-model:value="rateBelow" :min="1" :max="100" style="width: 110px">
-          <template #suffix>%</template>
-        </n-input-number>
-        <n-select v-model:value="labels" :options="labelOptions" multiple clearable placeholder="全部描述" style="width: 200px" />
-        <n-date-picker v-model:value="range" type="daterange" clearable start-placeholder="开始日期" end-placeholder="结束日期" style="width: 250px" />
-        <n-checkbox v-model:checked="showLeft">含已离队</n-checkbox>
-        <n-checkbox v-model:checked="showMerit">显示功勋数</n-checkbox>
+        <div class="att-search">
+          <n-input v-model:value="keyword" placeholder="搜成员名（含曾用名）" clearable :style="narrow ? '' : 'width: 190px'" />
+          <!-- 手机上其余筛选默认收起，点这个展开 -->
+          <n-button v-if="narrow" :type="filterActive ? 'primary' : 'default'" secondary @click="filtersOpen = !filtersOpen">
+            筛选{{ filterActive ? '·已用' : '' }} {{ filtersOpen ? '▴' : '▾' }}
+          </n-button>
+        </div>
+        <template v-if="!narrow || filtersOpen">
+          <n-select v-model:value="status" :options="STATUS" style="width: 140px" />
+          <n-input-number v-if="status === 'below'" v-model:value="rateBelow" :min="1" :max="100" style="width: 110px">
+            <template #suffix>%</template>
+          </n-input-number>
+          <n-select v-model:value="labels" :options="labelOptions" multiple clearable placeholder="全部描述" style="width: 200px" />
+          <n-date-picker v-model:value="range" type="daterange" clearable start-placeholder="开始日期" end-placeholder="结束日期" style="width: 250px" />
+          <n-checkbox v-model:checked="showLeft">含已离队</n-checkbox>
+          <n-checkbox v-model:checked="showMerit">显示功勋数</n-checkbox>
+        </template>
         <span class="att-count">{{ rows.length }} 人<template v-if="filtered"> · 筛出 {{ shownCols.length }} 天，出勤率按这几天算</template></span>
       </div>
 
@@ -670,7 +699,7 @@ function help() {
         :data="rows"
         :row-key="(r) => r.pid"
         :scroll-x="scrollX"
-        :max-height="'calc(100vh - 420px)'"
+        :max-height="narrow ? '72vh' : 'calc(100vh - 420px)'"
         class="att-table"
         :bordered="false"
         size="small"
@@ -679,7 +708,7 @@ function help() {
     </n-card>
 
     <!-- 新增一条 -->
-    <n-modal v-model:show="addOpen" preset="card" title="新增考勤" :style="{ width: add && add.type === 'manual' ? '720px' : '600px' }">
+    <n-modal v-model:show="addOpen" preset="card" title="新增考勤" :style="{ width: narrow ? '96vw' : add && add.type === 'manual' ? '720px' : '600px' }">
       <n-form v-if="add" label-placement="left" label-width="80">
         <n-form-item label="方式">
           <n-radio-group v-model:value="add.type">
@@ -769,7 +798,7 @@ function help() {
     </n-modal>
 
     <!-- 整本导入 -->
-    <n-modal v-model:show="bookOpen" preset="card" title="导入源数据表" :style="{ width: '820px' }">
+    <n-modal v-model:show="bookOpen" preset="card" title="导入源数据表" :style="{ width: narrow ? '96vw' : '820px' }">
       <n-alert type="info" :bordered="false" style="margin-bottom: 12px">
         以前出勤表脚本用的那本「源数据表」：一个工作表一天，表名写成「10月19号(攻城)」「10月19号(隐藏)」，
         日期、描述、隐藏会按表名自动填好，核对一下再导。已经导过的表会跳过。
@@ -807,7 +836,7 @@ function help() {
     </n-modal>
 
     <!-- 记录管理 -->
-    <n-drawer v-model:show="recOpen" :width="720">
+    <n-drawer v-model:show="recOpen" :width="narrow ? '100%' : 720">
       <n-drawer-content title="考勤记录" closable>
         <n-alert type="default" :bordered="false" style="margin-bottom: 12px">
           按时间新的在上。改时间、开关隐藏、删记录之后出勤表自动重算；名单本身导错了就删掉重导。
@@ -816,7 +845,7 @@ function help() {
       </n-drawer-content>
     </n-drawer>
 
-    <n-modal :show="Boolean(editing)" preset="card" title="改这条记录" :style="{ width: '420px' }" @update:show="(v) => { if (!v) editing = null }">
+    <n-modal :show="Boolean(editing)" preset="card" title="改这条记录" :style="{ width: narrow ? '92vw' : '420px' }" @update:show="(v) => { if (!v) editing = null }">
       <n-form v-if="editing" label-placement="left" label-width="60">
         <n-form-item label="时间"><n-date-picker v-model:value="editing.at" type="datetime" /></n-form-item>
         <n-form-item label="描述"><n-input v-model:value="editing.label" maxlength="20" /></n-form-item>
@@ -829,7 +858,7 @@ function help() {
       </template>
     </n-modal>
 
-    <n-modal v-model:show="thrOpen" preset="card" title="达标线" :style="{ width: '420px' }">
+    <n-modal v-model:show="thrOpen" preset="card" title="达标线" :style="{ width: narrow ? '92vw' : '420px' }">
       <n-space vertical>
         <span class="att-hint">当天功勋达到多少算出勤。以前的出勤表是 50 万。</span>
         <n-input-number v-model:value="thrValue" :min="1" :step="100000" style="width: 100%" />
@@ -848,6 +877,17 @@ function help() {
 <style scoped>
 .att-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
 .att-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-top: 16px; }
+/* 手机：统计三个一行，筛选项各占一整行，按钮换行排 */
+@media (max-width: 767px) {
+  .att-stats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .att-stat { padding: 8px 10px; }
+  .att-stat b { font-size: 16px; }
+  .att-filters > * { width: 100% !important; }
+  .att-filters > .n-checkbox { width: auto !important; }
+  .att-search { display: flex; gap: 8px; }
+  .att-search > :first-child { flex: 1; }
+  .att-top { flex-direction: column; align-items: stretch; }
+}
 .att-stat { background: #f7f6ff; border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; }
 .att-stat span { font-size: 12px; color: #6b7280; }
 .att-stat b { font-size: 20px; color: #1f2937; }
