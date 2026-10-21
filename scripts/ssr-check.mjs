@@ -103,7 +103,8 @@ for (const [v, want, deny] of [['Bonus', ['兵力（宫4 / 宫3）'], []], ['Min
 // （n-space 给每个子项包一层高度自适应的 div，表格会变成 0 高，整张表看不见）
 for (const v of ['Roster', 'Bonus', 'Attrs', 'Missing', 'Season', 'Users']) {
   const src = fs.readFileSync(`src/views/${v}.vue`, 'utf8')
-  const i = src.indexOf('<div class="page">')
+  // 外壳上可以再带别的属性（比如手机适配的 :class），认前缀就行
+  const i = src.indexOf('<div class="page"')
   const j = src.indexOf('<TableCard')
   if (i < 0 || j < 0) { bad++; console.log(`  !!   ${v}.vue 没有 .page 外壳`); continue }
   const span = src.slice(i, j)
