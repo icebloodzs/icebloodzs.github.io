@@ -11,3 +11,16 @@ body {
  */
 html.narrow { --page-h: auto; }
 html.narrow .page { min-height: 0 !important; }
+
+/*
+ * iPhone 上输入框字号小于 16px 时，一点进去 Safari 就把整页放大、而且不缩回来，
+ * 之后整页只能左右拖着看。手机上输入框一律 16px。
+ */
+html.narrow input,
+html.narrow textarea,
+html.narrow select,
+html.narrow .n-input__input-el,
+html.narrow .n-input__textarea-el,
+html.narrow .n-base-selection-label,
+html.narrow .n-base-selection-input,
+html.narrow .n-base-selection-tags { font-size: 16px !important; }

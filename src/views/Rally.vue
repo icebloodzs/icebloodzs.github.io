@@ -204,6 +204,11 @@ table.plan { border-collapse: collapse; font-size: 12px; min-width: 212px; }
 table.plan th { color: #fff; padding: 9px 12px; border: 1px solid #e9ebee; }
 table.plan td { border: 1px solid #e9ebee; padding: 7px 12px; text-align: center; white-space: nowrap; }
 table.plan td.nm { text-align: left; min-width: 112px; }
+/* 手机：各组上下排、每组撑满一行，不用左右滑 */
+@media (max-width: 767px) {
+  .cols { flex-direction: column; gap: 14px; }
+  table.plan { width: 100%; }
+}
 table.plan td.nu { text-align: right; min-width: 62px; color: #4b5563; }
 table.plan td.t { color: #fff; font-weight: 700; text-align: left; }
 table.plan td.l { color: #8a6d3b; font-size: 11px; text-align: left; }

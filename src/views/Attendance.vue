@@ -212,6 +212,25 @@ function dayCell(col, row) {
   return h(NDropdown, { trigger: 'click', options: tagMenu(col, row), onSelect: (k) => onTag(col, row, k) }, () => h('span', [withTip]))
 }
 
+/**
+ * 手机上的一天：一个小方块，上面日期 + 描述，下面功勋（或 出勤 / 缺勤 / 标签），绿达标、红没达标、灰不在队。
+ * 点一下跟电脑上点格子一样：功勋那几天标标签，手动记的那几天改出勤。
+ */
+function dayChip(col, row) {
+  const cell = row.cells[col.id]
+  const head = h('div', { class: 'chip-h' }, [mdShort(col.at), h('span', { class: 'chip-l' }, col.label || '')])
+  if (!cell) return h('div', { class: 'chip chip-blank' }, [head, h('div', { class: 'chip-v' }, '—')])
+  const value = cell.manual ? (cell.ok ? '出勤' : '缺勤') : cell.tag || (showMerit.value ? big(cell.merit) : cell.ok ? '✓' : '✗')
+  const body = h('div', { class: ['chip', cell.ok ? 'chip-ok' : 'chip-no'] }, [head, h('div', { class: 'chip-v' }, value)])
+  if (!isCurrent.value) return body
+  if (cell.manual) {
+    const options = [{ label: cell.ok ? '改成缺勤' : '改成出勤', key: cell.ok ? 'no' : 'yes' }]
+    return h(NDropdown, { trigger: 'click', options, onSelect: (k) => saveMark(col, row, k === 'yes') }, () => body)
+  }
+  const options = [{ label: `当天功勋 ${Number(cell.merit).toLocaleString('zh-CN')}`, key: '__info', disabled: true }, { type: 'divider', key: 'd0' }].concat(tagMenu(col, row))
+  return h(NDropdown, { trigger: 'click', options, onSelect: (k) => onTag(col, row, k) }, () => body)
+}
+
 /** 每天一列的宽度：日期 / 描述 / 出勤率挤在一行，格子里「12.60亿 摸鱼」也是一行 */
 const DAY_W = 136
 const FIXED_W = { idx: 46, name: 112, power: 74, strength: 74, rate: 66, days: 74, total: 80 }
@@ -692,6 +711,24 @@ function help() {
       </div>
 
       <n-empty v-if="data && !data.records.length" description="还没有考勤记录。点「新增考勤」导一份名单，或者把以前脚本用的源数据表整本导进来" style="padding: 60px 0" />
+      <!-- 手机：一人一张卡片，每天一个小方块，不用左右滑 -->
+      <div v-else-if="narrow" class="att-cards">
+        <n-spin :show="loading">
+          <div v-for="(r, i) in rows" :key="r.pid" class="att-card">
+            <div class="att-card-h">
+              <span class="att-idx">{{ i + 1 }}</span>
+              <b class="att-nm" :style="r.inRoster ? '' : 'color:#9ca3af'">{{ r.name }}<span v-if="!r.inRoster" class="att-left">离队</span></b>
+              <b :style="`color:${r.viewRate === 1 ? '#16a34a' : r.viewRate < 0.6 ? '#dc2626' : '#374151'}`">{{ pct(r.viewRate) }}</b>
+              <span class="att-days">{{ r.viewDays }}/{{ shownCols.length }}</span>
+            </div>
+            <div v-if="r.formerNames.length" class="att-former">曾用 {{ r.formerNames.join('、') }}</div>
+            <div class="chips">
+              <component :is="() => dayChip(c, r)" v-for="c in shownCols" :key="c.id" />
+            </div>
+          </div>
+          <n-empty v-if="!rows.length" description="没有符合的成员" style="padding: 30px 0" />
+        </n-spin>
+      </div>
       <n-data-table
         v-else
         :loading="loading"
@@ -877,6 +914,23 @@ function help() {
 <style scoped>
 .att-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
 .att-stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-top: 16px; }
+/* 手机卡片 */
+.att-card { padding: 10px 0; border-top: 1px solid #f0f0f5; }
+.att-card-h { display: flex; align-items: baseline; gap: 8px; }
+.att-idx { width: 22px; flex: none; text-align: right; font-size: 12px; color: #9aa0a6; }
+.att-nm { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-left { margin-left: 6px; font-size: 11px; font-weight: 400; color: #9ca3af; }
+.att-days { font-size: 12px; color: #8a9099; }
+.att-former { margin: 2px 0 0 30px; font-size: 11px; color: #9ca3af; }
+.chips { margin: 8px 0 0 30px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+:deep(.chip) { border-radius: 6px; padding: 4px 4px 5px; text-align: center; line-height: 1.25; cursor: pointer; }
+:deep(.chip-ok) { background: #e8f5e9; color: #1b5e20; }
+:deep(.chip-no) { background: #ffebee; color: #b71c1c; }
+:deep(.chip-blank) { background: #f3f4f6; color: #b0b4ba; }
+:deep(.chip-h) { font-size: 10px; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:deep(.chip-l) { margin-left: 2px; }
+:deep(.chip-v) { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* 手机：统计三个一行，筛选项各占一整行，按钮换行排 */
 @media (max-width: 767px) {
   .att-stats { grid-template-columns: repeat(3, 1fr); gap: 8px; }
