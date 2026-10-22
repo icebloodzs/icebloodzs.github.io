@@ -52,12 +52,16 @@ export const timeCol = (title, key, emptyText = '从未', width = 160) => ({
   xls: (r) => when(r[key])
 })
 
+/** 没有微信、靠浏览器登录码的成员，挂在虚拟用户 web_<成员 id> 名下（云函数 lib/webMember.js） */
+export const isVirtualUid = (uid) => typeof uid === 'string' && uid.startsWith('web_')
+const boundText = (r) => (!r.boundUid ? '未绑定' : isVirtualUid(r.boundUid) ? '登录码' : '已绑定')
+
 export const boundCol = {
   title: '绑定',
   key: 'boundUid',
   width: 90,
   sorter: sorter((r) => (r.boundUid ? 1 : 0)),
-  render: (r) => h(NTag, { size: 'small', type: r.boundUid ? 'success' : 'error', bordered: false },
-    () => (r.boundUid ? '已绑定' : '未绑定')),
-  xls: (r) => (r.boundUid ? '已绑定' : '未绑定')
+  render: (r) => h(NTag, { size: 'small', type: !r.boundUid ? 'error' : isVirtualUid(r.boundUid) ? 'info' : 'success', bordered: false },
+    () => boundText(r)),
+  xls: boundText
 }

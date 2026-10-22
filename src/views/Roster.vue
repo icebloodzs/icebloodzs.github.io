@@ -1,7 +1,7 @@
 <script setup>
 import { inject, computed, ref } from 'vue'
 import TableCard from './TableCard.vue'
-import { nameCol, bigCol, boundCol } from '../cols'
+import { nameCol, bigCol, boundCol, isVirtualUid } from '../cols'
 import { sorter, big, cmp } from '../fmt'
 
 const { members, narrow = ref(false) } = inject('app')
@@ -49,7 +49,7 @@ const stats = computed(() => {
   const all = members.value
   return [
     ['在册成员', all.length],
-    ['已绑定微信', all.filter((m) => m.boundUid).length],
+    ['已绑定微信', all.filter((m) => m.boundUid && !isVirtualUid(m.boundUid)).length],
     ['已传属性', all.filter((m) => m.profileComplete).length],
     ['已填集结值', all.filter((m) => m.maxBonus != null).length],
     ['已录武将战力', all.filter((m) => m.heroPower != null).length]
@@ -80,7 +80,7 @@ const stats = computed(() => {
         <div class="m-row">
           <span class="m-no">{{ i + 1 }}</span>
           <b class="m-name">{{ m.name }}</b>
-          <n-tag size="tiny" :type="m.boundUid ? 'success' : 'error'" :bordered="false">{{ m.boundUid ? '已绑定' : '未绑定' }}</n-tag>
+          <n-tag size="tiny" :type="!m.boundUid ? 'error' : isVirtualUid(m.boundUid) ? 'info' : 'success'" :bordered="false">{{ !m.boundUid ? '未绑定' : isVirtualUid(m.boundUid) ? '登录码' : '已绑定' }}</n-tag>
         </div>
         <div class="m-sub">{{ m.rank != null ? m.rank + '阶' : '—' }} · {{ m.furnace || '火炉未知' }}</div>
         <div class="m-nums">
