@@ -648,7 +648,7 @@ async function renderAlliances(refresh = true) {
             <td><b>${esc(a.name)}</b>${a.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${a.isDemo ? ' <span class="tag tiny">演示</span>' : ''}${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
             <td class="tiny">${esc(a.serverNo)} 区<br /><span class="muted">${esc(a.season)}</span></td>
             <td>${a.active ? '<span class="tag green">已激活</span>' : '<span class="tag red">已停用</span>'}</td>
-            <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}${extrasText(a)}</td>
+            <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}${a.trial ? ' <span class="tag amber tiny" title="建盟自动送的开发版试用，不是付费">试用</span>' : ''}${extrasText(a)}</td>
             <td class="tiny">${a.memberExpiresAt ? day(a.memberExpiresAt) : '—'}<br />${left}</td>
             <td class="num">${num(a.members)}<br /><span class="muted tiny">绑定 ${a.bound}</span></td>
             <td class="num">${num(a.vision.calls)}<br /><span class="muted tiny">本月 ${a.vision.monthCalls}</span></td>

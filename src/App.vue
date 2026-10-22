@@ -262,10 +262,13 @@ const title = computed(() => VIEWS[view.value].label)
 const selfTip = computed(() => {
   const who = me.value || {}
   const free = who.alliance && who.alliance.level !== 'ultra'
+  if (free && who.alliance.trial) return `${who.alliance.name} 的开发版试用已结束，现在是免费版：浏览器版只开放「我的信息」「我的属性」，盟主在小程序「管理 → 版本」输入兑换码可继续使用全部管理功能，数据都还在。`
   if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：浏览器版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
   return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只对开发版的管理员开放。'
 })
 const ally = computed(() => (me.value && me.value.alliance) || {})
+/** 开发版试用中：顶栏挂个「试用还剩 N 天」，管理员心里有数 */
+const trialLeft = computed(() => (ally.value.trial && ally.value.level !== 'free' ? ally.value.levelDaysLeft : null))
 
 boot()
 </script>
@@ -309,6 +312,12 @@ boot()
                   <div class="top-l">
                     <n-button v-if="narrow" quaternary size="small" class="burger" @click="navOpen = true">☰</n-button>
                     <h3>{{ title }}</h3>
+                    <n-tooltip v-if="trialLeft != null && !selfOnly">
+                      <template #trigger>
+                        <n-tag size="small" type="warning" :bordered="false" round style="margin-left: 6px; flex: none">试用{{ narrow ? '' : '中 · 还剩' }} {{ trialLeft }} 天</n-tag>
+                      </template>
+                      开发版试用，到期自动回到免费版（数据不丢）。盟主在小程序「管理 → 版本」输入兑换码可继续使用，剩下的试用天数会接在后面。
+                    </n-tooltip>
                   </div>
                   <n-space align="center" :size="10">
                     <n-button size="small" secondary :loading="loading" @click="reload">{{ narrow ? '刷新' : '刷新数据' }}</n-button>
