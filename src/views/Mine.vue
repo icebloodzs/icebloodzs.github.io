@@ -240,7 +240,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 
       <n-descriptions :column="narrow ? 1 : 2" style="margin-top: 14px" label-placement="left" size="small" bordered>
         <n-descriptions-item label="六维总和">{{ num(member.attrsSum, 2) }}</n-descriptions-item>
-        <n-descriptions-item label="最后更新">{{ member.attrsUpdatedAt ? when(member.attrsUpdatedAt) : '从未上传' }}</n-descriptions-item>
+        <n-descriptions-item label="属性加成更新">{{ member.attrsUpdatedAt ? when(member.attrsUpdatedAt) : '从未上传' }}</n-descriptions-item>
       </n-descriptions>
 
       <n-upload :show-file-list="false" accept="image/*" :custom-request="(o) => upload(o, 'attrs')" style="margin-top: 14px">
@@ -342,6 +342,8 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 
       <div class="foot">
         <span>两档合计 <b>{{ fmtSum(allSum) }}</b> 万</span>
+        <!-- 兵力、集结值、出征一起记一个更新时间；属性加成的时间在上面那张卡里，两个分开记 -->
+        <span class="upd">{{ member.profileUpdatedAt ? '最后更新 ' + when(member.profileUpdatedAt) : '还没填过' }}</span>
         <n-button type="primary" :loading="saving" @click="save">保存</n-button>
       </div>
     </n-card>
@@ -358,4 +360,5 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 .sum { text-align: right; font-weight: 600; color: #6c5ce7; }
 .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; font-size: 13px; color: #4b5563; }
 .foot b { color: #6c5ce7; font-size: 16px; }
+.foot .upd { flex: 1; margin: 0 12px; text-align: right; font-size: 12px; color: #9aa0a6; }
 </style>
