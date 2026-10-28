@@ -4,7 +4,7 @@
  * 攻城：每组 1 辆主车 + n 辆副车；每辆车 = 车头 + 车身。
  * 守城：每组 1 个车头 + 车身；第一组车身固定人数（默认 5），其余人分给后面几组。
  * 霹雳车（可选）：占正常队伍，上了霹雳车的人不再进别的车。攻城取常规车坐满后接下来的人，守城取排在最后的人。
- * 冲车（可选）：独立队伍，和常规车互不影响（同一个人可以既在组里又在冲车上）。
+ * 冲车（可选，只有攻城）：独立队伍，和常规车互不影响（同一个人可以既在组里又在冲车上）。
  *   六维最高的当车头，接着 N 个满兵车身（默认 6），其余 1 兵车身凑满 16 个，再加几个候补车身。
  *
  * 名字右边一律显示集结值；「按六维」只影响谁进哪辆车，不影响显示。
@@ -270,7 +270,7 @@ function generateDefense(members, opts) {
   const bench = distribute(cars, bodies, opts.bodyBy === 'balanced')
   cars.push(...catCars)
   finalizeCars(cars, displayKeyOf(opts.bodyBy))
-  return { mode: 'defense', cars, bench, ram: opts.ram ? generateRam(members, opts) : null }
+  return { mode: 'defense', cars, bench, ram: null }
 }
 
 /** 车名：攻城 "一组5:2:3" / "一组副5:2:3"；守城用车头名 */
