@@ -14,7 +14,7 @@ const message = useMessage()
 const opt = ref({
   mode: 'attack', groups: 4, subs: 1, mainBody: 5, subBody: 5, firstBody: 5,
   probability: 0, headBy: 'rally', bodyBy: 'rally', title: '',
-  catapult: false, catapults: 1, catBody: 6, catRatio: '6:1:3',
+  catapult: false, catBody: 6, catRatio: '6:1:3',
   ram: false, ramFull: 6, ramReserve: 4
 })
 const plan = ref(null)
@@ -33,7 +33,7 @@ function options() {
     groups: o.groups, subs: o.subs, mainBody: o.mainBody, subBody: o.subBody,
     mainRatio: '5:2:3', subRatio: '5:2:3', probability: o.probability, firstBody: o.firstBody,
     headBy: o.headBy, bodyBy: o.bodyBy,
-    catapult: o.catapult, catapults: o.catapults, catBody: o.catBody, catRatio: o.catRatio || '6:1:3',
+    catapult: o.catapult, catBody: o.catBody, catRatio: o.catRatio || '6:1:3',
     ram: o.ram, ramFull: o.ramFull, ramReserve: o.ramReserve,
     title: o.title || (attack.value ? '攻城集结分配' : '守城集结分配'),
     note: ''
@@ -111,7 +111,7 @@ async function exportExcel() {
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         车头按集结值（或六维）从高到低挑，车身按你选的排法依次填；不管按什么排，名字右边都显示集结值。
-        霹雳车占正常队伍；冲车（只有攻城）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
+        霹雳车一辆，占正常队伍；冲车（只有攻城）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>
 
@@ -127,8 +127,7 @@ async function exportExcel() {
           <n-gi><n-form-item label="车头依据"><n-select v-model:value="opt.headBy" :options="BY" /></n-form-item></n-gi>
           <n-gi><n-form-item label="车身排法"><n-select v-model:value="opt.bodyBy" :options="BODY" /></n-form-item></n-gi>
           <n-gi><n-form-item label="霹雳车"><n-switch v-model:value="opt.catapult" /></n-form-item></n-gi>
-          <n-gi v-if="opt.catapult"><n-form-item label="霹雳车数"><n-input-number v-model:value="opt.catapults" :min="1" :max="4" :step="1" style="width:100%" /></n-form-item></n-gi>
-          <n-gi v-if="opt.catapult"><n-form-item label="每辆车身"><n-input-number v-model:value="opt.catBody" :min="1" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.catapult"><n-form-item label="霹雳车车身"><n-input-number v-model:value="opt.catBody" :min="1" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="opt.catapult"><n-form-item label="霹雳车比例"><n-input v-model:value="opt.catRatio" placeholder="6:1:3" /></n-form-item></n-gi>
           <n-gi v-if="attack"><n-form-item label="冲车"><n-switch v-model:value="opt.ram" /></n-form-item></n-gi>
           <n-gi v-if="attack && opt.ram"><n-form-item label="满兵车身" :feedback="`其余 ${ramSingle} 个 1 兵车身，凑满 16 个`"><n-input-number v-model:value="opt.ramFull" :min="5" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>

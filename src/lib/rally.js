@@ -157,9 +157,9 @@ function generateRam(members, opts) {
   }
 }
 
-/** 霹雳车：从 pool（已按车身排法排好）里取，车头取其中车头依据最高的 */
+/** 霹雳车：固定一辆，从 pool（已按车身排法排好）里取，车头取其中车头依据最高的 */
 function buildCatapults(pool, opts, group) {
-  const n = opts.catapults || 0
+  const n = 1
   const per = 1 + (opts.catBody || 0)
   const picked = pool.slice(0, n * per)
   const heads = sortDesc(picked, opts.headBy).slice(0, n)
@@ -245,7 +245,7 @@ function generateDefense(members, opts) {
   let catCars = []
   if (opts.catapult) {
     const ordered = orderBodies(rest, opts.bodyBy, opts.rand)
-    const need = (opts.catapults || 0) * (1 + (opts.catBody || 0))
+    const need = 1 + (opts.catBody || 0)
     const tail = ordered.slice(Math.max(0, ordered.length - need))
     catCars = buildCatapults(tail, opts, G).cars
     rest = rest.filter((m) => tail.indexOf(m) < 0)
