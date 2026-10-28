@@ -6,14 +6,16 @@
 import { ref, inject, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import * as R from '../lib/rally'
-import { buildStyledExcel } from '../xlsx'
+import { buildStyledExcel, download } from '../xlsx'
 
 const { members } = inject('app')
 const message = useMessage()
 
 const opt = ref({
   mode: 'attack', groups: 4, subs: 1, mainBody: 5, subBody: 5, firstBody: 5,
-  probability: 0, headBy: 'rally', bodyBy: 'rally', title: ''
+  probability: 0, headBy: 'rally', bodyBy: 'rally', title: '',
+  catapult: false, catapults: 1, catBody: 6, catRatio: '6:1:3',
+  ram: false, ramFull: 6, ramReserve: 4
 })
 const plan = ref(null)
 const used = ref(null)
@@ -31,6 +33,8 @@ function options() {
     groups: o.groups, subs: o.subs, mainBody: o.mainBody, subBody: o.subBody,
     mainRatio: '5:2:3', subRatio: '5:2:3', probability: o.probability, firstBody: o.firstBody,
     headBy: o.headBy, bodyBy: o.bodyBy,
+    catapult: o.catapult, catapults: o.catapults, catBody: o.catBody, catRatio: o.catRatio || '6:1:3',
+    ram: o.ram, ramFull: o.ramFull, ramReserve: o.ramReserve,
     title: o.title || (attack.value ? '攻城集结分配' : '守城集结分配'),
     note: ''
   }
@@ -43,16 +47,7 @@ function generate() {
   sel.value = ''
 }
 
-const metric = computed(() => (used.value ? R.METRICS[R.displayKeyOf(used.value.bodyBy)] : null))
-const val = (m) => (m && metric.value ? metric.value.fmt(metric.value.get(m)) : '')
-
-function seatOf(key) {
-  const p = String(key).split(':')
-  if (p[0] === 'b') return (plan.value.bench || [])[Number(p[1])] || null
-  const car = plan.value.cars[Number(p[0])]
-  if (!car) return null
-  return p[1] === 'h' ? car.head : car.bodies[Number(p[1])]
-}
+const seatOf = (key) => R.getSeat(plan.value, String(key))
 
 function tap(key) {
   if (!sel.value) {
@@ -66,30 +61,26 @@ function tap(key) {
   }
 }
 
-/** 一组一列，列里自上而下堆这一组的车 */
-const columns = computed(() => {
-  if (!plan.value) return []
-  const groupCount = Math.max(1, ...plan.value.cars.map((c) => c.group + 1))
-  const out = []
-  for (let g = 0; g < groupCount; g += 1) {
-    const color = R.GROUP_COLORS[g % R.GROUP_COLORS.length]
-    const rows = []
-    plan.value.cars.forEach((car, ci) => {
-      if (car.group !== g) return
-      if (used.value.mode === 'defense') {
-        rows.push({ kind: 'title', text: car.head ? car.head.name : '（车头待定）', value: val(car.head) })
-        rows.push({ kind: 'label', text: '车身', value: metric.value.label })
-      } else {
-        rows.push({ kind: 'title', text: R.carTitle(car), value: metric.value.label, prob: car.tier === 'prob' })
-        rows.push({ kind: 'head', key: `${ci}:h`, text: car.head ? car.head.name : '', value: val(car.head) })
-      }
-      car.bodies.forEach((m, bi) => rows.push({ kind: 'body', key: `${ci}:${bi}`, text: m ? m.name : '', value: val(m) }))
-    })
-    out.push({ name: R.GROUP_NAMES[g] + '组', color, rows })
-  }
-  return out
-})
+/** 一组一列，霹雳车、冲车各一列排在后面；和导出图片、Excel 用同一份排版 */
+const columns = computed(() => (plan.value ? R.buildLayout(plan.value, used.value).columns : []))
 const bench = computed(() => (plan.value ? (plan.value.bench || []).filter(Boolean) : []))
+const cellBg = (row, c) => (row.kind === 'dim' ? '#f3f4f6' : row.kind === 'empty' ? '#fff' : c.color.light)
+const ramSingle = computed(() => R.RAM_TOTAL - 1 - (opt.value.ramFull || 0))
+const fileBase = () => (used.value.title || '集结分配').replace(/[\\/:*?"<>|【】\s]/g, '')
+
+function exportImage() {
+  if (busy.value || !plan.value) return
+  const layout = R.buildLayout(plan.value, used.value)
+  const size = R.imageSize(layout)
+  const canvas = document.createElement('canvas')
+  canvas.width = size.W
+  canvas.height = size.H
+  R.drawImage(canvas.getContext('2d'), layout, size)
+  canvas.toBlob((blob) => {
+    if (blob) download(blob, fileBase() + '.png')
+    else message.error('生成图片失败')
+  }, 'image/png')
+}
 
 async function exportExcel() {
   if (busy.value || !plan.value) return
@@ -114,11 +105,13 @@ async function exportExcel() {
         <n-space>
           <n-button type="primary" @click="generate">生成</n-button>
           <n-button v-if="plan" :loading="busy" @click="exportExcel">导出 Excel</n-button>
+          <n-button v-if="plan" @click="exportImage">导出图片</n-button>
         </n-space>
       </template>
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        车头按集结值（或六维）从高到低挑，车身按你选的排法依次填。算的是和小程序同一套逻辑，两边结果一致。
+        车头按集结值（或六维）从高到低挑，车身按你选的排法依次填；不管按什么排，名字右边都显示集结值。
+        霹雳车占正常队伍；冲车是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>
 
@@ -133,6 +126,13 @@ async function exportExcel() {
           <n-gi v-if="!attack"><n-form-item label="第一组车身"><n-input-number v-model:value="opt.firstBody" :min="0" :max="30" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi><n-form-item label="车头依据"><n-select v-model:value="opt.headBy" :options="BY" /></n-form-item></n-gi>
           <n-gi><n-form-item label="车身排法"><n-select v-model:value="opt.bodyBy" :options="BODY" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="霹雳车"><n-switch v-model:value="opt.catapult" /></n-form-item></n-gi>
+          <n-gi v-if="opt.catapult"><n-form-item label="霹雳车数"><n-input-number v-model:value="opt.catapults" :min="1" :max="4" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.catapult"><n-form-item label="每辆车身"><n-input-number v-model:value="opt.catBody" :min="1" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.catapult"><n-form-item label="霹雳车比例"><n-input v-model:value="opt.catRatio" placeholder="6:1:3" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="冲车"><n-switch v-model:value="opt.ram" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="满兵车身" :feedback="`其余 ${ramSingle} 个 1 兵车身，凑满 16 个`"><n-input-number v-model:value="opt.ramFull" :min="5" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="候补车身"><n-input-number v-model:value="opt.ramReserve" :min="0" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi span="1 s:2"><n-form-item label="标题"><n-input v-model:value="opt.title" :placeholder="attack ? '攻城集结分配' : '守城集结分配'" /></n-form-item></n-gi>
         </n-grid>
       </n-form>
@@ -141,7 +141,7 @@ async function exportExcel() {
     <n-card v-if="plan" :title="used.title" :bordered="false">
       <n-alert :type="sel ? 'warning' : 'info'" :bordered="false" style="margin-bottom: 12px">
         <template v-if="sel">已选中 <b>{{ seatOf(sel) ? seatOf(sel).name : '空位' }}</b>，再点另一个位置就对调；点它自己取消。</template>
-        <template v-else>点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）。</template>
+        <template v-else>点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）。<template v-if="plan.ram">冲车是独立队伍：点冲车上的位置再点组里或替补的人，就是把他换上冲车，组里的位置不动。</template></template>
       </n-alert>
 
       <!-- 一组一张小表并排放，组和组之间留空，不然几十列挤成一坨看不清 -->
@@ -154,24 +154,28 @@ async function exportExcel() {
             <tbody>
               <tr v-for="(row, i) in c.rows" :key="i">
                 <template v-if="row.kind === 'title'">
-                  <td colspan="2" class="t" :style="{ background: row.prob ? '#f08a24' : c.color.main }">
-                    {{ row.text }}<span class="v">{{ row.value }}</span>
-                  </td>
+                  <!-- 守城的车名行就是车头，可以点 -->
+                  <td
+                    colspan="2"
+                    :class="['t', row.key ? 's' : '', sel === row.key ? 'on' : '']"
+                    :style="{ background: row.prob ? '#f08a24' : c.color.main }"
+                    @click="row.key && tap(row.key)"
+                  >{{ row.text }}<span class="v">{{ row.value }}</span></td>
                 </template>
                 <template v-else-if="row.kind === 'label'">
-                  <td colspan="2" class="l" :style="{ background: c.color.light }">
+                  <td colspan="2" class="l" :style="{ color: c.color.main }">
                     {{ row.text }}<span class="v">{{ row.value }}</span>
                   </td>
                 </template>
                 <template v-else>
                   <td
-                    :class="['s', 'nm', row.kind === 'head' ? 'hd' : '', sel === row.key ? 'on' : '']"
-                    :style="{ background: sel === row.key ? '#ffe9a8' : c.color.light }"
+                    :class="['s', 'nm', row.kind === 'head' ? 'hd' : '', row.kind === 'dim' ? 'dm' : '', row.kind === 'empty' ? 'em' : '', sel === row.key ? 'on' : '']"
+                    :style="{ background: sel === row.key ? '#ffe9a8' : cellBg(row, c) }"
                     @click="tap(row.key)"
-                  >{{ row.text || '空位' }}</td>
+                  >{{ row.kind === 'empty' ? '空位' : row.text }}</td>
                   <td
-                    :class="['s', 'nu', sel === row.key ? 'on' : '']"
-                    :style="{ background: sel === row.key ? '#ffe9a8' : c.color.light }"
+                    :class="['s', 'nu', row.kind === 'head' ? 'hd' : '', row.kind === 'dim' ? 'dm' : '', sel === row.key ? 'on' : '']"
+                    :style="{ background: sel === row.key ? '#ffe9a8' : cellBg(row, c) }"
                     @click="tap(row.key)"
                   >{{ row.value }}</td>
                 </template>
@@ -211,7 +215,9 @@ table.plan td.nm { text-align: left; min-width: 112px; }
 }
 table.plan td.nu { text-align: right; min-width: 62px; color: #4b5563; }
 table.plan td.t { color: #fff; font-weight: 700; text-align: left; }
-table.plan td.l { color: #8a6d3b; font-size: 11px; text-align: left; }
+table.plan td.l { background: #fff; font-size: 11px; font-weight: 700; text-align: left; }
+table.plan td.dm { color: #6b7280; }
+table.plan td.em { color: #b6bbc2; }
 table.plan td.hd { color: #e0203a; font-weight: 700; }
 table.plan td.s { cursor: pointer; }
 table.plan td.s:hover { filter: brightness(0.96); }
