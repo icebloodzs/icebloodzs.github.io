@@ -12,7 +12,7 @@ const { members } = inject('app')
 const message = useMessage()
 
 const opt = ref({
-  mode: 'attack', groups: 4, subs: 1, mainBody: 5, subBody: 5, firstBody: 5,
+  mode: 'attack', groups: 4, subs: 0, mainBody: 5, subBody: 5, firstBody: 5,
   probability: 0, headBy: 'rally', bodyBy: 'rally', title: '',
   catapult: false, catBody: 6, catRatio: '6:1:3',
   ram: false, ramFull: 6, ramReserve: 4
