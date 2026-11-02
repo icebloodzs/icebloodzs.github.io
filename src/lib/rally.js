@@ -12,9 +12,9 @@
  * 成员字段：name、maxBonus（最高集结值）、attrsSum（六维总和）、strength（实力，兜底排序用）。
  */
 
-const GROUP_NAMES = ['一', '二', '三', '四', '五', '六', '七', '八']
+const GROUP_NAMES = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六']
 
-/** 每组的主色 + 行底色（跟参考表一致：红、蓝、青、紫，往后顺延） */
+/** 每组的主色 + 行底色（跟参考表一致：红、蓝、青、紫，往后顺延；最多 16 组） */
 const GROUP_COLORS = [
   { main: '#c8202f', light: '#fbdde1' },
   { main: '#2e4f9e', light: '#b4c6ea' },
@@ -23,7 +23,15 @@ const GROUP_COLORS = [
   { main: '#e07b1a', light: '#fdebd3' },
   { main: '#3a8a3a', light: '#d9f0d9' },
   { main: '#c2185b', light: '#f8d7e5' },
-  { main: '#6d4c41', light: '#eadfdb' }
+  { main: '#6d4c41', light: '#eadfdb' },
+  { main: '#00838f', light: '#ccf0f2' },
+  { main: '#9e7700', light: '#f6ebc2' },
+  { main: '#283593', light: '#d4d9f4' },
+  { main: '#455a64', light: '#dbe3e7' },
+  { main: '#827717', light: '#eeecc8' },
+  { main: '#d84315', light: '#fbd9cc' },
+  { main: '#0d47a1', light: '#d0defa' },
+  { main: '#ad1457', light: '#f8d1e0' }
 ]
 
 /** 冲车橙、霹雳车蓝（跟参考攻城表一致） */
@@ -443,20 +451,38 @@ function buildLayout(plan, opts) {
 }
 
 /**
- * 导出图片的尺寸：列宽固定，所有列共用一套行高，同一行在各列对齐。
- * 霹雳车 / 冲车列前面多留一道缝，跟分组区分开。
+ * 导出图片的尺寸：列宽固定，同一排里各列共用一套行高，同一行对齐。
+ * 组多了一排放不下（16 组一排有 6000 多像素宽，手机画布画不了），每排最多 IMG.perRow 个组，往下折行；
+ * 霹雳车 / 冲车列接在最后一排后面，前面多留一道缝，跟分组区分开。
  */
-const IMG = { colW: 340, rowH: 44, margin: 24, titleH: 80, gap: 8, specialGap: 28, lineH: 40 }
+const IMG = { colW: 340, rowH: 44, margin: 24, titleH: 80, gap: 8, specialGap: 28, lineH: 40, perRow: 8, bandGap: 28 }
 
-function imageColumnsX(layout) {
-  const xs = []
-  let x = IMG.margin
-  layout.columns.forEach((col, i) => {
-    if (i > 0) x += col.special && !layout.columns[i - 1].special ? IMG.specialGap : IMG.gap
-    xs.push(x)
-    x += IMG.colW
+/** 把列分成若干排，算出每列的 x、每排的 y：{ bands: [{ cols: [{ col, x }], top, rows }], right, bottom } */
+function imageBands(layout) {
+  const groups = layout.columns.filter((c) => !c.special)
+  const specials = layout.columns.filter((c) => c.special)
+  const chunks = []
+  for (let i = 0; i < groups.length; i += IMG.perRow) chunks.push(groups.slice(i, i + IMG.perRow))
+  if (!chunks.length) chunks.push([])
+  chunks[chunks.length - 1] = chunks[chunks.length - 1].concat(specials)
+
+  const bands = []
+  let right = IMG.margin
+  let top = IMG.margin + IMG.titleH + 12
+  chunks.forEach((cols) => {
+    let x = IMG.margin
+    const placed = cols.map((col, i) => {
+      if (i > 0) x += col.special && !cols[i - 1].special ? IMG.specialGap : IMG.gap
+      const at = { col, x }
+      x += IMG.colW
+      return at
+    })
+    const rows = Math.max(0, ...cols.map((c) => c.rows.length))
+    bands.push({ cols: placed, top, rows })
+    right = Math.max(right, x)
+    top += rows * IMG.rowH + IMG.bandGap
   })
-  return { xs, right: x }
+  return { bands, right, bottom: top - IMG.bandGap }
 }
 
 /** 替补 + 备注折成若干行（按字数粗估宽度） */
@@ -472,11 +498,10 @@ function imageExtraLines(layout, width) {
 }
 
 function imageSize(layout) {
-  const { right } = imageColumnsX(layout)
+  const { right, bottom } = imageBands(layout)
   const W = right + IMG.margin
-  const maxRows = Math.max(0, ...layout.columns.map((c) => c.rows.length))
   const extraLines = imageExtraLines(layout, W - IMG.margin * 2)
-  const H = IMG.margin * 2 + IMG.titleH + 12 + maxRows * IMG.rowH + (extraLines.length ? 20 + extraLines.length * IMG.lineH : 0)
+  const H = bottom + IMG.margin + (extraLines.length ? 20 + extraLines.length * IMG.lineH : 0)
   return { W, H, extraLines }
 }
 
@@ -509,12 +534,10 @@ function drawImage(ctx, layout, size) {
   ctx.fillStyle = '#e0203a'
   ctx.fillText(fit(layout.title || '', W - margin * 2, 34, true), W / 2, margin + titleH / 2)
 
-  const top = margin + titleH + 12
-  const { xs } = imageColumnsX(layout)
-  layout.columns.forEach((col, ci) => {
-    const x = xs[ci]
+  const { bands, bottom } = imageBands(layout)
+  bands.forEach((band) => band.cols.forEach(({ col, x }) => {
     col.rows.forEach((row, ri) => {
-      const y = top + ri * rowH
+      const y = band.top + ri * rowH
       let bg = col.color.light
       let fg = '#222222'
       let valFg = '#4b5563'
@@ -562,12 +585,11 @@ function drawImage(ctx, layout, size) {
       ctx.font = font(px, bold && row.kind !== 'label')
       ctx.fillText(row.value || '', x + nameW + (colW - nameW) / 2, y + rowH / 2 + 1)
     })
-  })
+  }))
 
   // 替补 + 备注
   if (extraLines.length) {
-    const maxRows = Math.max(0, ...layout.columns.map((c) => c.rows.length))
-    let y = top + maxRows * rowH + 20 + lineH / 2
+    let y = bottom + 20 + lineH / 2
     ctx.textAlign = 'left'
     extraLines.forEach((ln) => {
       ctx.fillStyle = ln.kind === 'bench' ? '#6b7280' : '#b45309'
