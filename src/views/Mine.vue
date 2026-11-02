@@ -40,11 +40,14 @@ const busy = ref('')
 const saving = ref(false)
 const before = ref(null)
 
+/** 和云函数 lib/shape.js 的 CAMPS 一致 */
+const CAMPS = ['群雄', '魏国', '吴国', '蜀国']
+
 const form = ref(blank())
 function blank() {
   const t = {}
   LEVELS.value.forEach((lv) => { t[lv] = { inf: null, cav: null, arc: null } })
-  return { maxBonus: null, maxMarch: null, troops: t }
+  return { maxBonus: null, maxMarch: null, camps: [], troops: t }
 }
 
 function fill(m) {
@@ -57,7 +60,7 @@ function fill(m) {
       t[lv][k] = v === null || v === undefined ? null : Number(v)
     })
   })
-  form.value = { maxBonus: m.maxBonus ?? null, maxMarch: m.maxMarch ?? null, troops: t }
+  form.value = { maxBonus: m.maxBonus ?? null, maxMarch: m.maxMarch ?? null, camps: (m.camps || []).slice(), troops: t }
 }
 // 赛季是后到的，档位一变要照着新档位重新铺一遍表格
 watch([member, LEVELS], () => fill(member.value), { immediate: true })
@@ -181,7 +184,7 @@ async function save() {
   try {
     const res = await call('profile.save', {
       troopsByLevel: form.value.troops,
-      camps: (member.value && member.value.camps) || [],
+      camps: form.value.camps,
       maxBonus: form.value.maxBonus,
       battleReportFileId: member.value && member.value.battleReportFileId,
       maxMarch: form.value.maxMarch === null ? '' : String(form.value.maxMarch)
@@ -313,6 +316,13 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
           <n-gi>
             <n-form-item label="单人出征数量">
               <n-input-number v-model:value="form.maxMarch" :min="0" :step="10000" placeholder="如 143510" style="width: 100%" />
+            </n-form-item>
+          </n-gi>
+          <n-gi span="1 s:2">
+            <n-form-item label="主玩阵营">
+              <n-checkbox-group v-model:value="form.camps">
+                <n-space><n-checkbox v-for="c in CAMPS" :key="c" :value="c" :label="c" /></n-space>
+              </n-checkbox-group>
             </n-form-item>
           </n-gi>
         </n-grid>
