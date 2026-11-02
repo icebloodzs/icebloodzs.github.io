@@ -23,12 +23,14 @@ import Users from './views/Users.vue'
 import Notice from './views/Notice.vue'
 import Board from './views/Board.vue'
 import Attendance from './views/Attendance.vue'
+import FullData from './views/FullData.vue'
 import SideNav from './views/SideNav.vue'
 
 const VIEWS = {
   mine: { label: '我的信息', icon: '👤', comp: Mine },
   roster: { label: '同盟名单', icon: '📋', comp: Roster },
   import: { label: '导入名单', icon: '📥', comp: ImportList },
+  fulldata: { label: '全员数据', icon: '🗂️', comp: FullData },
   bonus: { label: '成员加成', icon: '⚡', comp: Bonus },
   attrs: { label: '属性排名', icon: '📊', comp: Attrs },
   missing: { label: '遗漏排查', icon: '🔍', comp: Missing },
@@ -132,7 +134,7 @@ const menuOptions = computed(() => selfOnly.value
     type: 'group',
     label: '成员数据',
     key: 'g1',
-    children: ['roster', 'import', 'attendance', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
+    children: ['roster', 'import', 'fulldata', 'attendance', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
       label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon)
     }))
   },

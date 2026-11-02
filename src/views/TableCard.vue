@@ -16,7 +16,10 @@ const props = defineProps({
   columns: { type: Array, required: true },
   rows: { type: Array, required: true },
   search: { type: Boolean, default: true },
-  scrollX: { type: Number, default: 0 }
+  scrollX: { type: Number, default: 0 },
+  /** 导出的工作表名 / 文件名前缀，不给就用标题 */
+  sheetName: String,
+  fileName: String
 })
 
 const message = useMessage()
@@ -69,7 +72,7 @@ async function exportExcel() {
         return v === null || v === undefined ? '' : v
       }))
     })
-    await buildExcel({ aoa, sheetName: props.title, name: `${props.title}-${new Date().toISOString().slice(0, 10)}.xlsx` })
+    await buildExcel({ aoa, sheetName: props.sheetName || props.title, name: `${props.fileName || props.title}-${new Date().toISOString().slice(0, 10)}.xlsx` })
   } catch (e) {
     message.error(e.message)
   } finally {
@@ -88,11 +91,13 @@ async function exportExcel() {
     <template v-if="!narrow" #header-extra>
       <n-space align="center">
         <n-input v-if="search" v-model:value="keyword" placeholder="搜成员名" clearable style="width: 180px" />
+        <slot name="actions" />
         <n-button :loading="busy" @click="exportExcel">导出 Excel</n-button>
       </n-space>
     </template>
     <div v-if="narrow" class="tc-bar">
       <n-input v-if="search" v-model:value="keyword" placeholder="搜成员名" clearable size="small" />
+      <slot name="actions" />
       <n-button size="small" :loading="busy" @click="exportExcel">导出</n-button>
     </div>
     <div v-if="narrow && sortable.length" class="tc-bar">
