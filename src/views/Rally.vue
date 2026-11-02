@@ -118,7 +118,7 @@ async function exportExcel() {
       <n-form label-placement="left" :label-width="90" size="small">
         <n-grid cols="1 s:2 l:4" responsive="screen" :x-gap="16">
           <n-gi><n-form-item label="模式"><n-select v-model:value="opt.mode" :options="MODES" /></n-form-item></n-gi>
-          <n-gi><n-form-item label="组数"><n-input-number v-model:value="opt.groups" :min="1" :max="16" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="组数"><n-input-number v-model:value="opt.groups" :min="1" :max="20" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="attack"><n-form-item label="每组副车"><n-input-number v-model:value="opt.subs" :min="0" :max="5" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="attack"><n-form-item label="主车车身"><n-input-number v-model:value="opt.mainBody" :min="0" :max="20" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="attack"><n-form-item label="副车车身"><n-input-number v-model:value="opt.subBody" :min="0" :max="20" :step="1" style="width:100%" /></n-form-item></n-gi>

@@ -12,9 +12,9 @@
  * 成员字段：name、maxBonus（最高集结值）、attrsSum（六维总和）、strength（实力，兜底排序用）。
  */
 
-const GROUP_NAMES = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六']
+const GROUP_NAMES = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '十一', '十二', '十三', '十四', '十五', '十六', '十七', '十八', '十九', '二十']
 
-/** 每组的主色 + 行底色（跟参考表一致：红、蓝、青、紫，往后顺延；最多 16 组） */
+/** 每组的主色 + 行底色（跟参考表一致：红、蓝、青、紫，往后顺延；最多 20 组） */
 const GROUP_COLORS = [
   { main: '#c8202f', light: '#fbdde1' },
   { main: '#2e4f9e', light: '#b4c6ea' },
@@ -31,7 +31,11 @@ const GROUP_COLORS = [
   { main: '#827717', light: '#eeecc8' },
   { main: '#d84315', light: '#fbd9cc' },
   { main: '#0d47a1', light: '#d0defa' },
-  { main: '#ad1457', light: '#f8d1e0' }
+  { main: '#ad1457', light: '#f8d1e0' },
+  { main: '#2e7d32', light: '#d3edd5' },
+  { main: '#5e35b1', light: '#e2d9f5' },
+  { main: '#ef6c00', light: '#fde3c8' },
+  { main: '#37474f', light: '#d9dfe2' }
 ]
 
 /** 冲车橙、霹雳车蓝（跟参考攻城表一致） */
