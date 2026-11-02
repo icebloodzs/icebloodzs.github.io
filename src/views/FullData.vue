@@ -7,15 +7,16 @@
  * 导出：就是表格右上角的「导出 Excel」，表头即导入用的表头，导出的文件改完可以原样导回来。
  * 导入：在浏览器里读表、认表头，按行发给云函数 admin.importFull，先预演、确认后再写。
  * 按名字认人，只用比库里新的数据（规则写在云函数 handlers/fulldata.js）。
+ * 手动改：点成员名字，右边滑出编辑面板，只把改过的那几组发给 admin.editFull。
  */
-import { ref, inject, computed, h } from 'vue'
+import { ref, inject, computed, h, reactive } from 'vue'
 import { useMessage } from 'naive-ui'
 import TableCard from './TableCard.vue'
 import { call } from '../api'
 import { readWorkbook } from '../sheet'
 import { big, num, sorter } from '../fmt'
 
-const { members, reload } = inject('app')
+const { members, reload, narrow } = inject('app')
 const message = useMessage()
 
 const ATTRS = [
@@ -66,7 +67,10 @@ const bigNumCol = (title, key, width = 100) => ({
 })
 
 const columns = computed(() => [
-  { title: '账号名称', key: 'name', width: 130, fixed: 'left', sorter: sorter((r) => r.name), render: (r) => h('b', r.name), xls: (r) => r.name },
+  {
+    title: '账号名称', key: 'name', width: 130, fixed: 'left', sorter: sorter((r) => r.name), xls: (r) => r.name,
+    render: (r) => h('a', { class: 'fd-name', title: '点击修改', onClick: () => openEdit(r) }, r.name)
+  },
   textCol('六维更新时间', 'attrsUpdatedAt', (r) => stamp(r.attrsUpdatedAt), 160),
   textCol('关联状态', 'boundUid', (r) => (r.boundUid ? '已关联' : '未关联'), 90),
   textCol('阶位', 'rank', rankText, 70),
@@ -79,6 +83,82 @@ const columns = computed(() => [
   numberCol('六维', 'six', (r) => sumOf(r, ATTRS.map(([k]) => k)), 0, 80),
   ...ATTRS.map(([k, title]) => numberCol(title, k, (r) => (r.attrs ? r.attrs[k] : null), 0, 100))
 ])
+
+// ---------------- 手动修改 ----------------
+
+const RANKS = Array.from({ length: 10 }, (_, i) => ({ label: CN[i + 1] + '阶', value: i + 1 }))
+const TIER_OPTIONS = TIERS.map(([value, label]) => ({ label, value })).reverse()
+const CAMPS = ['群雄', '魏国', '吴国', '蜀国']
+
+const editing = ref(null) // 正在改的那一行
+const saving = ref(false)
+const form = reactive({ rank: null, power: null, strength: null, camps: [], maxBonus: null, tiers: {}, attrs: {} })
+let origin = ''
+
+/** 填了兵力的兵种，档位按兵力算，不让手改 */
+const troopTier = (r, arm) => {
+  for (let i = TIERS.length - 1; i >= 0; i -= 1) {
+    const one = r.troopsByLevel && r.troopsByLevel[TIERS[i][0]]
+    if (one && Number(one[arm]) > 0) return TIERS[i][1]
+  }
+  return ''
+}
+
+/** 当前表单里各组的值，用来比有没有改过 */
+const snapshot = () => JSON.stringify({
+  roster: [form.rank, form.power, form.strength],
+  profile: [[...form.camps].sort(), form.maxBonus],
+  tiers: form.tiers,
+  attrs: form.attrs
+})
+
+function openEdit(r) {
+  editing.value = r
+  form.rank = r.rank || null
+  form.power = r.power ?? null
+  form.strength = r.strength ?? null
+  form.camps = (r.camps || []).slice()
+  form.maxBonus = r.maxBonus ?? null
+  form.tiers = Object.fromEntries(ARMS.map(([arm]) => [arm, (r.barracksLv && r.barracksLv[arm]) || null]))
+  form.attrs = Object.fromEntries(ATTRS.map(([k]) => [k, r.attrs && r.attrs[k] !== undefined && r.attrs[k] !== null ? Number(r.attrs[k]) : null]))
+  origin = snapshot()
+}
+
+const formSum = (keys) => {
+  const vals = keys.map((k) => form.attrs[k]).filter((v) => v !== null && v !== undefined)
+  return vals.length ? Math.round(vals.reduce((a, b) => a + Number(b), 0)) : '—'
+}
+const dirty = computed(() => editing.value && snapshot() !== origin)
+
+async function saveEdit() {
+  const before = JSON.parse(origin)
+  const now = JSON.parse(snapshot())
+  const payload = { memberId: editing.value._id }
+  const blankOr = (v) => (v === null || v === undefined ? '' : v)
+  if (JSON.stringify(before.roster) !== JSON.stringify(now.roster)) {
+    Object.assign(payload, { rank: blankOr(form.rank), power: blankOr(form.power), strength: blankOr(form.strength) })
+  }
+  if (JSON.stringify(before.profile) !== JSON.stringify(now.profile)) {
+    Object.assign(payload, { camps: form.camps, maxBonus: blankOr(form.maxBonus) })
+  }
+  if (JSON.stringify(before.tiers) !== JSON.stringify(now.tiers)) {
+    payload.barracksLv = Object.fromEntries(ARMS.map(([arm]) => [arm, blankOr(form.tiers[arm])]))
+  }
+  if (JSON.stringify(before.attrs) !== JSON.stringify(now.attrs)) {
+    payload.attrs = Object.fromEntries(ATTRS.map(([k]) => [k, blankOr(form.attrs[k])]))
+  }
+  saving.value = true
+  try {
+    await call('admin.editFull', payload)
+    message.success(`已保存「${editing.value.name}」`)
+    editing.value = null
+    await reload()
+  } catch (err) {
+    message.error(err.message)
+  } finally {
+    saving.value = false
+  }
+}
 
 // ---------------- 导入 ----------------
 
@@ -205,6 +285,67 @@ const snapText = computed(() => (pending.value ? stamp(pending.value.snapshotAt)
     </TableCard>
     <input ref="picker" type="file" accept=".xlsx,.xls" style="display:none" @change="onFile" />
 
+    <n-drawer :show="!!editing" :width="narrow ? '100%' : 460" placement="right" @update:show="(v) => { if (!v && !saving) editing = null }">
+      <n-drawer-content v-if="editing" closable :native-scrollbar="false" body-content-style="padding: 18px 22px">
+        <template #header>
+          <div class="ed-head">
+            <span class="ed-name">{{ editing.name }}</span>
+            <n-tag size="small" :bordered="false" :type="editing.boundUid ? 'success' : 'default'">{{ editing.boundUid ? '已关联' : '未关联' }}</n-tag>
+          </div>
+          <div class="ed-sub">六维更新 {{ editing.attrsUpdatedAt ? stamp(editing.attrsUpdatedAt).slice(0, 16) : '从未' }}</div>
+        </template>
+
+        <div class="ed-sec">名单数据</div>
+        <div class="ed-grid3">
+          <div class="ed-field"><label>阶位</label><n-select v-model:value="form.rank" :options="RANKS" clearable placeholder="—" /></div>
+          <div class="ed-field">
+            <label>战力<span v-if="form.power">{{ big(form.power) }}</span></label>
+            <n-input-number v-model:value="form.power" :min="0" :show-button="false" placeholder="—" />
+          </div>
+          <div class="ed-field">
+            <label>实力<span v-if="form.strength">{{ big(form.strength) }}</span></label>
+            <n-input-number v-model:value="form.strength" :min="0" :show-button="false" placeholder="—" />
+          </div>
+        </div>
+
+        <div class="ed-sec">资料</div>
+        <div class="ed-field">
+          <label>主玩阵营</label>
+          <div class="ed-camps">
+            <button v-for="c in CAMPS" :key="c" type="button" :class="['ed-camp', { on: form.camps.includes(c) }]"
+              @click="form.camps = form.camps.includes(c) ? form.camps.filter((x) => x !== c) : [...form.camps, c]">{{ c }}</button>
+          </div>
+        </div>
+        <div class="ed-grid4">
+          <div class="ed-field">
+            <label>最高加成</label>
+            <n-input-number v-model:value="form.maxBonus" :min="0" :step="0.1" :show-button="false" placeholder="—"><template #suffix>%</template></n-input-number>
+          </div>
+          <div v-for="[arm, title] in ARMS" :key="arm" class="ed-field">
+            <label>{{ title }}<span v-if="troopTier(editing, arm)" title="填了兵力的兵种，等级按兵力算">按兵力</span></label>
+            <n-input v-if="troopTier(editing, arm)" :value="troopTier(editing, arm)" disabled />
+            <n-select v-else v-model:value="form.tiers[arm]" :options="TIER_OPTIONS" clearable placeholder="—" />
+          </div>
+        </div>
+
+        <div class="ed-sec">六维 <span class="ed-sum">四维 <b>{{ formSum(FOUR) }}</b> · 六维 <b>{{ formSum(ATTRS.map(([k]) => k)) }}</b></span></div>
+        <div class="ed-grid2">
+          <div v-for="[k, title] in ATTRS" :key="k" class="ed-field">
+            <label>{{ title }}</label>
+            <n-input-number v-model:value="form.attrs[k]" :min="0" :show-button="false" placeholder="—" />
+          </div>
+        </div>
+        <div class="ed-note">改了六维会记成「管理员修改」，更新时间按现在算，成长榜照常统计。</div>
+
+        <template #footer>
+          <n-space justify="end">
+            <n-button :disabled="saving" @click="editing = null">取消</n-button>
+            <n-button type="primary" :loading="saving" :disabled="!dirty" @click="saveEdit">保存</n-button>
+          </n-space>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
+
     <n-modal v-model:show="showPreview" preset="card" title="导入预演" style="width: 640px; max-width: 94vw" :mask-closable="!busy">
       <template v-if="preview">
         <div class="fd-file">{{ pending && pending.fileName }} · 表格时间 {{ snapText }}</div>
@@ -243,4 +384,28 @@ const snapText = computed(() => (pending.value ? stamp(pending.value.snapshotAt)
 .fd-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 4px 0; border-bottom: 1px dashed #f0f1f4; }
 .fd-row:last-child { border-bottom: none; }
 .fd-row span { color: #6b7280; }
+
+/* 成员名可点，点了右侧滑出编辑面板 */
+:deep(.fd-name) { font-weight: 600; color: #1f2329; cursor: pointer; border-bottom: 1px dashed #c4c9d0; }
+:deep(.fd-name:hover) { color: #6c5ce7; border-bottom-color: #6c5ce7; }
+
+.ed-head { display: flex; align-items: center; gap: 10px; }
+.ed-name { font-size: 18px; font-weight: 700; }
+.ed-sub { font-size: 12px; color: #9aa0a6; font-weight: 400; margin-top: 4px; }
+.ed-sec { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; font-weight: 700; color: #6c5ce7;
+  margin: 18px 0 10px; padding-bottom: 6px; border-bottom: 1px solid #f0f1f4; }
+.ed-sec:first-child { margin-top: 0; }
+.ed-sum { font-weight: 400; color: #6b7280; }
+.ed-sum b { color: #1f2329; font-variant-numeric: tabular-nums; }
+.ed-grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.ed-grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.ed-grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.ed-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; margin-bottom: 2px; }
+.ed-field label { font-size: 12px; color: #6b7280; display: flex; justify-content: space-between; }
+.ed-field label span { color: #9aa0a6; }
+.ed-camps { display: flex; gap: 8px; margin-bottom: 12px; }
+.ed-camp { flex: 1; height: 32px; border-radius: 8px; border: 1px solid #e0e3e8; background: #fff; color: #4b5563; font-size: 13px; cursor: pointer; transition: all .15s; }
+.ed-camp:hover { border-color: #6c5ce7; color: #6c5ce7; }
+.ed-camp.on { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }
+.ed-note { font-size: 12px; color: #9aa0a6; margin-top: 12px; }
 </style>
