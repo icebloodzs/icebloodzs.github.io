@@ -18,7 +18,10 @@ const roleText = (role) => (role === 'super' ? '超级管理员' : role === 'adm
         <div class="brand-s">{{ ally.serverNo }} 区 · {{ ally.season }}</div>
       </div>
     </div>
-    <n-menu :value="value" :options="options" :indent="18" style="flex: 1" @update:value="(v) => emit('update:value', v)" />
+    <!-- 菜单多了会超出一屏：只让中间菜单区滚，盟名和底部「我是谁」钉住 -->
+    <div class="menu">
+      <n-menu :value="value" :options="options" :indent="18" @update:value="(v) => emit('update:value', v)" />
+    </div>
     <div class="who">
       <n-avatar round :size="26" color="#e8e4ff" style="color:#6c5ce7">
         {{ (me.nickname || roleText(me.role)).slice(0, 1) }}
@@ -43,6 +46,7 @@ const roleText = (role) => (role === 'super' ? '超级管理员' : role === 'adm
   border-bottom: 1px solid #efeff5;
   flex: none;
 }
+.menu { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .brand-n { font-size: 15px; font-weight: 600; line-height: 1.2; }
 .brand-s { font-size: 12px; color: #8a9099; margin-top: 2px; }
 .who {
