@@ -65,3 +65,16 @@ export const boundCol = {
     () => boundText(r)),
   xls: boundText
 }
+
+/*
+ * 序号列：跟着当前排序走（naive-ui 的 render 第二个参数就是排序后的行号），
+ * 所以按哪一列排，序号就是那一列的名次。
+ */
+export const indexCol = {
+  title: '#',
+  key: '_idx',
+  width: 56,
+  fixed: 'left',
+  render: (_r, i) => h('span', { style: 'color:#8a9099;font-variant-numeric:tabular-nums' }, i + 1),
+  xls: (_r, i) => i + 1
+}

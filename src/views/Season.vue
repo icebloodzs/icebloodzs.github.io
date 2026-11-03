@@ -2,7 +2,7 @@
 import { inject, computed, ref, h } from 'vue'
 import { NTag } from 'naive-ui'
 import TableCard from './TableCard.vue'
-import { nameCol, bigCol, timeCol } from '../cols'
+import { nameCol, bigCol, timeCol, indexCol } from '../cols'
 import { big } from '../fmt'
 
 const { members, season } = inject('app')
@@ -22,6 +22,7 @@ function posOf(score) {
 }
 
 const columns = computed(() => [
+  indexCol,
   nameCol,
   bigCol('成员实力', 'strength'),
   {

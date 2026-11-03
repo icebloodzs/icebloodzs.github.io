@@ -1,7 +1,7 @@
 <script setup>
 import { inject, computed, h } from 'vue'
 import TableCard from './TableCard.vue'
-import { nameCol, numCol, timeCol } from '../cols'
+import { nameCol, numCol, timeCol, indexCol } from '../cols'
 import { num, sorter } from '../fmt'
 
 const app = inject('app')
@@ -14,18 +14,6 @@ const LABELS = {
   infDef: '步防', infHp: '步生', cavAtk: '骑攻', cavBreak: '骑破', arcAtk: '弓攻', arcBreak: '弓破'
 }
 
-/*
- * 序号列：跟着当前排序走（naive-ui 的 render 第二个参数就是排序后的行号），
- * 所以按哪一列排，序号就是那一列的名次。
- */
-const indexCol = {
-  title: '#',
-  key: '_idx',
-  width: 56,
-  fixed: 'left',
-  render: (_r, i) => h('span', { style: 'color:#8a9099;font-variant-numeric:tabular-nums' }, i + 1),
-  xls: (_r, i) => i + 1
-}
 
 /** 本赛季这几维的总和；S1~S3 不算骑兵那两项，不然和列表对不上 */
 const sumOf = (r) => {
