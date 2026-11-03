@@ -7,6 +7,7 @@ import { ref, inject, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import * as R from '../lib/rally'
 import { buildStyledExcel, download } from '../xlsx'
+import PlanTable from './PlanTable.vue'
 
 const { members } = inject('app')
 const message = useMessage()
@@ -63,10 +64,20 @@ function tap(key) {
   }
 }
 
-/** 一组一列，霹雳车、冲车各一列排在后面；和导出图片、Excel 用同一份排版 */
-const columns = computed(() => (plan.value ? R.buildLayout(plan.value, used.value).columns : []))
-const bench = computed(() => (plan.value ? (plan.value.bench || []).filter(Boolean) : []))
-const cellBg = (row, c) => (row.kind === 'dim' ? '#f3f4f6' : row.kind === 'empty' ? '#fff' : c.color.light)
+/** 一组一列；霹雳车、冲车/斗阵单独放右边一列，上下叠着。排版和导出图片、Excel 同一份 */
+const layoutCols = computed(() => (plan.value ? R.buildLayout(plan.value, used.value).columns : []))
+const groupCols = computed(() => layoutCols.value.filter((c) => !c.special))
+/** 冲车/斗阵按六维上车，集结值没用，页面上不显示（标签行的「n人」保留） */
+const sideCols = computed(() => layoutCols.value.filter((c) => c.special).map((c) => (c.special === 'ram'
+  ? { ...c, noVal: true, rows: c.rows.filter((r) => !(r.kind === 'title' && r.text === c.name)).map((r) => (r.kind === 'label' ? r : { ...r, value: '' })) }
+  : c)))
+/** 替补带集结值，从大到小；i 是在 plan.bench 里的原位置，点选对调用它 */
+const rallyOf = R.METRICS.rally
+const bench = computed(() => (plan.value ? plan.value.bench : [])
+  .map((m, i) => ({ m, i, v: rallyOf.get(m) }))
+  .filter((x) => x.m)
+  .sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity))
+  .map((x) => ({ ...x, text: rallyOf.fmt(x.v) })))
 const ramSingle = computed(() => R.RAM_TOTAL - 1 - (opt.value.ramFull || 0))
 const fileBase = () => (used.value.title || '集结分配').replace(/[\\/:*?"<>|【】\s]/g, '')
 
@@ -145,57 +156,28 @@ async function exportExcel() {
         <template v-else>点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）。<template v-if="plan.ram">{{ ramName }}是独立队伍：点{{ ramName }}上的位置再点组里或替补的人，就是把他换上{{ ramName }}，组里的位置不动。</template></template>
       </n-alert>
 
-      <!-- 一组一张小表并排放，组和组之间留空，不然几十列挤成一坨看不清 -->
-      <div class="wrap">
-        <div class="cols">
-          <table v-for="c in columns" :key="c.name" class="plan">
-            <thead>
-              <tr><th colspan="2" :style="{ background: c.color.main }">{{ c.name }}</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, i) in c.rows" :key="i">
-                <template v-if="row.kind === 'title'">
-                  <!-- 守城的车名行就是车头，可以点 -->
-                  <td
-                    colspan="2"
-                    :class="['t', row.key ? 's' : '', sel === row.key ? 'on' : '']"
-                    :style="{ background: row.prob ? '#f08a24' : c.color.main }"
-                    @click="row.key && tap(row.key)"
-                  >{{ row.text }}<span class="v">{{ row.value }}</span></td>
-                </template>
-                <template v-else-if="row.kind === 'label'">
-                  <td colspan="2" class="l" :style="{ color: c.color.main }">
-                    {{ row.text }}<span class="v">{{ row.value }}</span>
-                  </td>
-                </template>
-                <template v-else>
-                  <td
-                    :class="['s', 'nm', row.kind === 'head' ? 'hd' : '', row.kind === 'dim' ? 'dm' : '', row.kind === 'empty' ? 'em' : '', sel === row.key ? 'on' : '']"
-                    :style="{ background: sel === row.key ? '#ffe9a8' : cellBg(row, c) }"
-                    @click="tap(row.key)"
-                  >{{ row.kind === 'empty' ? '空位' : row.text }}</td>
-                  <td
-                    :class="['s', 'nu', row.kind === 'head' ? 'hd' : '', row.kind === 'dim' ? 'dm' : '', sel === row.key ? 'on' : '']"
-                    :style="{ background: sel === row.key ? '#ffe9a8' : cellBg(row, c) }"
-                    @click="tap(row.key)"
-                  >{{ row.value }}</td>
-                </template>
-              </tr>
-            </tbody>
-          </table>
+      <!-- 左边一组一张小表、放不下自动换行；右边霹雳车、冲车/斗阵单独一列 -->
+      <div class="board">
+        <div class="wrap">
+          <div class="cols">
+            <PlanTable :cols="groupCols" :sel="sel" @tap="tap" />
+          </div>
+        </div>
+        <div v-if="sideCols.length" class="side">
+          <PlanTable :cols="sideCols" :sel="sel" @tap="tap" />
         </div>
       </div>
 
       <n-space align="center" style="margin-top: 14px">
         <span class="bt">替补 {{ bench.length }}</span>
         <n-tag
-          v-for="(m, i) in bench"
-          :key="i"
-          :type="sel === 'b:' + i ? 'warning' : 'default'"
+          v-for="x in bench"
+          :key="x.i"
+          :type="sel === 'b:' + x.i ? 'warning' : 'default'"
           :bordered="false"
           style="cursor: pointer"
-          @click="tap('b:' + i)"
-        >{{ m.name }}</n-tag>
+          @click="tap('b:' + x.i)"
+        >{{ x.m.name }}<span class="bv">{{ x.text }}</span></n-tag>
         <span v-if="!bench.length" class="bt">（空）</span>
       </n-space>
     </n-card>
@@ -203,26 +185,19 @@ async function exportExcel() {
 </template>
 
 <style scoped>
-.wrap { overflow-x: auto; padding-bottom: 6px; }
-.cols { display: flex; gap: 20px; align-items: flex-start; }
-table.plan { border-collapse: collapse; font-size: 12px; min-width: 212px; }
-table.plan th { color: #fff; padding: 9px 12px; border: 1px solid #e9ebee; }
-table.plan td { border: 1px solid #e9ebee; padding: 7px 12px; text-align: center; white-space: nowrap; }
-table.plan td.nm { text-align: left; min-width: 112px; }
+.board { display: flex; gap: 20px; align-items: flex-start; }
+.wrap { flex: 1; min-width: 0; }
+/* 组多了自动换行，不用左右拖 */
+.cols { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+/* 霹雳车、冲车/斗阵：右边单独一列，虚线隔开，横向滚动时也一直看得到 */
+.side { flex: none; display: flex; flex-direction: column; gap: 14px; padding-left: 20px; border-left: 1px dashed #d8dce2; }
+.bv { margin-left: 6px; color: #8a9099; font-variant-numeric: tabular-nums; }
 /* 手机：各组上下排、每组撑满一行，不用左右滑 */
 @media (max-width: 767px) {
+  .board { flex-direction: column; gap: 14px; }
+  .wrap { width: 100%; }
   .cols { flex-direction: column; gap: 14px; }
-  table.plan { width: 100%; }
+  .side { width: 100%; padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px dashed #d8dce2; }
 }
-table.plan td.nu { text-align: right; min-width: 62px; color: #4b5563; }
-table.plan td.t { color: #fff; font-weight: 700; text-align: left; }
-table.plan td.l { background: #fff; font-size: 11px; font-weight: 700; text-align: left; }
-table.plan td.dm { color: #6b7280; }
-table.plan td.em { color: #b6bbc2; }
-table.plan td.hd { color: #e0203a; font-weight: 700; }
-table.plan td.s { cursor: pointer; }
-table.plan td.s:hover { filter: brightness(0.96); }
-table.plan td.on { outline: 2px solid #e0a800; outline-offset: -2px; }
-.v { float: right; font-weight: 400; opacity: 0.9; }
 .bt { font-size: 13px; color: #6b7280; }
 </style>
