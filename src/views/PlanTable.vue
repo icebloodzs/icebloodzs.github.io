@@ -1,12 +1,12 @@
 <script setup>
-/** 集结分配的一组小表：每列一张，点位置往外抛 seat key。noVal 的列（冲车/斗阵）不显示数值列 */
-defineProps({ cols: { type: Array, required: true }, sel: { type: String, default: '' } })
+/** 集结分配的一组小表：每列一张，点位置往外抛 seat key。compact 是右边霹雳车、冲车/斗阵那列，窄一点 */
+defineProps({ cols: { type: Array, required: true }, sel: { type: String, default: '' }, compact: Boolean })
 const emit = defineEmits(['tap'])
 const cellBg = (row, c) => (row.kind === 'dim' ? '#f3f4f6' : row.kind === 'empty' ? '#fff' : c.color.light)
 </script>
 
 <template>
-  <table v-for="c in cols" :key="c.name" class="plan">
+  <table v-for="c in cols" :key="c.name" :class="['plan', { compact }]">
     <thead>
       <tr><th colspan="2" :style="{ background: c.color.main }">{{ c.name }}</th></tr>
     </thead>
@@ -19,7 +19,7 @@ const cellBg = (row, c) => (row.kind === 'dim' ? '#f3f4f6' : row.kind === 'empty
             :class="['t', row.key ? 's' : '', sel === row.key ? 'on' : '']"
             :style="{ background: row.prob ? '#f08a24' : c.color.main }"
             @click="row.key && emit('tap', row.key)"
-          >{{ row.text }}<span v-if="!c.noVal" class="v">{{ row.value }}</span></td>
+          >{{ row.text }}<span class="v">{{ row.value }}</span></td>
         </template>
         <template v-else-if="row.kind === 'label'">
           <td colspan="2" class="l" :style="{ color: c.color.main }">
@@ -28,13 +28,11 @@ const cellBg = (row, c) => (row.kind === 'dim' ? '#f3f4f6' : row.kind === 'empty
         </template>
         <template v-else>
           <td
-            :colspan="c.noVal ? 2 : 1"
             :class="['s', 'nm', row.kind === 'head' ? 'hd' : '', row.kind === 'dim' ? 'dm' : '', row.kind === 'empty' ? 'em' : '', sel === row.key ? 'on' : '']"
             :style="{ background: sel === row.key ? '#ffe9a8' : cellBg(row, c) }"
             @click="emit('tap', row.key)"
           >{{ row.kind === 'empty' ? '空位' : row.text }}</td>
           <td
-            v-if="!c.noVal"
             :class="['s', 'nu', row.kind === 'head' ? 'hd' : '', row.kind === 'dim' ? 'dm' : '', sel === row.key ? 'on' : '']"
             :style="{ background: sel === row.key ? '#ffe9a8' : cellBg(row, c) }"
             @click="emit('tap', row.key)"
@@ -46,7 +44,8 @@ const cellBg = (row, c) => (row.kind === 'dim' ? '#f3f4f6' : row.kind === 'empty
 </template>
 
 <style scoped>
-table.plan { border-collapse: collapse; font-size: 12px; min-width: 212px; }
+table.plan { border-collapse: collapse; font-size: 12px; min-width: 212px; width: 100%; }
+table.plan.compact { width: auto; }
 table.plan th { color: #fff; padding: 9px 12px; border: 1px solid #e9ebee; }
 table.plan td { border: 1px solid #e9ebee; padding: 7px 12px; text-align: center; white-space: nowrap; }
 table.plan td.nm { text-align: left; min-width: 112px; }
@@ -60,6 +59,11 @@ table.plan td.s { cursor: pointer; }
 table.plan td.s:hover { filter: brightness(0.96); }
 table.plan td.on { outline: 2px solid #e0a800; outline-offset: -2px; }
 .v { float: right; font-weight: 400; opacity: 0.9; }
+/* 右边特殊车那列收窄，给左边分组多腾地方 */
+table.plan.compact { min-width: 176px; }
+table.plan.compact th, table.plan.compact td { padding: 7px 9px; }
+table.plan.compact td.nm { min-width: 88px; }
+table.plan.compact td.nu { min-width: 48px; }
 @media (max-width: 767px) {
   table.plan { width: 100%; }
 }

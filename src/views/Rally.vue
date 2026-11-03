@@ -16,7 +16,7 @@ const opt = ref({
   mode: 'attack', groups: 4, subs: 0, mainBody: 5, subBody: 5, firstBody: 5,
   probability: 0, headBy: 'rally', bodyBy: 'rally', title: '',
   catapult: false, catBody: 6, catRatio: '6:1:3',
-  ram: false, ramFull: 6, ramReserve: 4
+  ram: false, ramFull: 6, ramReserve: 4, ramRatio: '5:2:3'
 })
 const plan = ref(null)
 const used = ref(null)
@@ -37,7 +37,7 @@ function options() {
     mainRatio: '5:2:3', subRatio: '5:2:3', probability: o.probability, firstBody: o.firstBody,
     headBy: o.headBy, bodyBy: o.bodyBy,
     catapult: o.catapult, catBody: o.catBody, catRatio: o.catRatio || '6:1:3',
-    ram: o.ram, ramFull: o.ramFull, ramReserve: o.ramReserve,
+    ram: o.ram, ramFull: o.ramFull, ramReserve: o.ramReserve, ramRatio: o.ramRatio || '',
     title: o.title || (attack.value ? '攻城集结分配' : '守城集结分配'),
     note: ''
   }
@@ -67,10 +67,7 @@ function tap(key) {
 /** 一组一列；霹雳车、冲车/斗阵单独放右边一列，上下叠着。排版和导出图片、Excel 同一份 */
 const layoutCols = computed(() => (plan.value ? R.buildLayout(plan.value, used.value).columns : []))
 const groupCols = computed(() => layoutCols.value.filter((c) => !c.special))
-/** 冲车/斗阵按六维上车，集结值没用，页面上不显示（标签行的「n人」保留） */
-const sideCols = computed(() => layoutCols.value.filter((c) => c.special).map((c) => (c.special === 'ram'
-  ? { ...c, noVal: true, rows: c.rows.filter((r) => !(r.kind === 'title' && r.text === c.name)).map((r) => (r.kind === 'label' ? r : { ...r, value: '' })) }
-  : c)))
+const sideCols = computed(() => layoutCols.value.filter((c) => c.special))
 /** 替补带集结值，从大到小；i 是在 plan.bench 里的原位置，点选对调用它 */
 const rallyOf = R.METRICS.rally
 const bench = computed(() => (plan.value ? plan.value.bench : [])
@@ -128,7 +125,7 @@ async function exportExcel() {
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>
 
-      <n-form label-placement="left" :label-width="90" size="small">
+      <n-form label-placement="left" :label-width="104" size="small">
         <n-grid cols="1 s:2 l:4" responsive="screen" :x-gap="16">
           <n-gi><n-form-item label="模式"><n-select v-model:value="opt.mode" :options="MODES" /></n-form-item></n-gi>
           <n-gi><n-form-item label="组数"><n-input-number v-model:value="opt.groups" :min="1" :max="20" :step="1" style="width:100%" /></n-form-item></n-gi>
@@ -144,6 +141,7 @@ async function exportExcel() {
           <n-gi v-if="opt.catapult"><n-form-item label="霹雳车比例"><n-input v-model:value="opt.catRatio" placeholder="6:1:3" /></n-form-item></n-gi>
           <n-gi><n-form-item :label="ramName"><n-switch v-model:value="opt.ram" /></n-form-item></n-gi>
           <n-gi v-if="opt.ram"><n-form-item label="满兵车身" :feedback="`其余 ${ramSingle} 个 1 兵车身，凑满 16 个`"><n-input-number v-model:value="opt.ramFull" :min="5" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item :label="ramName + '比例'" ><n-input v-model:value="opt.ramRatio" placeholder="5:2:3" /></n-form-item></n-gi>
           <n-gi v-if="opt.ram"><n-form-item label="候补车身"><n-input-number v-model:value="opt.ramReserve" :min="0" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi span="1 s:2"><n-form-item label="标题"><n-input v-model:value="opt.title" :placeholder="attack ? '攻城集结分配' : '守城集结分配'" /></n-form-item></n-gi>
         </n-grid>
@@ -164,7 +162,7 @@ async function exportExcel() {
           </div>
         </div>
         <div v-if="sideCols.length" class="side">
-          <PlanTable :cols="sideCols" :sel="sel" @tap="tap" />
+          <PlanTable :cols="sideCols" :sel="sel" compact @tap="tap" />
         </div>
       </div>
 
@@ -187,8 +185,8 @@ async function exportExcel() {
 <style scoped>
 .board { display: flex; gap: 20px; align-items: flex-start; }
 .wrap { flex: 1; min-width: 0; }
-/* 组多了自动换行，不用左右拖 */
-.cols { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+/* 组多了自动换行，每排按宽度平均撑开，右边不留一大块空 */
+.cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 20px; align-items: start; }
 /* 霹雳车、冲车/斗阵：右边单独一列，虚线隔开，横向滚动时也一直看得到 */
 .side { flex: none; display: flex; flex-direction: column; gap: 14px; padding-left: 20px; border-left: 1px dashed #d8dce2; }
 .bv { margin-left: 6px; color: #8a9099; font-variant-numeric: tabular-nums; }
@@ -196,7 +194,7 @@ async function exportExcel() {
 @media (max-width: 767px) {
   .board { flex-direction: column; gap: 14px; }
   .wrap { width: 100%; }
-  .cols { flex-direction: column; gap: 14px; }
+  .cols { grid-template-columns: 1fr; gap: 14px; }
   .side { width: 100%; padding-left: 0; border-left: 0; padding-top: 14px; border-top: 1px dashed #d8dce2; }
 }
 .bt { font-size: 13px; color: #6b7280; }

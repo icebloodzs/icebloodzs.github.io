@@ -164,6 +164,7 @@ function generateRam(members, opts) {
     return out
   }
   return {
+    ratio: opts.ramRatio || '',
     head: order[0] || null,
     full: take(1, fullN),
     single: take(1 + fullN, singleN),
@@ -352,7 +353,7 @@ function clonePlan(plan) {
     mode: plan.mode,
     cars: plan.cars.map((c) => Object.assign({}, c, { bodies: c.bodies.slice() })),
     bench: plan.bench.slice(),
-    ram: ram ? { head: ram.head, full: ram.full.slice(), single: ram.single.slice(), reserve: ram.reserve.slice() } : null
+    ram: ram ? { ratio: ram.ratio, head: ram.head, full: ram.full.slice(), single: ram.single.slice(), reserve: ram.reserve.slice() } : null
   }
 }
 
@@ -435,7 +436,7 @@ function buildLayout(plan, opts) {
 
   const ram = plan.ram
   if (ram) {
-    const rows = [{ kind: 'title', text: ramName(plan.mode), value: metric.label }, headRow('r:h', ram.head)]
+    const rows = [{ kind: 'title', text: ramName(plan.mode) + (ram.ratio || ''), value: metric.label }, headRow('r:h', ram.head)]
     const part = (name, label, kind) => {
       if (!ram[name].length) return
       rows.push({ kind: 'label', text: label, value: `${ram[name].length}人` })
