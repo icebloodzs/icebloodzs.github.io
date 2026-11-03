@@ -26,7 +26,7 @@ const MODES = [{ label: '攻城', value: 'attack' }, { label: '守城', value: '
 const BY = [{ label: '集结值', value: 'rally' }, { label: '六维总和', value: 'attrs' }]
 const BODY = R.BODY_MODES.map((m) => ({ label: m.label, value: m.key }))
 const attack = computed(() => opt.value.mode === 'attack')
-/** 独立队伍的叫法：攻城冲车、守城斗阵 */
+/** 独立队伍的叫法：攻城「冲车/斗阵」、守城「斗阵」 */
 const ramName = computed(() => R.ramName(opt.value.mode))
 
 function options() {
@@ -113,7 +113,7 @@ async function exportExcel() {
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         车头按集结值（或六维）从高到低挑，车身按你选的排法依次填；不管按什么排，名字右边都显示集结值。
-        霹雳车一辆，占正常队伍；冲车（守城叫斗阵）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
+        霹雳车一辆，占正常队伍；冲车/斗阵（不同赛季的叫法，守城只有斗阵）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>
 
