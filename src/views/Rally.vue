@@ -26,6 +26,8 @@ const MODES = [{ label: '攻城', value: 'attack' }, { label: '守城', value: '
 const BY = [{ label: '集结值', value: 'rally' }, { label: '六维总和', value: 'attrs' }]
 const BODY = R.BODY_MODES.map((m) => ({ label: m.label, value: m.key }))
 const attack = computed(() => opt.value.mode === 'attack')
+/** 独立队伍的叫法：攻城冲车、守城斗阵 */
+const ramName = computed(() => R.ramName(opt.value.mode))
 
 function options() {
   const o = opt.value
@@ -111,7 +113,7 @@ async function exportExcel() {
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         车头按集结值（或六维）从高到低挑，车身按你选的排法依次填；不管按什么排，名字右边都显示集结值。
-        霹雳车一辆，占正常队伍；冲车（只有攻城）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
+        霹雳车一辆，占正常队伍；冲车（守城叫斗阵）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>
 
@@ -129,9 +131,9 @@ async function exportExcel() {
           <n-gi><n-form-item label="霹雳车"><n-switch v-model:value="opt.catapult" /></n-form-item></n-gi>
           <n-gi v-if="opt.catapult"><n-form-item label="霹雳车车身"><n-input-number v-model:value="opt.catBody" :min="1" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="opt.catapult"><n-form-item label="霹雳车比例"><n-input v-model:value="opt.catRatio" placeholder="6:1:3" /></n-form-item></n-gi>
-          <n-gi v-if="attack"><n-form-item label="冲车/斗阵"><n-switch v-model:value="opt.ram" /></n-form-item></n-gi>
-          <n-gi v-if="attack && opt.ram"><n-form-item label="满兵车身" :feedback="`其余 ${ramSingle} 个 1 兵车身，凑满 16 个`"><n-input-number v-model:value="opt.ramFull" :min="5" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>
-          <n-gi v-if="attack && opt.ram"><n-form-item label="候补车身"><n-input-number v-model:value="opt.ramReserve" :min="0" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi><n-form-item :label="ramName"><n-switch v-model:value="opt.ram" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="满兵车身" :feedback="`其余 ${ramSingle} 个 1 兵车身，凑满 16 个`"><n-input-number v-model:value="opt.ramFull" :min="5" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="候补车身"><n-input-number v-model:value="opt.ramReserve" :min="0" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi span="1 s:2"><n-form-item label="标题"><n-input v-model:value="opt.title" :placeholder="attack ? '攻城集结分配' : '守城集结分配'" /></n-form-item></n-gi>
         </n-grid>
       </n-form>
@@ -140,7 +142,7 @@ async function exportExcel() {
     <n-card v-if="plan" :title="used.title" :bordered="false">
       <n-alert :type="sel ? 'warning' : 'info'" :bordered="false" style="margin-bottom: 12px">
         <template v-if="sel">已选中 <b>{{ seatOf(sel) ? seatOf(sel).name : '空位' }}</b>，再点另一个位置就对调；点它自己取消。</template>
-        <template v-else>点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）。<template v-if="plan.ram">冲车是独立队伍：点冲车上的位置再点组里或替补的人，就是把他换上冲车，组里的位置不动。</template></template>
+        <template v-else>点一个人，再点另一个位置即可对调（空位也能点，等于把人挪过去）。<template v-if="plan.ram">{{ ramName }}是独立队伍：点{{ ramName }}上的位置再点组里或替补的人，就是把他换上{{ ramName }}，组里的位置不动。</template></template>
       </n-alert>
 
       <!-- 一组一张小表并排放，组和组之间留空，不然几十列挤成一坨看不清 -->
