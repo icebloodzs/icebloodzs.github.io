@@ -16,7 +16,7 @@ const opt = ref({
   mode: 'attack', groups: 4, subs: 0, mainBody: 5, subBody: 5, firstBody: 5,
   probability: 0, headBy: 'rally', bodyBy: 'rally', title: '',
   catapult: false, catBody: 6, catRatio: '6:1:3',
-  ram: false, ramFull: 6, ramReserve: 4, ramRatio: '5:2:3'
+  ram: false, ramFull: 6, ramSingle: 9, ramReserve: 2, ramRatio: '5:2:3'
 })
 const plan = ref(null)
 const used = ref(null)
@@ -37,7 +37,7 @@ function options() {
     mainRatio: '5:2:3', subRatio: '5:2:3', probability: o.probability, firstBody: o.firstBody,
     headBy: o.headBy, bodyBy: o.bodyBy,
     catapult: o.catapult, catBody: o.catBody, catRatio: o.catRatio || '6:1:3',
-    ram: o.ram, ramFull: o.ramFull, ramReserve: o.ramReserve, ramRatio: o.ramRatio || '',
+    ram: o.ram, ramFull: o.ramFull, ramSingle: o.ramSingle, ramReserve: o.ramReserve, ramRatio: o.ramRatio || '',
     title: o.title || (attack.value ? '攻城集结分配' : '守城集结分配'),
     note: ''
   }
@@ -75,7 +75,6 @@ const bench = computed(() => (plan.value ? plan.value.bench : [])
   .filter((x) => x.m)
   .sort((a, b) => (b.v ?? -Infinity) - (a.v ?? -Infinity))
   .map((x) => ({ ...x, text: rallyOf.fmt(x.v) })))
-const ramSingle = computed(() => R.RAM_TOTAL - 1 - (opt.value.ramFull || 0))
 const fileBase = () => (used.value.title || '集结分配').replace(/[\\/:*?"<>|【】\s]/g, '')
 
 function exportImage() {
@@ -121,7 +120,7 @@ async function exportExcel() {
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         车头按集结值（或六维）从高到低挑，车身按你选的排法依次填；不管按什么排，名字右边都显示集结值。
-        霹雳车一辆，占正常队伍；冲车/斗阵（不同赛季的叫法，守城只有斗阵）是独立队伍，六维最高的当车头，车头加车身共 16 个。算的是和小程序同一套逻辑，两边结果一致。
+        霹雳车一辆，占正常队伍；冲车/斗阵（不同赛季的叫法，守城只有斗阵）是独立队伍，六维最高的当车头，满兵车身、1 兵车身、补位各自设人数。算的是和小程序同一套逻辑，两边结果一致。
         参与人数 {{ members.length }}（在册成员）。
       </n-alert>
 
@@ -140,9 +139,10 @@ async function exportExcel() {
           <n-gi v-if="opt.catapult"><n-form-item label="霹雳车车身"><n-input-number v-model:value="opt.catBody" :min="1" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="opt.catapult"><n-form-item label="霹雳车比例"><n-input v-model:value="opt.catRatio" placeholder="6:1:3" /></n-form-item></n-gi>
           <n-gi><n-form-item :label="ramName"><n-switch v-model:value="opt.ram" /></n-form-item></n-gi>
-          <n-gi v-if="opt.ram"><n-form-item label="满兵车身" :feedback="`其余 ${ramSingle} 个 1 兵车身，凑满 16 个`"><n-input-number v-model:value="opt.ramFull" :min="5" :max="8" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="满兵车身"><n-input-number v-model:value="opt.ramFull" :min="1" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="1兵车身"><n-input-number v-model:value="opt.ramSingle" :min="1" :max="16" :step="1" style="width:100%" /></n-form-item></n-gi>
+          <n-gi v-if="opt.ram"><n-form-item label="补位满兵"><n-input-number v-model:value="opt.ramReserve" :min="0" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi v-if="opt.ram"><n-form-item :label="ramName + '比例'" ><n-input v-model:value="opt.ramRatio" placeholder="5:2:3" /></n-form-item></n-gi>
-          <n-gi v-if="opt.ram"><n-form-item label="候补车身"><n-input-number v-model:value="opt.ramReserve" :min="0" :max="10" :step="1" style="width:100%" /></n-form-item></n-gi>
           <n-gi span="1 s:2"><n-form-item label="标题"><n-input v-model:value="opt.title" :placeholder="attack ? '攻城集结分配' : '守城集结分配'" /></n-form-item></n-gi>
         </n-grid>
       </n-form>

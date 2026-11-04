@@ -5,7 +5,7 @@
  * 守城：每组 1 个车头 + 车身；第一组车身固定人数（默认 5），其余人分给后面几组。
  * 霹雳车（可选）：占正常队伍，上了霹雳车的人不再进别的车。攻城取常规车坐满后接下来的人，守城取排在最后的人。
  * 冲车（可选）：独立队伍，和常规车互不影响（同一个人可以既在组里又在冲车上）。不同赛季叫法不同（S4 冲车、S5 斗阵），规则一样只排一次：攻城写「冲车/斗阵」，守城只有斗阵（ramName）。
- *   六维最高的当车头，接着 N 个满兵车身（默认 6），其余 1 兵车身凑满 16 个，再加几个候补车身。
+ *   六维最高的当车头，满兵车身（1~10，默认 6）、1 兵车身（1~16，默认 9）、补位满兵车身（默认 2）各自设人数，不再限 16 个。
  *
  * 名字右边一律显示集结值；「按六维」只影响谁进哪辆车，不影响显示。
  *
@@ -41,7 +41,7 @@ const GROUP_COLORS = [
 /** 冲车橙、霹雳车蓝（跟参考攻城表一致） */
 const RAM_COLOR = { main: '#e8731a', light: '#fde4cc' }
 const CAT_COLOR = { main: '#4472c4', light: '#d9e2f5' }
-/** 冲车：车头 + 车身固定最多 16 个 */
+/** 冲车：老版本没传 1 兵人数时，按「车头 + 车身凑满 16 个」算 */
 /** 这支独立队伍的叫法：冲车（S4）和斗阵（S5）上车规则一样，攻城两种都可能是，守城只有斗阵 */
 const ramName = (mode) => (mode === 'defense' ? '斗阵' : '冲车/斗阵')
 const RAM_TOTAL = 16
@@ -153,8 +153,10 @@ function sortForRam(list) {
  * full 满兵车身（5~8），single 1 兵车身 = 16 − 1 − full，reserve 候补车身。人不够就留空位。
  */
 function generateRam(members, opts) {
-  const fullN = Math.max(0, Math.min(RAM_TOTAL - 1, opts.ramFull || 0))
-  const singleN = RAM_TOTAL - 1 - fullN
+  const fullN = Math.max(0, opts.ramFull || 0)
+  const singleN = opts.ramSingle === undefined || opts.ramSingle === null
+    ? Math.max(0, RAM_TOTAL - 1 - fullN)
+    : Math.max(0, opts.ramSingle)
   const reserveN = Math.max(0, opts.ramReserve || 0)
   const order = sortForRam(members)
   // 谁上哪一段按六维挑，段内按集结值排，看着整齐
@@ -166,9 +168,10 @@ function generateRam(members, opts) {
   return {
     ratio: opts.ramRatio || '',
     head: order[0] || null,
+    // 补位是给满兵车身顶缺的，紧跟满兵往下挑；剩下的才上 1 兵车身
     full: take(1, fullN),
-    single: take(1 + fullN, singleN),
-    reserve: take(1 + fullN + singleN, reserveN)
+    reserve: take(1 + fullN, reserveN),
+    single: take(1 + fullN + reserveN, singleN)
   }
 }
 
@@ -444,7 +447,7 @@ function buildLayout(plan, opts) {
     }
     part('full', '满兵车身', 'body')
     part('single', '1兵车身', 'body')
-    part('reserve', '候补车身', 'dim')
+    part('reserve', '补位满兵车身', 'dim')
     columns.push({ name: ramName(plan.mode), color: RAM_COLOR, special: 'ram', rows })
   }
 
