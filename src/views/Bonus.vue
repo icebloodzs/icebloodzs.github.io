@@ -62,7 +62,8 @@ const columns = computed(() => [
   bigCol('单人出征', 'maxMarch', 110),
   troopCol.value,
   numCol('六维总和', 'attrsSum', 2, 110, true),
-  timeCol('资料更新', 'attrsUpdatedAt')
+  // 集结值 / 出征 / 兵力 / 阵营改了刷的是 profileUpdatedAt；六维的时间在「属性排名」页
+  timeCol('资料更新', 'profileUpdatedAt')
 ])
 </script>
 
