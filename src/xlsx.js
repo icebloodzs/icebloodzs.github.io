@@ -18,15 +18,14 @@ function visual(s) {
 
 /**
  * 表格配色跟浏览器版走：紫色表头、浅紫隔行底色、淡紫细边框；
- * 第一列（名字）靠左加粗，数字靠右，其余居中；表头带筛选下拉。
+ * 所有格子居中，第一列（名字）加粗；表头带筛选下拉。
  */
 const PURPLE = '6C5CE7'
 const EXCEL_STYLES = [
   { fill: PURPLE, color: 'FFFFFF', bold: true, size: 11, line: '5A4BD6' }, // 0 表头
   ...['FFFFFF', 'F5F3FF'].flatMap((fill) => [
-    { fill, color: '2B2F36', size: 11, line: 'E4E0F7' }, // 文本居中
-    { fill, color: '2B2F36', size: 11, line: 'E4E0F7', bold: true, align: 'left' }, // 第一列
-    { fill, color: '2B2F36', size: 11, line: 'E4E0F7', align: 'right' } // 数字
+    { fill, color: '2B2F36', size: 11, line: 'E4E0F7' }, // 内容
+    { fill, color: '2B2F36', size: 11, line: 'E4E0F7', bold: true } // 第一列
   ])
 ]
 
@@ -35,7 +34,7 @@ export async function buildExcel({ aoa, sheetName, name }) {
   const cols = aoa[0].map((_, c) => ({ wch: Math.min(40, Math.max(8, ...aoa.map((r) => visual(r[c] ?? '') + 4))) }))
   const cellStyles = aoa.map((row, r) => (r === 0
     ? row.map(() => 0)
-    : row.map((v, c) => 1 + (r % 2 === 0 ? 3 : 0) + (c === 0 ? 1 : typeof v === 'number' ? 2 : 0))))
+    : row.map((v, c) => 1 + (r % 2 === 0 ? 2 : 0) + (c === 0 ? 1 : 0))))
   const res = await call('files.buildExcel', {
     aoa,
     cols,
