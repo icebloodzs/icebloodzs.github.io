@@ -168,7 +168,8 @@ const attrKeys = computed(() => {
   const a = me.value && me.value.alliance
   return (a && a.attrKeys) || ['infDef', 'infHp', 'cavAtk', 'cavBreak', 'arcAtk', 'arcBreak']
 })
-provide('app', { me, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can, selfOnly, narrow })
+const ally = computed(() => (me.value && me.value.alliance) || {})
+provide('app', { me, ally, members, season, attrKeys, loginBy, reload, refreshMe, refreshNotices, can, selfOnly, narrow })
 // 手机上点了菜单就把抽屉收起来
 watch(view, () => { navOpen.value = false })
 
@@ -268,7 +269,6 @@ const selfTip = computed(() => {
   if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：浏览器版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
   return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只对开发版的管理员开放。'
 })
-const ally = computed(() => (me.value && me.value.alliance) || {})
 /** 开发版试用中：顶栏挂个「试用还剩 N 天」，管理员心里有数 */
 const trialLeft = computed(() => (ally.value.trial && ally.value.level !== 'free' ? ally.value.levelDaysLeft : null))
 

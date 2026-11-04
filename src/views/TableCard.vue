@@ -24,7 +24,7 @@ const props = defineProps({
 
 const message = useMessage()
 // 手机：搜索框和导出挪到标题下面一整行，表格不撑满整页高、改成最多七成屏高
-const { narrow = ref(false) } = inject('app', {})
+const { narrow = ref(false), ally = ref({}) } = inject('app', {})
 const keyword = ref('')
 const busy = ref(false)
 
@@ -72,7 +72,11 @@ async function exportExcel() {
         return v === null || v === undefined ? '' : v
       }))
     })
-    await buildExcel({ aoa, sheetName: props.sheetName || props.title, name: `${props.fileName || props.title}-${new Date().toISOString().slice(0, 10)}.xlsx` })
+    // 文件名：同盟名-表名-日期（北京时间），去掉文件名里不能用的字符
+    const day = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10)
+    const name = [ally.value && ally.value.name, props.fileName || props.title, day]
+      .filter(Boolean).join('-').replace(/[\\/:*?"<>|\s]/g, '')
+    await buildExcel({ aoa, sheetName: props.sheetName || props.title, name: name + '.xlsx' })
   } catch (e) {
     message.error(e.message)
   } finally {
