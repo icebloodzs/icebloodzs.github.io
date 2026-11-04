@@ -15,6 +15,7 @@ import TableCard from './TableCard.vue'
 import { call } from '../api'
 import { readWorkbook } from '../sheet'
 import { big, num, sorter } from '../fmt'
+import { indexCol } from '../cols'
 
 const { members, reload, narrow } = inject('app')
 const message = useMessage()
@@ -67,6 +68,8 @@ const bigNumCol = (title, key, width = 100) => ({
 })
 
 const columns = computed(() => [
+  // 序号列表头留空；导回来时空表头那列会被跳过
+  { ...indexCol, title: '' },
   {
     title: '账号名称', key: 'name', width: 130, fixed: 'left', sorter: sorter((r) => r.name), xls: (r) => r.name,
     render: (r) => h('a', { class: 'fd-name', title: '点击修改', onClick: () => openEdit(r) }, r.name)
@@ -277,7 +280,7 @@ const snapText = computed(() => (pending.value ? stamp(pending.value.snapshotAt)
       desc="每个人的名单数据、自填资料和六维都在这一张表里。导出的 Excel 改完可以直接导回来：按账号名称认人，只用比系统里新的数据（六维看「六维更新时间」，其余看表格导出的时间），对不上名字的会列出来、不会新建。"
       :columns="columns"
       :rows="members"
-      :scroll-x="2000"
+      :scroll-x="2100"
     >
       <template #actions>
         <n-button :loading="busy" @click="pickFile">导入 Excel</n-button>

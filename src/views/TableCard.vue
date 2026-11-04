@@ -64,7 +64,8 @@ async function exportExcel() {
   if (busy.value) return
   busy.value = true
   try {
-    const cols = props.columns.filter((c) => c.title)
+    // 有表头的列都导；表头留空的（序号）带了 xls 也导
+    const cols = props.columns.filter((c) => c.title || c.xls)
     const aoa = [cols.map((c) => c.title)]
     shown.value.forEach((r, i) => {
       aoa.push(cols.map((c) => {
