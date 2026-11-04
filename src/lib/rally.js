@@ -5,7 +5,8 @@
  * 守城：每组 1 个车头 + 车身；第一组车身固定人数（默认 5），其余人分给后面几组。
  * 霹雳车（可选）：占正常队伍，上了霹雳车的人不再进别的车。攻城取常规车坐满后接下来的人，守城取排在最后的人。
  * 冲车（可选）：独立队伍，和常规车互不影响（同一个人可以既在组里又在冲车上）。不同赛季叫法不同（S4 冲车、S5 斗阵），规则一样只排一次：攻城写「冲车/斗阵」，守城只有斗阵（ramName）。
- *   六维最高的当车头，满兵车身（1~10，默认 6）、1 兵车身（1~16，默认 9）、补位满兵车身（默认 2）各自设人数，不再限 16 个。
+ *   六维最高的当车头，补位满兵车身（1~10，默认 6）、1 兵车身（1~16，默认 9）、候补车身（1~6，默认 2）各自设人数，不再限 16 个；
+ *   显示顺序：车头 → 1 兵车身 → 补位满兵车身 → 候补车身。
  *
  * 名字右边一律显示集结值；「按六维」只影响谁进哪辆车，不影响显示。
  *
@@ -168,10 +169,9 @@ function generateRam(members, opts) {
   return {
     ratio: opts.ramRatio || '',
     head: order[0] || null,
-    // 补位是给满兵车身顶缺的，紧跟满兵往下挑；剩下的才上 1 兵车身
     full: take(1, fullN),
-    reserve: take(1 + fullN, reserveN),
-    single: take(1 + fullN + reserveN, singleN)
+    single: take(1 + fullN, singleN),
+    reserve: take(1 + fullN + singleN, reserveN)
   }
 }
 
@@ -445,9 +445,9 @@ function buildLayout(plan, opts) {
       rows.push({ kind: 'label', text: label, value: `${ram[name].length}人` })
       ram[name].forEach((m, i) => rows.push(seat(kind, `r:${name}:${i}`, m)))
     }
-    part('full', '满兵车身', 'body')
     part('single', '1兵车身', 'body')
-    part('reserve', '补位满兵车身', 'dim')
+    part('full', '补位满兵车身', 'body')
+    part('reserve', '候补车身', 'dim')
     columns.push({ name: ramName(plan.mode), color: RAM_COLOR, special: 'ram', rows })
   }
 
