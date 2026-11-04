@@ -74,8 +74,6 @@ const columns = computed(() => [
     title: '账号名称', key: 'name', width: 130, fixed: 'left', sorter: sorter((r) => r.name), xls: (r) => r.name,
     render: (r) => h('a', { class: 'fd-name', title: '点击修改', onClick: () => openEdit(r) }, r.name)
   },
-  textCol('六维更新时间', 'attrsUpdatedAt', (r) => stamp(r.attrsUpdatedAt), 160),
-  textCol('关联状态', 'boundUid', (r) => (r.boundUid ? '已关联' : '未关联'), 90),
   textCol('阶位', 'rank', rankText, 70),
   textCol('主玩阵营', 'camps', (r) => (r.camps || []).join('、'), 150),
   numberCol('最高加成', 'maxBonus', (r) => r.maxBonus, 2, 90),
@@ -84,7 +82,9 @@ const columns = computed(() => [
   ...ARMS.map(([arm, title]) => textCol(title, 'tier_' + arm, (r) => tierOf(r, arm), 100)),
   numberCol('四维', 'four', (r) => sumOf(r, FOUR), 0, 80),
   numberCol('六维', 'six', (r) => sumOf(r, ATTRS.map(([k]) => k)), 0, 80),
-  ...ATTRS.map(([k, title]) => numberCol(title, k, (r) => (r.attrs ? r.attrs[k] : null), 0, 100))
+  ...ATTRS.map(([k, title]) => numberCol(title, k, (r) => (r.attrs ? r.attrs[k] : null), 0, 100)),
+  textCol('关联状态', 'boundUid', (r) => (r.boundUid ? '已关联' : '未关联'), 90),
+  textCol('六维更新时间', 'attrsUpdatedAt', (r) => stamp(r.attrsUpdatedAt), 160)
 ])
 
 // ---------------- 手动修改 ----------------
