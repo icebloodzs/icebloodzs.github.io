@@ -147,7 +147,9 @@ export function drawSheet(opts) {
   text(subs.join('、') || '无', X[1] + 12, y + RH / 2, { size: 14 })
   y += RH
   box(0, y, WIDTH, RH, S.head)
-  text([commander, channel].filter(Boolean).join('　　') || '指挥：（沙盘左上角「排表信息」里填）', WIDTH - 20, y + RH / 2, { color: '#fff', align: 'right', bold: true })
+  // 指挥后面固定跟一句「所有调度以实时战况为准」
+  const cmd = commander ? `${commander}，所有调度以实时战况为准` : '所有调度以实时战况为准'
+  text([cmd, channel].filter(Boolean).join('　　'), WIDTH - 20, y + RH / 2, { color: '#fff', align: 'right', bold: true })
   text('三冰小帮手 · 官渡排表', 20, y + RH / 2, { color: '#dbe5f7', size: 12 })
   return c
 }
