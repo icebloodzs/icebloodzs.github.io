@@ -173,7 +173,7 @@ function closeBoard() {
       <n-tabs v-model:value="tab" type="segment" style="max-width: 420px; margin-bottom: 12px">
         <n-tab name="1">一团 {{ res.rows.filter((r) => r.legion === 1).length }}</n-tab>
         <n-tab name="2">二团 {{ res.rows.filter((r) => r.legion === 2).length }}</n-tab>
-        <n-tab name="pending">未表态 {{ res.pending.length }}</n-tab>
+        <n-tab name="pending">未报名 {{ res.pending.length }}</n-tab>
       </n-tabs>
       <n-data-table :columns="tab === 'pending' ? pendingColumns : signColumns" :data="tableRows" :row-key="(r) => r.memberId" size="small" :max-height="520" />
     </n-card>
