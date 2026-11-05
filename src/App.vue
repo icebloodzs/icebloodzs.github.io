@@ -24,6 +24,7 @@ import Notice from './views/Notice.vue'
 import Board from './views/Board.vue'
 import Attendance from './views/Attendance.vue'
 import FullData from './views/FullData.vue'
+import GuanDu from './views/GuanDu.vue'
 import SideNav from './views/SideNav.vue'
 
 const VIEWS = {
@@ -37,6 +38,7 @@ const VIEWS = {
   season: { label: '赛季评分', icon: '🏅', comp: Season },
   attendance: { label: '考勤功勋', icon: '🗓️', comp: Attendance },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
+  guandu: { label: '官渡之战', icon: '⚔️', comp: GuanDu },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
   shape: { label: '摆图形', icon: '🔠', comp: Shape },
   myattrs: { label: '我的属性', icon: '📈', comp: MyAttrs },
@@ -142,7 +144,7 @@ const menuOptions = computed(() => selfOnly.value
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'placement', 'shape', 'notice', 'board']
+    children: ['rally', 'guandu', 'placement', 'shape', 'notice', 'board']
       .filter(shown)
       .map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
