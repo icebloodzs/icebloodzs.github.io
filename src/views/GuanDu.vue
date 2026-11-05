@@ -56,7 +56,9 @@ const legions = computed(() => {
       groups: plan.groups.map((g) => `${g.name} ${g.members.length}`).join(' · '),
       ungrouped: rows.filter((x) => !plan.groups.some((g) => g.members.includes(x.memberId))).length,
       prog,
-      fromLastWeek: plan.fromLastWeek
+      fromLastWeek: plan.fromLastWeek,
+      pub: plan.publishedAt ? (plan.pubStale ? `已发布 ${stamp(plan.publishedAt)}，之后又改过，进沙盘重新发布` : `已发布给成员 · ${stamp(plan.publishedAt)}`) : '还没发布给成员：排好后在沙盘右上角点「发布给成员」',
+      pubOk: Boolean(plan.publishedAt && !plan.pubStale)
     }
   })
 })
@@ -121,7 +123,7 @@ function closeBoard() {
   <n-space vertical :size="16">
     <n-alert type="info" :bordered="false">
       成员在小程序首页人物卡片上点「官渡报名」，选一团或二团、主力或替补（每团主力 30、替补 10，满了就报不上）。
-      报名截止后在这里进沙盘排表，排完导出排表图发群。催报、代报、游戏勾选清单在小程序「管理 → 官渡管理」。
+      报名截止后在这里进沙盘排表，排完点「发布给成员」，成员在小程序里就能看到自己的任务；也可以导出排表图发群。催报、代报、游戏勾选清单在小程序「管理 → 官渡管理」。
     </n-alert>
     <n-alert v-if="narrow" type="warning" :bordered="false">沙盘排表需要电脑的大屏幕，手机上只能看报名情况。</n-alert>
 
@@ -159,6 +161,7 @@ function closeBoard() {
             <div class="gd-groups">{{ lg.groups }}<span v-if="lg.ungrouped"> · 未分组 {{ lg.ungrouped }}</span></div>
             <div v-if="lg.fromLastWeek" class="gd-tip">本周还没排过：进沙盘会照上周的分组和任务起个头</div>
             <div v-else-if="lg.prog.missing.length" class="gd-tip">还没派：{{ lg.prog.missing.slice(0, 3).join('、') }}{{ lg.prog.missing.length > 3 ? ` 等 ${lg.prog.missing.length} 项` : '' }}</div>
+            <div class="gd-pub" :class="{ ok: lg.pubOk }">{{ lg.pub }}</div>
             <n-space style="margin-top: 14px">
               <n-button type="primary" size="large" :disabled="narrow" @click="boardLegion = lg.legion">进入沙盘排表</n-button>
               <n-button size="large" @click="exportSheet(lg.legion)">导出排表图</n-button>
@@ -198,5 +201,7 @@ function closeBoard() {
 .gd-v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .gd-v small { font-size: 14px; color: #8a9099; font-weight: 400; }
 .gd-groups { color: #4b5563; font-size: 13px; }
+.gd-pub { color: #d97706; font-size: 13px; margin-top: 6px; }
+.gd-pub.ok { color: #18a058; }
 .gd-tip { color: #e0203a; font-size: 13px; margin-top: 6px; }
 </style>

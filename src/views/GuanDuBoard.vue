@@ -5,9 +5,10 @@
  * - 数据：admin.guanduOverview({ withPlans }) 一次给齐（两个团的报名、排表、模板），由外层页面传进来
  * - 拖地图上的分组棋子 = 这一阶段该组 1 队去哪；左边拖名字换组、双击设车头；右边改 2/3 队、4-6 队、要点
  * - 排表改动 0.8 秒后自动存（admin.guanduSavePlan）；频道、指挥、每组要点存模板（admin.guanduSaveTpl），下周自动带上
+ * - 「发布给成员」(admin.guanduPublish)：把存好的排表拍一份快照给小程序「我的任务」；之后再改要重新发布才生效
  * - 画布和侧栏都是手写 DOM（照搬原型），样式不加 scoped，统一挂在 .gdb 下面
  */
-import { onMounted, onBeforeUnmount, ref } from 'vue'
+import { onMounted, onBeforeUnmount, ref, reactive, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { call } from '../api'
 import { download } from '../xlsx'
@@ -45,6 +46,11 @@ const DATA = {}
 })
 const INFO = { channel: tpl.channel || '', commander: { 1: (tpl.commander && tpl.commander[1]) || '', 2: (tpl.commander && tpl.commander[2]) || '' } }
 
+// 发布状态（顶栏按钮用）：at 发布时间，dirty 发布后又改过
+const PUB = reactive({ 1: { at: res.plans[1].publishedAt || null, dirty: Boolean(res.plans[1].pubStale) }, 2: { at: res.plans[2].publishedAt || null, dirty: Boolean(res.plans[2].pubStale) } })
+const curLegion = ref(Number(props.legion))
+const publishing = ref(false)
+
 const S = { legion: String(props.legion), phase: 0, sel: null, drag: null, playing: false, playT: 0, playStart: 0, t0: performance.now() }
 const L = () => DATA[S.legion]
 const groupOf = (gid) => L().groups.find((g) => g.id === gid)
@@ -75,9 +81,46 @@ async function flush(key) {
 function savePlan() {
   const l = Number(S.legion)
   const D = DATA[l]
+  PUB[l].dirty = true
   debounce('plan' + l, () => call('admin.guanduSavePlan', { legion: l, plan: { groups: D.groups, assign: D.assign, tasks: D.tasks } }))
 }
-function saveTpl(key, payload) { debounce('tpl' + key, () => call('admin.guanduSaveTpl', payload), 1000) }
+function saveTpl(key, payload) {
+  // 频道两个团共用，指挥、要点按团
+  ;(payload.legion ? [payload.legion] : [1, 2]).forEach((l) => { PUB[l].dirty = true })
+  debounce('tpl' + key, () => call('admin.guanduSaveTpl', payload), 1000)
+}
+
+// ===================== 发布给成员 =====================
+const stampOf = (iso) => {
+  const d = new Date(new Date(iso).getTime() + 8 * 3600000)
+  return `${d.getUTCMonth() + 1}-${String(d.getUTCDate()).padStart(2, '0')} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
+}
+const pubLabel = computed(() => {
+  const p = PUB[curLegion.value]
+  if (publishing.value) return '发布中…'
+  if (!p.at) return '发布给成员'
+  return p.dirty ? '有改动，重新发布' : '已发布 ' + stampOf(p.at)
+})
+async function publish() {
+  if (publishing.value) return
+  const l = curLegion.value
+  const name = l === 1 ? '一团' : '二团'
+  if (!window.confirm(`把${name}现在的排表发布给成员？\n\n成员在小程序报名页「我的任务」里能看到自己在哪组、每个阶段去哪、本组要点。之后再改，要重新发布才会更新。`)) return
+  publishing.value = true
+  try {
+    // 先把还在排队的保存发出去，发布的是最新的
+    Object.keys(timers).forEach((k) => clearTimeout(timers[k]))
+    await Promise.all([...pending.keys()].map((k) => flush(k)))
+    const r = await call('admin.guanduPublish', { legion: l })
+    PUB[l].at = r.publishedAt; PUB[l].dirty = false
+    message.success(`${name}排表已发布，${r.members} 人能看到自己的任务`)
+    emit('saved')
+  } catch (e) {
+    message.error('发布失败：' + e.message)
+  } finally {
+    publishing.value = false
+  }
+}
 
 // ===================== 画布 =====================
 let cv, ctx, tip, raf = 0, ro = null
@@ -550,7 +593,7 @@ function play() { if (S.playing) return; S.playing = true; S.playStart = perform
 function renderSide() { renderLeft(); renderRight(); if (!S.playing) renderTimeline() }
 function switchLegion(l) {
   if (S.playing) return
-  S.legion = String(l); S.sel = (L().groups[0] || {}).id || null; S.phase = 0
+  S.legion = String(l); curLegion.value = Number(l); S.sel = (L().groups[0] || {}).id || null; S.phase = 0
   root.value.querySelectorAll('.lgtab').forEach((x) => x.classList.toggle('on', x.dataset.l === S.legion))
   renderSide()
 }
@@ -612,6 +655,7 @@ onBeforeUnmount(() => {
       </div>
       <span class="hint saved">{{ saveState }}</span>
       <div class="grow"></div>
+      <button class="btn pub" :class="{ primary: !PUB[curLegion].at || PUB[curLegion].dirty, done: PUB[curLegion].at && !PUB[curLegion].dirty }" :disabled="publishing" title="发布后成员在小程序「我的任务」里看到自己的安排" @click="publish">{{ pubLabel }}</button>
       <span class="hint">拖动地图上的分组棋子到建筑 · 点棋子看全程路线 · Esc 返回</span>
       <button class="btn" title="浏览器全屏，开会投屏用" @click="toggleFull">⛶ 全屏</button>
     </header>
@@ -649,6 +693,7 @@ onBeforeUnmount(() => {
 .gdb .grow { flex: 1; }
 .gdb .btn { border: 1px solid var(--line); background: var(--panel2); padding: 7px 14px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .gdb .btn:hover { border-color: #3a4d75; }
+.gdb .btn.pub.done { color: #34d399; border-color: rgba(52, 211, 153, .45); }
 .gdb .btn.primary { background: linear-gradient(135deg, #f59e0b, #f97316); border: 0; color: #1a1205; font-weight: 700; }
 .gdb .mini { margin-left: auto; border: 1px dashed #3a4d75; background: none; color: #93c5fd; border-radius: 6px; padding: 1px 8px; cursor: pointer; font-size: 12px; }
 .gdb .hint { color: var(--mute); font-size: 12px; }
