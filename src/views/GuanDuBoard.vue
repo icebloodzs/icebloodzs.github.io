@@ -427,7 +427,7 @@ function renderLeft() {
   const q = (label, n, max, color) => `<div class="q"><small>${label}</small><div><b>${n}</b> / ${max}　<small>剩 ${Math.max(0, max - n)} 个</small></div><div class="bar"><i style="width:${Math.min(100, n / max * 100)}%;background:${color}"></i></div></div>`
   $('.left').innerHTML = `
     <div class="sec"><h3>排表信息</h3>
-      <div class="field"><label>频道</label><input id="gdChannel" placeholder="如 KOOK频道：xxx" value="${esc(INFO.channel)}" /></div>
+      <div class="field"><label>频道</label><input id="gdChannel" placeholder="如 xx频道：xxx" value="${esc(INFO.channel)}" /></div>
       <div class="field"><label>指挥</label><input id="gdCommander" placeholder="如 指挥：xxx" value="${esc(INFO.commander[S.legion])}" /></div>
       <p class="hint">写进导出的排表图；频道两个团共用，指挥按团分开，下周自动带上</p></div>
     <div class="sec"><h3>报名情况</h3><div class="quota">${q('主力', mainN, res.caps.main, '#3b82f6')}${q('替补', subN, res.caps.sub, '#f59e0b')}</div>
