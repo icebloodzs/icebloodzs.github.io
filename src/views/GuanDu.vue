@@ -103,7 +103,12 @@ function exportSheet(l) {
     plan: { ...plan, groups: plan.groups.map((g) => ({ ...g, members: g.members.filter((id) => names[id]) })) },
     names, subs, notes, channel: r.tpl.channel, commander: r.tpl.commander && r.tpl.commander[l]
   })
-  c.toBlob((blob) => { if (blob) download(blob, `官渡${l === 1 ? '一团' : '二团'}安排表.png`); else message.error('生成图片失败') }, 'image/png')
+  preview.value = { url: c.toDataURL('image/png'), canvas: c, name: `官渡${l === 1 ? '一团' : '二团'}安排表.png` }
+}
+const preview = ref(null) // 导出图预览，看过再下载
+function savePreview() {
+  const p = preview.value
+  p.canvas.toBlob((blob) => { if (blob) download(blob, p.name); else message.error('生成图片失败') }, 'image/png')
 }
 
 function closeBoard() {
@@ -172,6 +177,13 @@ function closeBoard() {
       </n-tabs>
       <n-data-table :columns="tab === 'pending' ? pendingColumns : signColumns" :data="tableRows" :row-key="(r) => r.memberId" size="small" :max-height="520" />
     </n-card>
+
+    <n-modal :show="!!preview" preset="card" title="排表预览" style="width: 1240px; max-width: 96vw" @update:show="(v) => { if (!v) preview = null }">
+      <img v-if="preview" :src="preview.url" alt="排表预览" style="width: 100%; display: block; border-radius: 6px" />
+      <template #footer>
+        <n-space justify="end"><n-button @click="preview = null">关闭</n-button><n-button type="primary" @click="savePreview">下载图片</n-button></n-space>
+      </template>
+    </n-modal>
 
     <GuanDuBoard v-if="boardLegion && res" :data="res" :legion="boardLegion" @close="closeBoard" />
   </n-space>

@@ -18,6 +18,7 @@ const emit = defineEmits(['close', 'saved'])
 const message = useMessage()
 const root = ref(null)
 const saveState = ref('')
+const preview = ref(null) // 导出图预览 { url, canvas, name }
 
 const { BUILDINGS, BM, BASE_US, BASE_THEM, PHASES, fullName, shortName, isOpen, colorOf, rankOf, RANK_COLOR, T456 } = GD
 
@@ -564,7 +565,12 @@ function exportSheet() {
   const l = Number(S.legion), D = DATA[l]
   const names = Object.fromEntries(Object.values(MEMBERS).map((m) => [m.id, m.name]))
   const c = GD.drawSheet({ alliance: res.alliance, legion: l, battleText: battleText(l), plan: D, names, subs: D.subs.map((id) => MEMBERS[id].name), notes: D.notes, channel: INFO.channel, commander: INFO.commander[l] })
-  c.toBlob((blob) => { if (blob) download(blob, `官渡${l === 1 ? '一团' : '二团'}安排表.png`); else message.error('生成图片失败') }, 'image/png')
+  // 先弹预览，看过再下载
+  preview.value = { url: c.toDataURL('image/png'), canvas: c, name: `官渡${l === 1 ? '一团' : '二团'}安排表.png` }
+}
+function savePreview() {
+  const p = preview.value
+  p.canvas.toBlob((blob) => { if (blob) download(blob, p.name); else message.error('生成图片失败') }, 'image/png')
 }
 function toggleFull() {
   if (document.fullscreenElement) document.exitFullscreen()
@@ -572,6 +578,7 @@ function toggleFull() {
 }
 function onKey(e) {
   if (e.key !== 'Escape' || (e.target.closest && e.target.closest('input, textarea, select'))) return
+  if (preview.value) { preview.value = null; return }
   if (!document.fullscreenElement) emit('close')
 }
 
@@ -614,6 +621,13 @@ onBeforeUnmount(() => {
       <div class="timeline"></div>
     </main>
     <aside class="right"></aside>
+    <div v-if="preview" class="pv" @click.self="preview = null">
+      <img :src="preview.url" alt="排表预览" />
+      <div class="pv-ops">
+        <button class="btn primary" @click="savePreview">下载图片</button>
+        <button class="btn" @click="preview = null">关闭</button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -697,5 +711,8 @@ onBeforeUnmount(() => {
 .gdb .tgt.none { color: var(--mute); border-style: dashed; }
 .gdb textarea { width: 100%; min-height: 70px; background: #0d1630; border: 1px solid var(--line); border-radius: 8px; padding: 6px; resize: vertical; }
 .gdb .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--mute); }
+.gdb .pv { position: fixed; inset: 0; z-index: 10; background: rgba(4,8,18,.82); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 24px; }
+.gdb .pv img { max-width: 96vw; max-height: 80vh; border-radius: 8px; background: #fff; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+.gdb .pv-ops { display: flex; gap: 10px; }
 .gdb .legend span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; background: var(--c); box-shadow: 0 0 6px var(--c); }
 </style>
