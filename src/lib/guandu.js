@@ -147,8 +147,10 @@ export function drawSheet(opts) {
   text(subs.join('、') || '无', X[1] + 12, y + RH / 2, { size: 14 })
   y += RH
   box(0, y, WIDTH, RH, S.head)
-  // 指挥后面固定跟一句「所有调度以实时战况为准」
-  const cmd = commander ? `${commander}，所有调度以实时战况为准` : '所有调度以实时战况为准'
+  // 指挥后面固定跟一句「所有调度以实时战况为准」；指挥栏里自己已经写了这句就不再重复
+  const NOTE = '所有调度以实时战况为准'
+  const who = (commander || '').replace(/[，,、\s]*所有调度以实时战况为准[。.！!]*/g, '').trim()
+  const cmd = who ? `${who}，${NOTE}` : NOTE
   text([cmd, channel].filter(Boolean).join('　　'), WIDTH - 20, y + RH / 2, { color: '#fff', align: 'right', bold: true })
   text('三冰小帮手 · 官渡排表', 20, y + RH / 2, { color: '#dbe5f7', size: 12 })
   return c
