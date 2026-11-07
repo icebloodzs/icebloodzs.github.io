@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 官渡之战（浏览器版）：本周报名概况 + 报名名单 + 进入全屏沙盘排表。
- * 报名在小程序里（周四 15:00 ~ 周六 12:00，每团主力 30 / 替补 10），这里只看和排。
+ * 报名在小程序里（周四 15:00 ~ 周日 12:00，每团主力 30 / 替补 10），这里只看和排。
  * 数据一次拉齐：admin.guanduOverview({ withPlans })，进沙盘直接用，不再请求。
  */
 import { ref, computed, inject, h, onMounted } from 'vue'
@@ -35,7 +35,7 @@ const STATUS = { before: ['未开始', 'default'], open: ['报名中', 'success'
 const statusLine = computed(() => {
   const r = res.value
   if (!r) return ''
-  return { before: '周四 15:00 开始报名', open: '周六 12:00 截止报名', closed: '报名已截止，开战前在小程序「官渡管理」里还能代报、调整', ended: '本周已打完，下周四 15:00 开始报名' }[r.status]
+  return { before: '周四 15:00 开始报名', open: '周日 12:00 截止报名', closed: '报名已截止，开战前在小程序「官渡管理」里还能代报、调整', ended: '本周已打完，下周四 15:00 开始报名' }[r.status]
 })
 
 const legions = computed(() => {
