@@ -195,7 +195,7 @@ async function uploadRally({ file }) {
     if (res.maxBonus != null) { form.value.maxBonus = res.maxBonus; got.push(`集结值 ${res.maxBonus}%`) }
     if (res.maxMarch != null) { form.value.maxMarch = res.maxMarch; got.push(`单人出征 ${res.maxMarch}`) }
     if (res.member) me.value.member = res.member
-    rallyTip.value = `读到${got.join('、')}，已保存`
+    rallyTip.value = `读到${got.join('、')}，已保存` + (res.raw && res.raw.rowTroopsText ? `（截图原文：${res.raw.rowTroopsText}${res.raw.bonusText ? '、' + res.raw.bonusText : ''}）` : '')
     reload()
     const q = res.quota && res.quota.rally
     message.success(q ? `已保存，今天还能传 ${q.left} 次` : '已保存')
