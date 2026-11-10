@@ -110,7 +110,8 @@ async function exportExcel() {
       <n-button size="small" :disabled="!sortKey" @click="sortDesc = !sortDesc">{{ sortDesc ? '从高到低' : '从低到高' }}</n-button>
     </div>
 
-    <n-alert v-if="desc" type="info" :bordered="false" style="margin-bottom: 14px">{{ desc }}</n-alert>
+    <!-- 说明里要标颜色等时用 #desc 插槽，平常给 desc 字符串就行 -->
+    <n-alert v-if="desc || $slots.desc" type="info" :bordered="false" style="margin-bottom: 14px"><slot name="desc">{{ desc }}</slot></n-alert>
     <slot name="filters" />
 
     <!-- flex-height：表格自己占满剩下的高度，表头钉住、只有表体滚 -->

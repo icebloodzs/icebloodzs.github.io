@@ -277,11 +277,13 @@ const snapText = computed(() => (pending.value ? stamp(pending.value.snapshotAt)
     <TableCard
       title="全员数据"
       sheet-name="成员"
-      desc="每个人的名单数据、自填资料和六维都在这一张表里。导出的 Excel 改完可以直接导回来，也支持把其他平台或自己统计的数据直接导入。点红色的账号名称可以修改这个人的数据。"
       :columns="columns"
       :rows="members"
       :scroll-x="2100"
     >
+      <template #desc>
+        每个人的名单数据、自填资料和六维都在这一张表里。导出的 Excel 改完可以直接导回来，也支持把其他平台或自己统计的数据直接导入。<span class="fd-red">点名称</span>可修改。
+      </template>
       <template #actions>
         <n-button :loading="busy" @click="pickFile">导入 Excel</n-button>
       </template>
@@ -389,8 +391,9 @@ const snapText = computed(() => (pending.value ? stamp(pending.value.snapshotAt)
 .fd-row span { color: #6b7280; }
 
 /* 成员名可点，点了右侧滑出编辑面板 */
-:deep(.fd-name) { font-weight: 600; color: #e03e3e; cursor: pointer; border-bottom: 1px dashed #f0a3a3; }
-:deep(.fd-name:hover) { color: #b42318; border-bottom-color: #b42318; }
+:deep(.fd-name) { font-weight: 600; color: #1f2329; cursor: pointer; border-bottom: 1px dashed #c4c9d0; }
+:deep(.fd-name:hover) { color: #6c5ce7; border-bottom-color: #6c5ce7; }
+.fd-red { color: #e03e3e; font-weight: 600; }
 
 .ed-head { display: flex; align-items: center; gap: 10px; }
 .ed-name { font-size: 18px; font-weight: 700; }
