@@ -178,6 +178,32 @@ async function upload({ file }, kind) {
   }
 }
 
+/*
+ * 集结截图：服务端只读数回来，不入库。填进表单让他核对，再自己点保存
+ * （集结值、出征本来就是手填项，读错了也能当场改掉）。
+ */
+const rallyTip = ref('')
+const showRallyGuide = ref(false)
+async function uploadRally({ file }) {
+  if (busy.value) return
+  busy.value = 'rally'
+  rallyTip.value = ''
+  try {
+    const base64 = await compress(file.file)
+    const res = await call('web.uploadShot', { kind: 'rally', ...(await sendChunks(base64)), ext: 'jpg' })
+    const got = []
+    if (res.maxBonus != null) { form.value.maxBonus = res.maxBonus; got.push(`集结值 ${res.maxBonus}%`) }
+    if (res.maxMarch != null) { form.value.maxMarch = res.maxMarch; got.push(`出征 ${res.maxMarch}`) }
+    rallyTip.value = `读到${got.join('、')}，已填进下面，核对无误后点「保存」`
+    const q = res.quota && res.quota.rally
+    message.success(q ? `识别完成，今天还能传 ${q.left} 次` : '识别完成')
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    busy.value = ''
+  }
+}
+
 async function save() {
   if (saving.value) return
   saving.value = true
@@ -304,6 +330,21 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
         </div>
       </n-alert>
 
+      <div class="rally-up">
+        <n-upload :show-file-list="false" accept="image/*" :custom-request="uploadRally">
+          <n-button :loading="busy === 'rally'">{{ busy === 'rally' ? '识别中…' : '上传集结截图识别' }}</n-button>
+        </n-upload>
+        <span class="rally-desc">自动读出集结值和单人出征</span>
+        <a class="rally-eg" @click="showRallyGuide = true">查看示例 ›</a>
+      </div>
+      <div v-if="rallyTip" class="rally-ok">{{ rallyTip }}</div>
+
+      <n-modal v-model:show="showRallyGuide" preset="card" title="集结截图示例" :style="{ width: narrow ? '94vw' : '480px' }" :bordered="false">
+        <div class="eg-step">自己发一次集结（或上车），截下集结界面，<b>自己那一行要截进去</b>。</div>
+        <img src="/guide/rally.jpg" alt="集结截图示例" class="eg-img" />
+        <div class="eg-step">读的是自己那一行：头像下面的 <b class="hl">28.8%</b> 是集结值，右上角 <b class="hl">155110</b>（括号前的数）是单人出征。</div>
+      </n-modal>
+
       <n-form label-placement="left" :label-width="110" size="small">
         <n-grid cols="1 s:2" responsive="screen" :x-gap="20">
           <n-gi>
@@ -365,6 +406,13 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 .row b { color: #6c5ce7; }
 .old { color: #9aa0a6; }
 .tip { margin-top: 6px; line-height: 1.8; }
+.rally-up { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.rally-desc { font-size: 12px; color: #9aa0a6; }
+.rally-eg { margin-left: auto; font-size: 13px; color: #6c5ce7; cursor: pointer; }
+.rally-ok { margin: -4px 0 12px; font-size: 13px; color: #16a34a; }
+.eg-step { font-size: 13px; line-height: 1.7; color: #4b5563; }
+.eg-img { display: block; width: 100%; margin: 10px 0; border-radius: 8px; }
+.hl { color: #dc2626; }
 .tip b { color: #4b5563; }
 .lvh { font-size: 11px; color: #9aa0a6; line-height: 1.4; margin-top: 1px; }
 .sum { text-align: right; font-weight: 600; color: #6c5ce7; }
