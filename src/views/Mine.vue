@@ -333,12 +333,14 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       </n-alert>
 
       <div class="rally-up">
-        <n-upload :show-file-list="false" accept="image/*" :custom-request="uploadRally">
-          <n-button :loading="busy === 'rally'">{{ busy === 'rally' ? '识别中…' : '上传集结截图识别' }}</n-button>
-        </n-upload>
-        <span class="rally-desc">自动读出集结值和单人出征并保存（兵力没保存的先点保存）</span>
+        <span class="rally-desc">传一张集结截图，自动读出集结值和单人出征并保存（兵力没保存的先点保存）</span>
         <a class="rally-eg" @click="showRallyGuide = true">查看示例 ›</a>
       </div>
+      <n-upload :show-file-list="false" accept="image/*" :custom-request="uploadRally" style="margin-bottom: 12px">
+        <n-button type="primary" :loading="busy === 'rally'" block>
+          {{ busy === 'rally' ? '识别中…' : '上传集结截图' }}
+        </n-button>
+      </n-upload>
       <div v-if="rallyTip" class="rally-ok">{{ rallyTip }}</div>
 
       <n-modal v-model:show="showRallyGuide" preset="card" title="集结截图示例" :style="{ width: narrow ? '94vw' : '480px' }" :bordered="false">
@@ -408,7 +410,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
 .row b { color: #6c5ce7; }
 .old { color: #9aa0a6; }
 .tip { margin-top: 6px; line-height: 1.8; }
-.rally-up { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.rally-up { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .rally-desc { font-size: 12px; color: #9aa0a6; }
 .rally-eg { margin-left: auto; font-size: 13px; color: #6c5ce7; cursor: pointer; }
 .rally-ok { margin: -4px 0 12px; font-size: 13px; color: #16a34a; }
