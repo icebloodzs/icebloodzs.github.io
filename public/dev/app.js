@@ -274,6 +274,7 @@ const VIEWS = [
   { key: 'alliances', title: '同盟', render: renderAlliances },
   { key: 'vision', title: '识别用量', render: renderVision },
   { key: 'plans', title: '版本方案', render: renderPlans },
+  { key: 'welfare', title: '同盟福利', render: renderWelfare },
   { key: 'demo', title: '演示环境', render: renderDemo },
   { key: 'backup', title: '备份', render: renderBackup },
   { key: 'logs', title: '操作日志', render: renderLogs }
@@ -975,6 +976,39 @@ async function renderPlans() {
 
 const ROLE_NAME = { super: '超管', admin: '管理员', member: '成员' }
 
+// ---------------- 同盟福利 ----------------
+
+/** 实时宝藏分享页的可见范围。存在 appSettings/treasure，小程序分享页每次打开都现查，切了立刻生效 */
+async function renderWelfare() {
+  const d = await call('dev.treasureSettings')
+  const on = d.shareMembersOnly
+  $('body').innerHTML = `
+    <div class="card">
+      <h3>实时宝藏分享页</h3>
+      <p class="hint">
+        成员在小程序「同盟福利」点分享，别人点开分享卡看到的是分享页。
+        关着时谁点开都能看；打开后只有分享者所在同盟的成员能看，其他人只看到一句「只有本盟成员能看」。
+        切换后立刻生效，不用更新小程序。
+      </p>
+      <div class="row">
+        <span>只给本盟成员看</span>
+        <span class="tag ${on ? 'green' : 'amber'}">${on ? '已打开：只有本盟成员能看' : '已关闭：谁点开都能看'}</span>
+        <button class="btn ${on ? 'ghost' : ''}" id="wToggle">${on ? '关闭限制' : '打开限制'}</button>
+      </div>
+    </div>`
+  $('wToggle').onclick = async () => {
+    const next = !on
+    if (!confirm(next ? '打开后，别的盟和没入盟的人就看不到分享页了。确定？' : '关闭后，拿到分享卡的任何人都能看到实时宝藏。确定？')) return
+    try {
+      await call('dev.treasureSettingsSave', { shareMembersOnly: next })
+      toast('好了')
+      renderWelfare()
+    } catch (e) {
+      toast(e.message)
+    }
+  }
+}
+
 async function renderDemo() {
   const d = await call('demo.status')
   const demo = d.demo
@@ -1199,7 +1233,8 @@ const LOG_NAME = {
   allianceDisable: '停用同盟',
   allianceMarkTest: '标为测试盟',
   allianceUnmarkTest: '取消测试盟',
-  allianceDelete: '删除测试盟'
+  allianceDelete: '删除测试盟',
+  treasureSettings: '同盟福利开关'
 }
 
 async function renderLogs() {
