@@ -194,6 +194,7 @@ async function uploadRally({ file }) {
     const got = []
     if (res.maxBonus != null) { form.value.maxBonus = res.maxBonus; got.push(`集结值 ${res.maxBonus}%`) }
     if (res.maxMarch != null) { form.value.maxMarch = res.maxMarch; got.push(`单人出征 ${res.maxMarch}`) }
+    if (res.maxMarch == null && res.raw && res.raw.rowTroopsText) got.push(`单人出征读到「${res.raw.rowTroopsText}」不在 1 千 - 50 万之间，没改`)
     if (res.member) me.value.member = res.member
     rallyTip.value = `读到${got.join('、')}，已保存` + (res.raw && res.raw.rowTroopsText ? `（截图原文：${res.raw.rowTroopsText}${res.raw.bonusText ? '、' + res.raw.bonusText : ''}）` : '')
     reload()
@@ -333,7 +334,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       </n-alert>
 
       <div class="rally-up">
-        <span class="rally-desc">传一张集结截图，自动读出集结值和单人出征并保存（兵力没保存的先点保存）</span>
+        <span class="rally-desc">传一张自己发起的集结截图，自动读出集结值和单人出征并保存（兵力没保存的先点保存）</span>
         <a class="rally-eg" @click="showRallyGuide = true">查看示例 ›</a>
       </div>
       <n-upload :show-file-list="false" accept="image/*" :custom-request="uploadRally" style="margin-bottom: 12px">
@@ -344,9 +345,9 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
       <div v-if="rallyTip" class="rally-ok">{{ rallyTip }}</div>
 
       <n-modal v-model:show="showRallyGuide" preset="card" title="集结截图示例" :style="{ width: narrow ? '94vw' : '480px' }" :bordered="false">
-        <div class="eg-step">自己发一次集结（或上车），截下集结界面，<b>自己那一行要截进去</b>。</div>
+        <div class="eg-step"><b>自己发起</b>一次集结，截下集结界面。车上有别人也没关系，只读第一行（队长）。</div>
         <img src="/guide/rally.jpg" alt="集结截图示例" class="eg-img" />
-        <div class="eg-step">读的是自己那一行：头像右边的 <b class="hl">28.8%</b> 是集结值，右上角 <b class="hl">155110</b>（括号前的数）是单人出征。</div>
+        <div class="eg-step">读的是第一行（头像左上角紫色小旗子）：头像右边的 <b class="hl">28.8%</b> 是集结值，右上角两个小人后面的 <b class="hl">155110</b>（括号前的数）是单人出征。</div>
       </n-modal>
 
       <n-form label-placement="left" :label-width="110" size="small">
