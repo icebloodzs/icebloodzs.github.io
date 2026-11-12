@@ -157,10 +157,6 @@ onBeforeUnmount(() => clearTimeout(timer))
           <span class="run-t">{{ task.message || STATUS_TEXT[task.status] }}</span>
         </div>
 
-        <n-space v-if="task.status === 'scanning'" style="margin-top:16px" :size="32">
-          <n-statistic label="已找到" :value="task.found || 0"><template #suffix>个</template></n-statistic>
-          <n-statistic label="已跳转" :value="task.jumps || 0"><template #suffix>次</template></n-statistic>
-        </n-space>
         <div v-if="task.status === 'scanning'" class="hint">边采集边更新，小程序里现在就能看到已找到的。</div>
 
         <n-button style="margin-top:20px" :disabled="task.cancel" @click="cancel">{{ task.cancel ? '正在取消…' : '取消' }}</n-button>
