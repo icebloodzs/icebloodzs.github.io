@@ -3,7 +3,7 @@
  * 同盟福利 · 宝藏采集：点「开始采集」→ 采集端（开发者那边）打开游戏 → 没登录就在这里显示登录码等扫 →
  * 进游戏扫一轮 → 结果传到本盟小程序的「同盟福利」里。这一页不显示宝藏，只管发起和看进度。
  *
- * 登录信息保存在采集端：登录过一次，下次直接「发布采集」不用再扫码；「换账号」会清掉重新出码。
+ * 登录信息保存在采集端：登录过一次，下次直接「发布代采集」不用再扫码；「换账号」会清掉重新出码。
  * 任务状态在云端（collect.*），这边只在任务跑着的时候轮询。
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
@@ -127,10 +127,10 @@ onBeforeUnmount(() => clearTimeout(timer))
 
         <n-space align="center" style="margin-top:8px">
           <n-button v-if="hasLogin" type="primary" size="large" :loading="busy" :disabled="blocked" @click="start(false)">
-            发布采集（用上次的账号）
+            发布代采集（用上次的账号）
           </n-button>
           <n-button :type="hasLogin ? 'default' : 'primary'" size="large" :loading="busy && !hasLogin" :disabled="blocked" @click="startFresh">
-            {{ hasLogin ? '换账号重新扫码' : '扫码登录并采集' }}
+            {{ hasLogin ? '换账号重新扫码' : '扫码登录并代采集' }}
           </n-button>
         </n-space>
         <div v-if="!runnerOnline" class="hint">采集端没开着，联系开发者打开后再来。</div>
