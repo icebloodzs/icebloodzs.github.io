@@ -56,7 +56,8 @@ async function load(quiet) {
 /** 只在任务跑着的时候轮询；等扫码时勤一点，扫描中慢一点（省调用次数） */
 function schedule() {
   clearTimeout(timer)
-  if (!active.value) return
+  // 采集端显示离线时隔 20 秒再看一次，它一上线按钮就亮，不用手动刷新
+  if (!active.value) { if (!runnerOnline.value) timer = setTimeout(() => load(true), 20000); return }
   timer = setTimeout(() => load(true), task.value.status === 'scanning' ? 8000 : 3000)
 }
 
