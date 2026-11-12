@@ -3,7 +3,7 @@
  * 同盟福利 · 宝藏采集：点「开始采集」→ 采集端（开发者那边）打开游戏 → 没登录就在这里显示登录码等扫 →
  * 进游戏扫一轮 → 结果传到本盟小程序的「同盟福利」里。这一页不显示宝藏，只管发起和看进度。
  *
- * 登录信息保存在采集端：登录过一次，下次直接「一键采集」不用再扫码；「换账号」会清掉重新出码。
+ * 登录信息保存在采集端：登录过一次，下次直接「一键发布」不用再扫码；「换账号」会清掉重新出码。
  * 任务状态在云端（collect.*），这边只在任务跑着的时候轮询。
  */
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
@@ -107,8 +107,8 @@ onBeforeUnmount(() => clearTimeout(timer))
       </template>
 
       <n-alert type="info" :show-icon="false" style="margin-bottom:16px">
-        采集到的宝藏会更新到本盟小程序的「同盟福利 · 实时宝藏」里，这里只负责发起采集。
-        登录游戏<b>只用小号</b>：采集是程序在操作游戏，账号有被游戏处罚的风险。
+        采集到的宝藏会更新到本盟小程序的「同盟福利 · 实时宝藏」里，此为专为支持开发版做的代采集。
+        目前仅支持用<b>支付宝端小号</b>。
       </n-alert>
 
       <!-- 没在跑：开始按钮 + 上一次的结果 -->
@@ -127,7 +127,7 @@ onBeforeUnmount(() => clearTimeout(timer))
 
         <n-space align="center" style="margin-top:8px">
           <n-button v-if="hasLogin" type="primary" size="large" :loading="busy" :disabled="blocked" @click="start(false)">
-            一键采集（用上次的账号）
+            一键发布（用上次的账号）
           </n-button>
           <n-button :type="hasLogin ? 'default' : 'primary'" size="large" :loading="busy && !hasLogin" :disabled="blocked" @click="startFresh">
             {{ hasLogin ? '换账号重新扫码' : '扫码登录并采集' }}
