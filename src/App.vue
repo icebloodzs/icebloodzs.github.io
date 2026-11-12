@@ -25,6 +25,7 @@ import Board from './views/Board.vue'
 import Attendance from './views/Attendance.vue'
 import FullData from './views/FullData.vue'
 import GuanDu from './views/GuanDu.vue'
+import Welfare from './views/Welfare.vue'
 import SideNav from './views/SideNav.vue'
 
 const VIEWS = {
@@ -39,6 +40,7 @@ const VIEWS = {
   attendance: { label: '考勤功勋', icon: '🗓️', comp: Attendance },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   guandu: { label: '官渡之战', icon: '⚔️', comp: GuanDu },
+  welfare: { label: '同盟福利', icon: '🎁', comp: Welfare },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
   shape: { label: '摆图形', icon: '🔠', comp: Shape },
   myattrs: { label: '我的属性', icon: '📈', comp: MyAttrs },
@@ -111,8 +113,13 @@ const can = (key) => {
   return !f || f[key] !== false
 }
 /** 菜单项对应的付费功能：等级不够（或者老客户单独没开）的就不摆出来 */
-const VIEW_FEATURE = { attendance: 'attendance', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice' }
-const shown = (k) => !VIEW_FEATURE[k] || can(VIEW_FEATURE[k])
+const VIEW_FEATURE = { attendance: 'attendance', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice', welfare: 'collect' }
+const shown = (k) => {
+  if (!VIEW_FEATURE[k]) return true
+  // 同盟福利（采集）只给正式开发版：服务端明确给了 collect: true 才显示，没给（老版本云函数）也不显示
+  if (k === 'welfare') { const f = me.value && me.value.alliance && me.value.alliance.features; return Boolean(f && f.collect) }
+  return can(VIEW_FEATURE[k])
+}
 /**
  * 电脑版能用到什么程度（服务端在 whoami 里给，见云函数 lib/webAccess.js）：
  * full = 开发版的管理员扫码进来，全部菜单；self = 其余情况，只有「我的」两页。
@@ -144,7 +151,7 @@ const menuOptions = computed(() => selfOnly.value
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'guandu', 'placement', 'shape', 'notice', 'board']
+    children: ['rally', 'guandu', 'welfare', 'placement', 'shape', 'notice', 'board']
       .filter(shown)
       .map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
