@@ -172,15 +172,21 @@ export function buildSheetXlsx(opts) {
     { fill: 'b4c6e7', color: 'e0203a', bold: true, line: '8eaadb' }, // 3 车头
     { fill: 'b4c6e7', color: '1f2329', line: '8eaadb' }, // 4 车身
     { fill: 'dae3f3', color: '1f2329', line: '8eaadb', align: 'left', wrap: true }, // 5 任务 / 要点
-    { fill: 'dbe5f7', color: '2f5597', bold: true, line: '8eaadb', align: 'left' } // 6 频道 / 替补 / 指挥
+    { fill: 'dbe5f7', color: '2f5597', bold: true, line: '8eaadb', align: 'left' }, // 6 标题行左边的频道
+    { fill: 'dbe5f7', color: '2f5597', bold: true, size: 14, line: '8eaadb', wrap: true }, // 7 标题（两行：表名 + 场次）
+    { fill: '4472c4', color: 'dbe5f7', size: 10, line: '8eaadb', align: 'left' }, // 8 底栏左：三冰小帮手
+    { fill: '4472c4', color: 'ffffff', bold: true, line: '8eaadb', align: 'right' } // 9 底栏右：指挥 + 频道
   ]
   const aoa = [], cellStyles = [], merges = [], rows = []
   const push = (row, st, h = 22) => { aoa.push(row); cellStyles.push(st); rows.push({ hpt: h }) }
-  const wide = (text, st, h = 24) => { const r = aoa.length; push([text].concat(Array(W - 1).fill('')), Array(W).fill(st), h); merges.push({ s: { r, c: 0 }, e: { r, c: W - 1 } }) }
 
   const allianceText = `${alliance && alliance.serverNo ? alliance.serverNo + '区' : ''}【${(alliance && alliance.name) || ''}】`
-  wide(`${allianceText}官渡${legionName}安排表　${battleText || ''}`, 0, 30)
-  if (channel) wide(channel, 6)
+  // 标题行和图一样：频道在左边，表名 + 场次居中（第 3~5 列合并，正好落在整张表的中间）
+  {
+    const r = aoa.length
+    push([channel || '', '', `${allianceText}官渡${legionName}安排表\n${battleText || ''}`, '', '', ''], [6, 6, 7, 7, 7, 7], 40)
+    merges.push({ s: { r, c: 0 }, e: { r, c: 1 } }, { s: { r, c: 2 }, e: { r, c: 4 } })
+  }
   const mainN = plan.groups.reduce((a, g) => a + g.members.length, 0)
   push(['分组', `昵称\n主力 ${mainN} · 替补 ${subs.length}`].concat(PHASES.map((p, i) => `${p.name} ${phaseTime(legion, i)}\n${p.desc}`), ['官渡要点']), Array(W).fill(1), 36)
 
@@ -204,7 +210,13 @@ export function buildSheetXlsx(opts) {
   merges.push({ s: { r: sr, c: 1 }, e: { r: sr, c: W - 1 } })
   const NOTE = '所有调度以实时战况为准'
   const who = (commander || '').replace(/[，,、\s]*所有调度以实时战况为准[。.！!]*/g, '').trim()
-  wide(who ? `${who}，${NOTE}` : NOTE, 6)
+  // 底栏和图一样：左边「三冰小帮手 · 官渡排表」，右边指挥 + 频道
+  {
+    const r = aoa.length
+    const right = [who ? `${who}，${NOTE}` : NOTE, channel].filter(Boolean).join('　　')
+    push(['三冰小帮手 · 官渡排表', '', right, '', '', ''], [8, 8, 9, 9, 9, 9], 26)
+    merges.push({ s: { r, c: 0 }, e: { r, c: 1 } }, { s: { r, c: 2 }, e: { r, c: W - 1 } })
+  }
 
   const cols = [{ wch: 12 }, { wch: 18 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 36 }]
   return { aoa, merges, cols, rows, styles: ST, cellStyles }
