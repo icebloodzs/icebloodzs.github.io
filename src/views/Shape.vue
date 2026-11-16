@@ -23,6 +23,12 @@ const BLOCK_COLORS = [
   { fill: '#f0ad4e', text: '#5a3a00' }
 ]
 const AREAS = S.AREAS
+/** 快捷键：图案名一点就填进对应区域；示例一键把四块都填上，和小程序的快捷按钮同一套图案 */
+const PATTERNS = S.PATTERN_NAMES
+const CHAR_HINT = S.CHARS.join(' ')
+function fill(area, v) { texts.value[area] = texts.value[area] === v ? '' : v }
+function fillExample() { texts.value = { leftBottom: '2X3', rightBottom: '=06', top: '', bottom: '爱心' } }
+function clearAll() { texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '' } }
 
 const baseX = ref('')
 const baseY = ref('')
@@ -205,12 +211,21 @@ function savePng() {
             </n-form-item>
           </n-gi>
           <n-gi v-for="a in AREAS" :key="a.key">
-            <n-form-item :label="a.label">
-              <n-input v-model:value="texts[a.key]" placeholder="字或图案名" />
+            <n-form-item :label="a.label" :show-feedback="false" style="margin-bottom: 4px">
+              <n-input v-model:value="texts[a.key]" placeholder="字或图案名" clearable />
             </n-form-item>
+            <!-- 快捷键：点一下填进这一块，再点一下清掉 -->
+            <div class="quick">
+              <n-tag v-for="p in PATTERNS" :key="p" size="small" round checkable :checked="texts[a.key] === p" @update:checked="fill(a.key, p)">{{ p }}</n-tag>
+            </div>
           </n-gi>
         </n-grid>
       </n-form>
+      <n-space align="center" :size="10" style="margin: 2px 0 12px">
+        <n-button size="small" @click="fillExample">填示例（2X3 · =06 · 下方爱心）</n-button>
+        <n-button size="small" @click="clearAll">清空</n-button>
+        <span class="lab">字能写：{{ CHAR_HINT }}；图案：{{ PATTERNS.join('、') }}</span>
+      </n-space>
 
       <n-space align="center" :size="14">
         <span class="lab">格子大小</span>
@@ -272,6 +287,8 @@ function savePng() {
 <style scoped>
 .wrap { overflow: auto; text-align: center; }
 .lab { font-size: 13px; color: #8a9099; }
+.quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px 90px; }
+@media (max-width: 639px) { .quick { margin-left: 0; } }
 /* 手机：整张图缩到屏幕宽度（要看细节双指放大）；下载图片读的是 svg 自身尺寸，不受影响 */
 @media (max-width: 767px) {
   #shape-map { width: 100%; height: auto; }
