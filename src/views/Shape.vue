@@ -20,19 +20,21 @@ const BLOCK_COLORS = [
   { fill: '#4a90d9', text: '#fff' },
   { fill: '#5cb85c', text: '#fff' },
   { fill: '#d9534f', text: '#fff' },
-  { fill: '#f0ad4e', text: '#5a3a00' }
+  { fill: '#f0ad4e', text: '#5a3a00' },
+  { fill: '#8e6bd8', text: '#fff' },
+  { fill: '#20a8a0', text: '#fff' }
 ]
 const AREAS = S.AREAS
 /** 快捷键：图案名一点就填进对应区域；示例一键把四块都填上，和小程序的快捷按钮同一套图案 */
 const PATTERNS = S.PATTERN_NAMES
 const CHAR_HINT = S.CHARS.join(' ')
 function fill(area, v) { texts.value[area] = texts.value[area] === v ? '' : v }
-function fillExample() { texts.value = { leftBottom: '2X3', rightBottom: '=06', top: '', bottom: '爱心' } }
-function clearAll() { texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '' } }
+function fillExample() { texts.value = { leftBottom: '2X3', rightBottom: '=06', top: '', bottom: '爱心', left: '', right: '' } }
+function clearAll() { texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' } }
 
 const baseX = ref('')
 const baseY = ref('')
-const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '' })
+const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' })
 const D = ref(56)
 
 const board = computed(() => S.buildBoard(LEVEL.city, LEVEL.rings))
@@ -274,12 +276,12 @@ function savePng() {
 
       <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
         用 7 级城池的黑土格子拼字或图案，整幅图摆在城池下方：左下、右下各一块贴着下边，
-        正下方再放个图案，中间留出缝、左右对称。填了参照坐标之后每格都会标出实际坐标，照着报点位不会错。
+        正下方再放个图案，中间留出缝、左右对称；城池正左、正右也能各放一个图案。填了参照坐标之后每格都会标出实际坐标，照着报点位不会错。
       </n-alert>
 
       <n-form label-placement="left" :label-width="90" size="small">
-        <n-grid cols="1 s:2 l:4" responsive="screen" :x-gap="16">
-          <n-gi span="1 s:2 l:4">
+        <n-grid cols="1 s:2 l:3" responsive="screen" :x-gap="16">
+          <n-gi span="1 s:2 l:3">
             <n-form-item label="参照坐标">
               <n-space :size="8" align="center">
                 <n-input v-model:value="baseX" placeholder="X 如 521" style="width: 120px" />

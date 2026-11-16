@@ -178,7 +178,10 @@ const AREAS = [
   { key: 'leftBottom', label: '左下' },
   { key: 'rightBottom', label: '右下' },
   { key: 'top', label: '上方' },
-  { key: 'bottom', label: '下方' }
+  { key: 'bottom', label: '下方' },
+  // 城池正左、正右：屏幕上的左右两角，适合放图案（2026-11 加）
+  { key: 'left', label: '左边' },
+  { key: 'right', label: '右边' }
 ]
 
 /**
@@ -413,6 +416,8 @@ function placeScreen(board, rows, area, occupied, target) {
       const dv = v0 + (H - 1) / 2 - centerV
       if (area === 'top' && !(dv < 0 && Math.abs(uc) <= -dv)) continue
       if (area === 'bottom' && !(dv > 0 && Math.abs(uc) <= dv)) continue
+      if (area === 'left' && !(uc < 0 && Math.abs(dv) <= -uc)) continue
+      if (area === 'right' && !(uc > 0 && Math.abs(dv) <= uc)) continue
 
       const set = new Set()
       let fits = true
@@ -456,7 +461,8 @@ function placeScreen(board, rows, area, occupied, target) {
         dist,
         // 图案离城池最近的那条边在屏幕上的位置，用来留缝
         edge: area === 'bottom' ? Math.min.apply(null, vs) : Math.max.apply(null, vs),
-        off: Math.abs(uc),
+        // 上下的图案要左右居中；左右的图案要上下居中
+        off: area === 'left' || area === 'right' ? Math.abs(dv) : Math.abs(uc),
         away,
         rc,
         cc
@@ -495,7 +501,8 @@ function placeScreen(board, rows, area, occupied, target) {
  * 反过来的话，左右两块会先滑到下边中间，把图案的位置吃掉，三块就凑不成一组了。
  * 注意这只是**摆的顺序**，序号还是按用户填的顺序编（见下面第二轮）。
  */
-const PLACE_ORDER = ['bottom', 'top', 'leftBottom', 'rightBottom']
+// 左边、右边的图案最后摆：先让左下、右下的字贴好下边，图案再找剩下的空地
+const PLACE_ORDER = ['bottom', 'top', 'leftBottom', 'rightBottom', 'left', 'right']
 
 function placeAll(board, items, origin) {
   // 已经被占掉的格子，外加四周一圈缓冲：几块图形之间留条缝，不然会黏成一片看不出是几块
@@ -522,7 +529,7 @@ function placeAll(board, items, origin) {
     // 对面那块已经摆好的话，这块就按镜像位置摆：
     //   左 ↔ 右 是沿垂直中线镜像，(r, c) → (c, r)
     //   上 ↔ 下 是沿水平中线镜像，(r, c) → (size−1−r, size−1−c)
-    const mirrorOf = { leftBottom: 'rightBottom', rightBottom: 'leftBottom', top: 'bottom', bottom: 'top' }
+    const mirrorOf = { leftBottom: 'rightBottom', rightBottom: 'leftBottom', top: 'bottom', bottom: 'top', left: 'right', right: 'left' }
     const done = placed[mirrorOf[item.area]]
     let target = null
     if (done) {
@@ -532,7 +539,7 @@ function placeAll(board, items, origin) {
           : { r: done.c, c: done.r }
     }
 
-    const screenArea = item.area === 'top' || item.area === 'bottom'
+    const screenArea = ['top', 'bottom', 'left', 'right'].includes(item.area)
     const hit = screenArea
       ? placeScreen(board, bmp.rows, item.area, taken, target)
       : placeBitmap(board, bmp.rows, item.area, taken, target)
@@ -548,7 +555,9 @@ function placeAll(board, items, origin) {
       leftBottom: (a, b) => a.r - b.r || a.c - b.c,
       rightBottom: (a, b) => a.c - b.c || b.r - a.r,
       top: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r),
-      bottom: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r)
+      bottom: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r),
+      left: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r),
+      right: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r)
     }
     const cells = hit.cells.slice().sort(order[item.area] || order.leftBottom)
     cells.forEach((cell) => {
