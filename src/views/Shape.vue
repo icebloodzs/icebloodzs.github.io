@@ -5,7 +5,7 @@
  * 和「黑土落位」的区别：这里的字是沿**游戏的 X/Y 网格**画的，格子边对边紧挨着，
  * 在菱形视角下看才是正的。这里只算「哪些格子要站人、每格的序号和坐标」，不排成员。
  */
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import * as S from '../lib/shape'
 import * as P from '../lib/placement'
@@ -48,10 +48,88 @@ const origin = computed(() => {
   return { x: Math.round(x), y: Math.round(y) }
 })
 
-const result = computed(() => {
+/** 按填的字算出来的原样（还没手动改过） */
+const auto = computed(() => {
   const items = S.AREAS.map((a) => ({ area: a.key, text: texts.value[a.key] })).filter((x) => x.text)
   return S.placeAll(board.value, items, origin.value || { x: 0, y: 0 })
 })
+
+/*
+ * 自定义：在摆好的图上手动擦掉格子、或者往某一块里补格子。
+ *   erased：擦掉的原有格子 id；added：补上的格子 id → 补进第几块（auto.blocks 的下标）
+ * 改字后图会重新摆，手动改的就作废清空；只改参照坐标不影响格子，保留。
+ * 序号照原来那块的读法重新编（左块逐行、右块逐列、上下按屏幕），报点顺序不会乱。
+ */
+const editing = ref(false)
+const brush = ref('erase') // 'erase' 或者块下标（数字）
+const erased = ref(new Set())
+const added = ref(new Map())
+const history = ref([])
+watch(texts, () => { erased.value = new Set(); added.value = new Map(); history.value = [] }, { deep: true })
+
+const ORDER = {
+  leftBottom: (a, b) => a.r - b.r || a.c - b.c,
+  rightBottom: (a, b) => a.c - b.c || b.r - a.r,
+  top: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r),
+  bottom: (a, b) => a.r + a.c - (b.r + b.c) || a.c - a.r - (b.c - b.r)
+}
+
+const result = computed(() => {
+  const base = auto.value
+  if (!erased.value.size && !added.value.size) return base
+  const o = origin.value || { x: 0, y: 0 }
+  const byId = new Map(board.value.cells.map((c) => [c.id, c]))
+  let seq = 0
+  const blocks = base.blocks.map((b, bi) => {
+    if (!b.ok) return b
+    const kept = b.cells.filter((c) => !erased.value.has(c.id)).map((c) => ({ id: c.id, r: c.r, c: c.c, city: c.city, ring: c.ring }))
+    added.value.forEach((to, id) => { if (to === bi) { const c = byId.get(id); if (c) kept.push({ id, r: c.r, c: c.c, city: c.city, ring: c.ring }) } })
+    const cells = kept.sort(ORDER[b.area] || ORDER.leftBottom).map((c) => {
+      seq += 1
+      const xy = S.coordOf(c.r, c.c, o)
+      return { ...c, seq, x: xy.x, y: xy.y }
+    })
+    return { ...b, cells, total: cells.length }
+  })
+  const all = []
+  blocks.forEach((b) => all.push(...b.cells))
+  return { blocks, cells: all, total: all.length }
+})
+const edited = computed(() => erased.value.size + added.value.size)
+
+/** 画笔可选：擦除 + 每个摆成功的块 */
+const brushes = computed(() => [{ key: 'erase', label: '橡皮擦', color: '#6b7280' }].concat(
+  auto.value.blocks.map((b, bi) => ({ key: bi, ok: b.ok, label: `补到${(S.AREAS.find((a) => a.key === b.area) || {}).label || b.area}「${b.text}」`, color: BLOCK_COLORS[bi % BLOCK_COLORS.length].fill }))
+    .filter((x) => x.ok)))
+
+/** 点一格（或按住拖过去）：橡皮擦掉、画笔补进选中的那块 */
+let painting = false
+function snapshot() { history.value.push({ e: new Set(erased.value), a: new Map(added.value) }); if (history.value.length > 50) history.value.shift() }
+function paint(id) {
+  if (!editing.value) return
+  const hit = hitMap.value.get(id)
+  const e = new Set(erased.value), a = new Map(added.value)
+  const original = auto.value.blocks.findIndex((b) => b.ok && b.cells.some((c) => c.id === id))
+  if (brush.value === 'erase') {
+    if (!hit) return
+    if (a.has(id)) a.delete(id)
+    if (original >= 0) e.add(id)
+  } else {
+    const to = Number(brush.value)
+    if (hit && hit.block === to) return
+    a.delete(id); e.delete(id)
+    if (original === to) { /* 原来就是这块的，取消擦除就行 */ } else {
+      if (original >= 0) e.add(id)
+      a.set(id, to)
+    }
+  }
+  erased.value = e; added.value = a
+}
+function startPaint(id) { if (!editing.value) return; snapshot(); painting = true; paint(id) }
+function overPaint(id) { if (painting) paint(id) }
+function endPaint() { painting = false }
+function undo() { const h = history.value.pop(); if (h) { erased.value = h.e; added.value = h.a } }
+function resetEdits() { snapshot(); erased.value = new Set(); added.value = new Map() }
 
 /** 格子 id → 它属于哪一块、序号、坐标 */
 const hitMap = computed(() => {
@@ -245,9 +323,25 @@ function savePng() {
     </n-card>
 
     <n-card v-if="cells.length" :bordered="false">
+      <!-- 自定义：摆好后手动擦掉 / 补上 -->
+      <div v-if="result.total || edited" class="edit-bar">
+        <n-switch v-model:value="editing" size="small" />
+        <span class="lab" style="color:#4b5563">自定义（擦掉 / 补上）</span>
+        <template v-if="editing">
+          <n-radio-group v-model:value="brush" size="small">
+            <n-radio-button v-for="b in brushes" :key="b.key" :value="b.key">
+              <span class="sw" :style="{ background: b.color }"></span>{{ b.label }}
+            </n-radio-button>
+          </n-radio-group>
+          <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
+          <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
+          <span class="lab">点格子或按住拖过去；改了字会重新摆，手动改的会清掉</span>
+        </template>
+        <span v-else-if="edited" class="lab">已手动改 {{ edited }} 格</span>
+      </div>
       <div class="wrap">
-        <svg id="shape-map" :width="span" :height="span" :viewBox="`0 0 ${span} ${span}`" xmlns="http://www.w3.org/2000/svg">
-          <g v-for="c in cells" :key="c.id">
+        <svg id="shape-map" :class="{ editing }" :width="span" :height="span" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`0 0 ${span} ${span}`" xmlns="http://www.w3.org/2000/svg">
+          <g v-for="c in cells" :key="c.id" :class="{ paintable: editing }" @pointerdown.prevent="startPaint(c.id)" @pointerenter="overPaint(c.id)">
             <g :transform="`translate(${c.x},${c.y}) rotate(45)`">
               <rect
                 :x="-D / 2.83" :y="-D / 2.83" :width="D / 1.414" :height="D / 1.414" rx="2"
@@ -287,8 +381,16 @@ function savePng() {
 <style scoped>
 .wrap { overflow: auto; text-align: center; }
 .lab { font-size: 13px; color: #8a9099; }
+.edit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+#shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
+.paintable:hover rect { opacity: 0.75; }
 .quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px 90px; }
-@media (max-width: 639px) { .quick { margin-left: 0; } }
+@media (max-width: 639px) { .edit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+#shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
+.paintable:hover rect { opacity: 0.75; }
+.quick { margin-left: 0; } }
 /* 手机：整张图缩到屏幕宽度（要看细节双指放大）；下载图片读的是 svg 自身尺寸，不受影响 */
 @media (max-width: 767px) {
   #shape-map { width: 100%; height: auto; }
