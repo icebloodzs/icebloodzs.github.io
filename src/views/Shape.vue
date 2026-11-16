@@ -29,11 +29,26 @@ const AREAS = S.AREAS
 const PATTERNS = S.PATTERN_NAMES
 const CHAR_HINT = S.CHARS.join(' ')
 function fill(area, v) { texts.value[area] = texts.value[area] === v ? '' : v }
-function fillExample() { texts.value = { leftBottom: '2X3', rightBottom: '=06', top: '', bottom: '爱心', left: '', right: '' } }
-function clearAll() { texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' } }
+/**
+ * 默认示例：开发者自己在「满屏截图」上手动摆的一套（上菱形、下菱形带柄、左 N、右 B，共 168 格），
+ * 序号也照他摆的顺序。四块都是自定义块，不靠填字生成；参照坐标 660,647。
+ */
+const EXAMPLE = [["6_6", "7_6", "6_7", "8_6", "6_8", "9_6", "6_9", "10_6", "6_10", "10_7", "7_10", "11_7", "7_11", "11_8", "8_11", "11_9", "9_11", "11_10", "10_11"], ["17_20", "18_20", "19_20", "20_20", "21_20", "20_21", "22_20", "20_22", "23_20", "20_23", "23_21", "20_24", "24_21", "21_24", "24_22", "21_25", "25_22", "22_25", "25_23", "24_24", "23_25", "25_24", "24_25"], ["17_6", "17_7", "18_6", "18_7", "18_8", "19_7", "19_8", "19_9", "20_8", "20_9", "21_9", "21_10", "22_1", "22_2", "22_3", "22_4", "22_5", "22_6", "22_7", "22_8", "22_9", "22_10", "22_11", "22_12", "23_1", "23_2", "23_3", "23_4", "23_5", "23_6", "23_7", "23_8", "23_9", "23_10", "23_11", "23_12", "24_2", "24_3", "25_3", "25_4", "26_3", "26_4", "26_5", "27_4", "27_5", "27_6", "28_5", "28_6", "28_7", "29_6", "29_7"], ["1_19", "1_20", "1_21", "1_22", "1_23", "1_24", "2_18", "2_19", "2_20", "2_22", "2_23", "2_24", "3_18", "3_19", "3_23", "3_24", "4_17", "4_18", "4_23", "4_24", "4_25", "4_26", "4_27", "4_28", "5_16", "5_17", "5_18", "5_19", "5_23", "5_24", "5_25", "5_26", "5_27", "5_28", "5_29", "6_18", "6_19", "6_20", "6_22", "6_23", "6_27", "6_28", "6_29", "7_19", "7_20", "7_21", "7_22", "7_23", "7_28", "7_29", "8_20", "8_21", "8_22", "8_28", "8_29", "9_21", "9_22", "9_23", "9_28", "10_22", "10_23", "10_24", "10_27", "10_28", "11_23", "11_24", "11_25", "11_26", "11_27", "12_24", "12_25", "12_26", "13_24", "13_25", "14_24"]]
+function fillExample() {
+  texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' }
+  scope.value = 'screen'
+  baseX.value = '660'
+  baseY.value = '647'
+  // 等改字的 watch 先清完旧的手动修改，再铺示例
+  setTimeout(() => { snapshot(); custom.value = EXAMPLE.map((b) => b.slice()).concat([[], [], [], []]).slice(0, CUSTOM_N) }, 0)
+}
+function clearAll() {
+  texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' }
+  setTimeout(() => { custom.value = Array.from({ length: CUSTOM_N }, () => []) }, 0)
+}
 
-const baseX = ref('')
-const baseY = ref('')
+const baseX = ref('660')
+const baseY = ref('647')
 const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' })
 const D = ref(56)
 
@@ -71,10 +86,17 @@ const auto = computed(() => {
  * 序号照原来那块的读法重新编（左块逐行、右块逐列、上下按屏幕），报点顺序不会乱。
  */
 const editing = ref(false)
-const brush = ref('erase') // 'erase' 或者块下标（数字）
+const brush = ref('erase') // 'erase'、块下标（数字）、或者 'c0'~'c3'（自定义块）
 const erased = ref(new Set())
 const added = ref(new Map())
 const history = ref([])
+/*
+ * 自定义块：不靠填字，直接在格子上画出来的块（没填任何字也能画）。每块是一串格子 id，序号按画的先后编。
+ * 改字不会清掉它们，只有「清空」「恢复原样」会。
+ */
+const CUSTOM_N = 4
+const custom = ref(Array.from({ length: CUSTOM_N }, () => []))
+const customCount = computed(() => custom.value.reduce((a, b) => a + b.length, 0))
 watch(texts, () => { erased.value = new Set(); added.value = new Map(); history.value = [] }, { deep: true })
 
 const ORDER = {
@@ -86,7 +108,9 @@ const ORDER = {
 
 const result = computed(() => {
   const base = auto.value
-  if (!erased.value.size && !added.value.size) return base
+  const nAuto = base.blocks.length
+  // ci：块的颜色下标（自定义块排在填字的块后面）
+  if (!erased.value.size && !added.value.size && !customCount.value) return { ...base, blocks: base.blocks.map((b, bi) => ({ ...b, ci: bi })) }
   const o = origin.value || { x: 0, y: 0 }
   const byId = new Map(board.value.cells.map((c) => [c.id, c]))
   let seq = 0
@@ -99,32 +123,58 @@ const result = computed(() => {
       const xy = S.coordOf(c.r, c.c, o)
       return { ...c, seq, x: xy.x, y: xy.y }
     })
-    return { ...b, cells, total: cells.length }
+    return { ...b, cells, total: cells.length, ci: bi }
+  })
+  const free = new Set(board.value.free.map((c) => c.id))
+  custom.value.forEach((ids, k) => {
+    const cells = ids.filter((id) => free.has(id)).map((id) => {
+      const c = byId.get(id)
+      seq += 1
+      const xy = S.coordOf(c.r, c.c, o)
+      return { id, r: c.r, c: c.c, seq, x: xy.x, y: xy.y }
+    })
+    if (cells.length) blocks.push({ area: 'custom', label: `自定义${k + 1}`, text: '', ok: true, reason: '', cells, total: cells.length, ci: nAuto + k })
   })
   const all = []
   blocks.forEach((b) => all.push(...b.cells))
   return { blocks, cells: all, total: all.length }
 })
-const edited = computed(() => erased.value.size + added.value.size)
+const edited = computed(() => erased.value.size + added.value.size + customCount.value)
 
 /** 画笔可选：擦除 + 每个摆成功的块 */
 const brushes = computed(() => [{ key: 'erase', label: '橡皮擦', color: '#6b7280' }].concat(
   auto.value.blocks.map((b, bi) => ({ key: bi, ok: b.ok, label: `补到${(S.AREAS.find((a) => a.key === b.area) || {}).label || b.area}「${b.text}」`, color: BLOCK_COLORS[bi % BLOCK_COLORS.length].fill }))
-    .filter((x) => x.ok)))
+    .filter((x) => x.ok))
+  .concat(custom.value.map((_ids, k) => ({ key: 'c' + k, label: `画到自定义${k + 1}`, color: BLOCK_COLORS[(auto.value.blocks.length + k) % BLOCK_COLORS.length].fill }))))
 
 /** 点一格（或按住拖过去）：橡皮擦掉、画笔补进选中的那块 */
 let painting = false
-function snapshot() { history.value.push({ e: new Set(erased.value), a: new Map(added.value) }); if (history.value.length > 50) history.value.shift() }
+function snapshot() { history.value.push({ e: new Set(erased.value), a: new Map(added.value), c: custom.value.map((b) => b.slice()) }); if (history.value.length > 50) history.value.shift() }
 function paint(id) {
   if (!editing.value) return
   const hit = hitMap.value.get(id)
   const e = new Set(erased.value), a = new Map(added.value)
+  const cu = custom.value.map((b) => b.slice())
+  const inCustom = cu.findIndex((b) => b.includes(id))
+  const dropCustom = () => { if (inCustom >= 0) cu[inCustom] = cu[inCustom].filter((x) => x !== id) }
   const original = auto.value.blocks.findIndex((b) => b.ok && b.cells.some((c) => c.id === id))
   if (brush.value === 'erase') {
     if (!hit) return
-    if (a.has(id)) a.delete(id)
+    if (inCustom >= 0) dropCustom()
+    else {
+      if (a.has(id)) a.delete(id)
+      if (original >= 0) e.add(id)
+    }
+  } else if (String(brush.value).startsWith('c')) {
+    // 画进自定义块：从别的块里拿出来，接到这一块最后（序号按画的先后）
+    const k = Number(String(brush.value).slice(1))
+    if (inCustom === k) return
+    dropCustom()
+    a.delete(id)
     if (original >= 0) e.add(id)
+    cu[k].push(id)
   } else {
+    dropCustom()
     const to = Number(brush.value)
     if (hit && hit.block === to) return
     a.delete(id); e.delete(id)
@@ -133,18 +183,18 @@ function paint(id) {
       a.set(id, to)
     }
   }
-  erased.value = e; added.value = a
+  erased.value = e; added.value = a; custom.value = cu
 }
 function startPaint(id) { if (!editing.value) return; snapshot(); painting = true; paint(id) }
 function overPaint(id) { if (painting) paint(id) }
 function endPaint() { painting = false }
-function undo() { const h = history.value.pop(); if (h) { erased.value = h.e; added.value = h.a } }
-function resetEdits() { snapshot(); erased.value = new Set(); added.value = new Map() }
+function undo() { const h = history.value.pop(); if (h) { erased.value = h.e; added.value = h.a; custom.value = h.c } }
+function resetEdits() { snapshot(); erased.value = new Set(); added.value = new Map(); custom.value = Array.from({ length: CUSTOM_N }, () => []) }
 
 /** 格子 id → 它属于哪一块、序号、坐标 */
 const hitMap = computed(() => {
   const m = new Map()
-  result.value.blocks.forEach((b, bi) => b.cells.forEach((c) => m.set(c.id, { ...c, block: bi })))
+  result.value.blocks.forEach((b, bi) => b.cells.forEach((c) => m.set(c.id, { ...c, block: b.ci ?? bi })))
   return m
 })
 
@@ -222,22 +272,22 @@ const list = computed(() => {
   const out = []
   result.value.blocks.forEach((b, bi) => {
     if (!b.ok) return
-    const area = (S.AREAS.find((a) => a.key === b.area) || {}).label || b.area
+    const area = b.label || (S.AREAS.find((a) => a.key === b.area) || {}).label || b.area
     b.cells.forEach((c) => out.push({ seq: String(c.seq).padStart(3, '0'), area, text: b.text, coord: `${c.x},${c.y}`, _i: bi }))
   })
   return out
 })
 
 const blocks = computed(() =>
-  result.value.blocks.map((b, bi) => ({
-    area: (S.AREAS.find((a) => a.key === b.area) || {}).label || b.area,
+  result.value.blocks.filter((b) => !b.ok || b.cells.length).map((b, bi) => ({
+    area: b.label || (S.AREAS.find((a) => a.key === b.area) || {}).label || b.area,
     text: b.text,
     ok: b.ok,
     reason: b.reason,
     total: b.total,
     from: b.ok ? String(b.cells[0].seq).padStart(3, '0') : '',
     to: b.ok ? String(b.cells[b.cells.length - 1].seq).padStart(3, '0') : '',
-    color: b.ok ? BLOCK_COLORS[bi % BLOCK_COLORS.length].fill : '#b9bec6'
+    color: b.ok ? BLOCK_COLORS[(b.ci ?? bi) % BLOCK_COLORS.length].fill : '#b9bec6'
   }))
 )
 
@@ -318,7 +368,7 @@ function savePng() {
         </n-grid>
       </n-form>
       <n-space align="center" :size="10" style="margin: 2px 0 12px">
-        <n-button size="small" @click="fillExample">填示例（2X3 · =06 · 下方爱心）</n-button>
+        <n-button size="small" @click="fillExample">填示例（满屏 · 上下菱形 + N + B）</n-button>
         <n-button size="small" @click="clearAll">清空</n-button>
         <span class="lab">字能写：{{ CHAR_HINT }}；图案：{{ PATTERNS.join('、') }}</span>
       </n-space>
@@ -342,7 +392,7 @@ function savePng() {
 
       <n-space v-if="blocks.length" :size="10" style="margin-top: 14px">
         <n-tag v-for="b in blocks" :key="b.area" :bordered="false" :color="{ color: b.color, textColor: '#fff' }">
-          {{ b.area }}「{{ b.text }}」{{ b.ok ? `${b.total} 格 · ${b.from}–${b.to}` : b.reason || '摆不下' }}
+          {{ b.area }}{{ b.text ? `「${b.text}」` : "" }} {{ b.ok ? `${b.total} 格 · ${b.from}–${b.to}` : b.reason || '摆不下' }}
         </n-tag>
         <n-tag :bordered="false">共 {{ result.total }} 格</n-tag>
       </n-space>
@@ -350,7 +400,7 @@ function savePng() {
 
     <n-card v-if="cells.length" :bordered="false">
       <!-- 自定义：摆好后手动擦掉 / 补上 -->
-      <div v-if="result.total || edited" class="edit-bar">
+      <div class="edit-bar">
         <n-switch v-model:value="editing" size="small" />
         <span class="lab" style="color:#4b5563">自定义（擦掉 / 补上）</span>
         <template v-if="editing">
@@ -361,7 +411,7 @@ function savePng() {
           </n-radio-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span class="lab">点格子或按住拖过去；改了字会重新摆，手动改的会清掉</span>
+          <span class="lab">点格子或按住拖过去；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited" class="lab">已手动改 {{ edited }} 格</span>
       </div>
