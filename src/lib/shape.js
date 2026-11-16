@@ -101,8 +101,54 @@ function arrowShape(T, L) {
   }
 }
 
+/**
+ * 下面这几款是给「7 级城池缩小截图」上方那片空地设计的（2026-11）。
+ * 菱形格子只有 45° 的边是齐的，所以都学爱心的结构：底下是一个 ∨，上面立几个 45° 的尖，
+ * 尖和尖之间自然有凹口；只走 45°，拼出来没有锯齿。
+ *
+ * lobes(K, L, peaks)：∨ 的底尖在 v = K，半宽不超过 L；peaks = [[位置 u, 尖顶 v], …]
+ */
+function lobesShape(K, L, peaks) {
+  return (u, v) => Math.abs(u) <= L && v <= K - Math.abs(u) && peaks.some(([c, a]) => v >= a + Math.abs(u - c))
+}
+
+/** 波浪：一条 45° 折线带子，上下起伏 —— 山河的「河」。A = 起伏高度，T = 带子粗细 */
+function waveShape(A, T) {
+  return (u, v) => {
+    const m = ((u % (2 * A)) + 2 * A) % (2 * A)
+    const y = m <= A ? m : 2 * A - m
+    return v >= y && v <= y + T
+  }
+}
+
+/** 宝石：一圈菱形框套一个实心小菱形 */
+function gemShape(R, T, C) {
+  return (u, v) => {
+    const d = Math.abs(u) + Math.abs(v)
+    return (d <= R && d > R - T) || d <= C
+  }
+}
+
+/** 雁阵：几层往上尖的 ∧ 叠起来（︽），像雁阵 / 军衔。n 层、每层厚 T、层间空 G、半宽 L */
+function chevronShape(n, T, G, L) {
+  return (u, v) => {
+    if (Math.abs(u) > L) return false
+    const d = v - Math.abs(u)
+    for (let k = 0; k < n; k += 1) {
+      const top = k * (T + G)
+      if (d >= top && d < top + T) return true
+    }
+    return false
+  }
+}
+
 const PATTERNS = {
   爱心: mask(10, -5, 10, heartShape(5, 5)),
+  皇冠: mask(11, -6, 9, lobesShape(9, 11, [[0, -6], [-7, -6], [7, -6]])),
+  山: mask(10, -7, 8, lobesShape(8, 10, [[0, -7], [-7, -4], [7, -4]])),
+  波浪: mask(13, 0, 6, waveShape(4, 3)),
+  宝石: mask(9, -9, 9, gemShape(9, 3, 3)),
+  雁阵: mask(8, 0, 21, chevronShape(3, 3, 2, 8)),
   箭头: mask(7, 0, 10, arrowShape(6, 14)),
   十字: mask(8, -8, 8, crossShape(4, 12))
 }
