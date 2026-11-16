@@ -29,6 +29,14 @@ const active = computed(() => ACTIVE.includes(task.value.status))
 const blocked = computed(() => !runnerOnline.value || left.value === 0)
 const STEP = { queued: 0, starting: 0, qr: 1, entering: 2, scanning: 3, done: 4 }
 const step = computed(() => (STEP[task.value.status] ?? 0) + 1)
+/** 完成后的说明：找到几个 + 什么时候采完（标题已写“采集完毕”，这里不再重复） */
+const doneText = computed(() => {
+  const t = task.value
+  const d = t.finishedAt ? new Date(t.finishedAt) : null
+  const p = (n) => String(n).padStart(2, '0')
+  const when = d ? `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())} 采完，` : ''
+  return `找到 ${t.found || 0} 个宝藏，${when}已更新到本盟小程序`
+})
 const STATUS_TEXT = {
   queued: '排队中，等采集端接单',
   starting: '采集端已接单，正在打开游戏',
@@ -116,8 +124,8 @@ onBeforeUnmount(() => clearTimeout(timer))
         <n-result
           v-if="task.status === 'done'"
           status="success"
-          :title="`找到 ${task.found || 0} 个宝藏`"
-          :description="task.message"
+          title="采集完毕"
+          :description="doneText"
           size="small"
         />
         <n-alert v-else-if="task.status === 'failed'" type="error" title="上次采集没完成" style="margin-bottom:16px">
