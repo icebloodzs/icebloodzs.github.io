@@ -27,10 +27,28 @@ const isDev = computed(() => Boolean(me && me.value && me.value.isDev))
 const SIM_KEY = 'gd_sim'
 const sim = ref(false)
 try { sim.value = localStorage.getItem(SIM_KEY) === '1' } catch (e) {}
-function toggleSim(v) {
+async function toggleSim(v) {
   sim.value = v
   try { localStorage.setItem(SIM_KEY, v ? '1' : '0') } catch (e) {}
-  load()
+  await load()
+  // 刚打开模拟、这一场还没人报：直接铺一批模拟报名，进沙盘就有人可排
+  if (v && res.value && !res.value.rows.length) simFill(false)
+}
+/** 生成 / 清空模拟报名（只动模拟那一场） */
+const simBusy = ref(false)
+async function simFill(clear) {
+  if (simBusy.value) return
+  if (clear === false && res.value && res.value.rows.length && !window.confirm('重新生成会先清掉这一场现有的模拟报名，继续？')) return
+  simBusy.value = true
+  try {
+    const r = await call('admin.guanduSimFill', { sim: true, clear: Boolean(clear) })
+    message.success(clear ? '模拟报名已清空' : `已生成 ${r.filled} 人的模拟报名`)
+    await load()
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    simBusy.value = false
+  }
 }
 const simOn = computed(() => isDev.value && sim.value)
 
@@ -155,7 +173,13 @@ function closeBoard() {
       报名截止后在这里进沙盘排表，排完点「发布给成员」，成员在小程序里就能看到自己的任务；也可以导出排表图发群。催报、代报、游戏勾选清单在小程序「管理 → 官渡管理」。
     </n-alert>
     <n-alert v-if="narrow" type="warning" :bordered="false">沙盘排表需要电脑的大屏幕，手机上只能看报名情况。</n-alert>
-    <n-alert v-if="simOn" type="warning" :bordered="false">模拟报名中：只有你看得到，数据单独存一场，不影响成员的真实报名和排表</n-alert>
+    <n-alert v-if="simOn" type="warning" :bordered="false">
+      模拟报名中：只有你看得到，报名、排表、频道/指挥/要点模板都单独存一份，不影响成员的真实报名和真实模板。
+      <n-space :size="8" style="margin-top: 8px">
+        <n-button size="small" :loading="simBusy" @click="simFill(false)">重新生成模拟报名</n-button>
+        <n-button size="small" :disabled="simBusy" @click="simFill(true)">清空模拟报名</n-button>
+      </n-space>
+    </n-alert>
 
     <n-spin :show="loading && !res">
       <n-grid v-if="res" cols="1 l:2" responsive="screen" :x-gap="16" :y-gap="16">
