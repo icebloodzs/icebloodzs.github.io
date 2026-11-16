@@ -37,7 +37,15 @@ const baseY = ref('')
 const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' })
 const D = ref(56)
 
-const board = computed(() => S.buildBoard(LEVEL.city, LEVEL.rings))
+/**
+ * 范围：整块黑土（原来的），或者「满屏截图」—— 游戏缩到最小、城池居中截一张图能看到的那些格子（S.VIEW），
+ * 只往这些格子里摆，图上也只画这些、裁成截图的样子。记在本机。
+ */
+const SCOPE_KEY = 'shape_scope'
+const scope = ref('full')
+try { if (localStorage.getItem(SCOPE_KEY) === 'screen') scope.value = 'screen' } catch (e) {}
+watch(scope, (v) => { try { localStorage.setItem(SCOPE_KEY, v) } catch (e) {} })
+const board = computed(() => S.buildBoard(LEVEL.city, LEVEL.rings, scope.value === 'screen'))
 
 /**
  * 顶角 (0,0) 那一格的游戏坐标 —— 填的就是黑土最上面那一格，不用换算。
@@ -141,6 +149,14 @@ const hitMap = computed(() => {
 })
 
 const span = computed(() => board.value.size * D.value)
+/** svg 的可视范围：整块黑土就是整张；满屏截图只框住截图里那些格子 */
+const box = computed(() => {
+  if (!board.value.screen || !cells.value.length) return { x: 0, y: 0, w: span.value, h: span.value }
+  const h = D.value / 2
+  const xs = cells.value.map((c) => c.x), ys = cells.value.map((c) => c.y)
+  const x = Math.min(...xs) - h, y = Math.min(...ys) - h
+  return { x, y, w: Math.max(...xs) + h - x, h: Math.max(...ys) + h - y }
+})
 
 /**
  * 格子是个菱形，离中心越远能写字的地方越窄，所以字号得按放字的高度算出来。
@@ -169,7 +185,7 @@ const cells = computed(() => {
   const b = board.value
   const out = []
   b.cells.forEach((cell) => {
-    if (cell.city) return
+    if (cell.city || !cell.inView) return
     const hit = hitMap.value.get(cell.id)
     const ctr = P.cellCenter(cell.r, cell.c, b.size, D.value)
     const color = hit ? BLOCK_COLORS[hit.block % BLOCK_COLORS.length] : null
@@ -307,6 +323,14 @@ function savePng() {
         <span class="lab">字能写：{{ CHAR_HINT }}；图案：{{ PATTERNS.join('、') }}</span>
       </n-space>
 
+      <n-space align="center" :size="14" style="margin-bottom: 10px">
+        <span class="lab">范围</span>
+        <n-radio-group v-model:value="scope" size="small">
+          <n-radio-button value="full">整块黑土</n-radio-button>
+          <n-radio-button value="screen">满屏截图（含 7 级城）</n-radio-button>
+        </n-radio-group>
+        <span class="lab">{{ scope === 'screen' ? '只用游戏缩到最小、城池居中截一张图能看到的格子' : '整块黑土都能摆，截图可能拍不全' }}</span>
+      </n-space>
       <n-space align="center" :size="14">
         <span class="lab">格子大小</span>
         <n-slider v-model:value="D" :min="20" :max="80" :step="2" style="width: 160px" />
@@ -342,7 +366,7 @@ function savePng() {
         <span v-else-if="edited" class="lab">已手动改 {{ edited }} 格</span>
       </div>
       <div class="wrap">
-        <svg id="shape-map" :class="{ editing }" :width="span" :height="span" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`0 0 ${span} ${span}`" xmlns="http://www.w3.org/2000/svg">
+        <svg id="shape-map" :class="{ editing }" :width="box.w" :height="box.h" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
           <g v-for="c in cells" :key="c.id" :class="{ paintable: editing }" @pointerdown.prevent="startPaint(c.id)" @pointerenter="overPaint(c.id)">
             <g :transform="`translate(${c.x},${c.y}) rotate(45)`">
               <rect
