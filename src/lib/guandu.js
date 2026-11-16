@@ -155,3 +155,57 @@ export function drawSheet(opts) {
   text('三冰小帮手 · 官渡排表', 20, y + RH / 2, { color: '#dbe5f7', size: 12 })
   return c
 }
+
+/**
+ * 排表导出成 Excel：版式照 drawSheet 的图（分组 | 昵称 | 三个阶段 | 官渡要点），
+ * 返回 files.buildExcel 要的 { aoa, merges, cols, rows, styles, cellStyles }。
+ * 每组至少占 3 行，阶段格子里「1队 / 2/3队 / 4-6队」分行写，格子自动换行。
+ */
+export function buildSheetXlsx(opts) {
+  const { alliance, legion, battleText, plan, names, subs, notes, channel, commander } = opts
+  const legionName = Number(legion) === 1 ? '一团' : '二团'
+  const W = 6
+  const ST = [
+    { fill: 'dbe5f7', color: '2f5597', bold: true, size: 14, line: '8eaadb' }, // 0 标题
+    { fill: '4472c4', color: 'ffffff', bold: true, line: '8eaadb', wrap: true }, // 1 表头
+    { fill: '2f5597', color: 'ffffff', bold: true, line: '8eaadb' }, // 2 组名
+    { fill: 'b4c6e7', color: 'e0203a', bold: true, line: '8eaadb' }, // 3 车头
+    { fill: 'b4c6e7', color: '1f2329', line: '8eaadb' }, // 4 车身
+    { fill: 'dae3f3', color: '1f2329', line: '8eaadb', align: 'left', wrap: true }, // 5 任务 / 要点
+    { fill: 'dbe5f7', color: '2f5597', bold: true, line: '8eaadb', align: 'left' } // 6 频道 / 替补 / 指挥
+  ]
+  const aoa = [], cellStyles = [], merges = [], rows = []
+  const push = (row, st, h = 22) => { aoa.push(row); cellStyles.push(st); rows.push({ hpt: h }) }
+  const wide = (text, st, h = 24) => { const r = aoa.length; push([text].concat(Array(W - 1).fill('')), Array(W).fill(st), h); merges.push({ s: { r, c: 0 }, e: { r, c: W - 1 } }) }
+
+  const allianceText = `${alliance && alliance.serverNo ? alliance.serverNo + '区' : ''}【${(alliance && alliance.name) || ''}】`
+  wide(`${allianceText}官渡${legionName}安排表　${battleText || ''}`, 0, 30)
+  if (channel) wide(channel, 6)
+  const mainN = plan.groups.reduce((a, g) => a + g.members.length, 0)
+  push(['分组', `昵称\n主力 ${mainN} · 替补 ${subs.length}`].concat(PHASES.map((p, i) => `${p.name} ${phaseTime(legion, i)}\n${p.desc}`), ['官渡要点']), Array(W).fill(1), 36)
+
+  plan.groups.forEach((g) => {
+    const n = Math.max(3, g.members.length)
+    const top = aoa.length
+    const phaseText = PHASES.map((_p, i) => {
+      const a = plan.assign[i][g.id], tk = plan.tasks[i][g.id] || {}
+      return [`1队：${a ? fullName(a) : '待命'}`, tk.t23 ? `2/3队：${fullName(tk.t23)}` : '', tk.t456 ? `4/5/6队：${tk.t456}` : ''].filter(Boolean).join('\n')
+    })
+    for (let r = 0; r < n; r++) {
+      const id = g.members[r]
+      const first = r === 0
+      push([first ? g.name : '', id ? names[id] || '' : ''].concat(first ? phaseText : ['', '', ''], [first ? notes[g.id] || '' : '']), [2, r === 0 && id ? 3 : 4, 5, 5, 5, 5], 22)
+    }
+    if (n > 1) [0, 2, 3, 4, 5].forEach((c) => merges.push({ s: { r: top, c }, e: { r: top + n - 1, c } }))
+  })
+
+  const sr = aoa.length
+  push(['替补', subs.join('、') || '无', '', '', '', ''], [2, 5, 5, 5, 5, 5], 26)
+  merges.push({ s: { r: sr, c: 1 }, e: { r: sr, c: W - 1 } })
+  const NOTE = '所有调度以实时战况为准'
+  const who = (commander || '').replace(/[，,、\s]*所有调度以实时战况为准[。.！!]*/g, '').trim()
+  wide(who ? `${who}，${NOTE}` : NOTE, 6)
+
+  const cols = [{ wch: 12 }, { wch: 18 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 36 }]
+  return { aoa, merges, cols, rows, styles: ST, cellStyles }
+}

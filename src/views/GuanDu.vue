@@ -7,7 +7,7 @@
 import { ref, computed, inject, h, onMounted } from 'vue'
 import { NTag, useMessage } from 'naive-ui'
 import { call } from '../api'
-import { download } from '../xlsx'
+import { download, buildStyledExcel } from '../xlsx'
 import { sorter } from '../fmt'
 import * as GD from '../lib/guandu'
 import GuanDuBoard from './GuanDuBoard.vue'
@@ -147,17 +147,32 @@ function exportSheet(l) {
   const notes = {}
   plan.groups.forEach((g) => { const t = r.tpl.notes && r.tpl.notes[l] && r.tpl.notes[l][g.name]; if (t) notes[g.id] = t })
   const bj = new Date(new Date(r.battles[l]).getTime() + 8 * 3600000)
-  const c = GD.drawSheet({
+  const opts = {
     alliance: r.alliance, legion: l, battleText: `${bj.getUTCMonth() + 1}月${bj.getUTCDate()}日 周日 ${l === 1 ? '21:00' : '14:00'} 场`,
     plan: { ...plan, groups: plan.groups.map((g) => ({ ...g, members: g.members.filter((id) => names[id]) })) },
     names, subs, notes, channel: r.tpl.channel, commander: r.tpl.commander && r.tpl.commander[l]
-  })
-  preview.value = { url: c.toDataURL('image/png'), canvas: c, name: `官渡${l === 1 ? '一团' : '二团'}安排表.png` }
+  }
+  const c = GD.drawSheet(opts)
+  preview.value = { url: c.toDataURL('image/png'), canvas: c, opts, name: `官渡${l === 1 ? '一团' : '二团'}安排表` }
 }
 const preview = ref(null) // 导出图预览，看过再下载
 function savePreview() {
   const p = preview.value
-  p.canvas.toBlob((blob) => { if (blob) download(blob, p.name); else message.error('生成图片失败') }, 'image/png')
+  p.canvas.toBlob((blob) => { if (blob) download(blob, p.name + '.png'); else message.error('生成图片失败') }, 'image/png')
+}
+/** 同一份排表导成 Excel（版式和图一样，方便再改、打印） */
+const xlsxBusy = ref(false)
+async function savePreviewXlsx() {
+  const p = preview.value
+  if (!p || xlsxBusy.value) return
+  xlsxBusy.value = true
+  try {
+    await buildStyledExcel(GD.buildSheetXlsx(p.opts), p.opts.legion === 1 ? '一团' : '二团', p.name + '.xlsx')
+  } catch (e) {
+    message.error('导出 Excel 失败：' + e.message)
+  } finally {
+    xlsxBusy.value = false
+  }
 }
 
 function closeBoard() {
@@ -218,7 +233,7 @@ function closeBoard() {
             <div class="gd-pub" :class="{ ok: lg.pubOk }">{{ lg.pub }}</div>
             <n-space style="margin-top: 14px">
               <n-button type="primary" size="large" :disabled="narrow" @click="boardLegion = lg.legion">进入沙盘排表</n-button>
-              <n-button size="large" @click="exportSheet(lg.legion)">导出排表图</n-button>
+              <n-button size="large" @click="exportSheet(lg.legion)">导出排表（图片 / Excel）</n-button>
             </n-space>
           </n-card>
         </n-gi>
@@ -248,7 +263,7 @@ function closeBoard() {
     <n-modal :show="!!preview" preset="card" title="排表预览" style="width: 1240px; max-width: 96vw" @update:show="(v) => { if (!v) preview = null }">
       <img v-if="preview" :src="preview.url" alt="排表预览" style="width: 100%; display: block; border-radius: 6px" />
       <template #footer>
-        <n-space justify="end"><n-button @click="preview = null">关闭</n-button><n-button type="primary" @click="savePreview">下载图片</n-button></n-space>
+        <n-space justify="end"><n-button @click="preview = null">关闭</n-button><n-button :loading="xlsxBusy" @click="savePreviewXlsx">下载 Excel</n-button><n-button type="primary" @click="savePreview">下载图片</n-button></n-space>
       </template>
     </n-modal>
 

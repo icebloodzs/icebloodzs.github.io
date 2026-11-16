@@ -11,7 +11,7 @@
 import { onMounted, onBeforeUnmount, ref, reactive, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { call } from '../api'
-import { download } from '../xlsx'
+import { download, buildStyledExcel } from '../xlsx'
 import * as GD from '../lib/guandu'
 
 const props = defineProps({ data: { type: Object, required: true }, legion: { type: Number, default: 1 }, sim: { type: Boolean, default: false } })
@@ -644,7 +644,7 @@ function renderRight() {
     <div class="sec"><h3>建筑颜色</h3>
       <div class="legend"><span style="--c:#fbbf24">兵器坊（前期）· 官渡（后期）</span><span style="--c:#7dd3fc">工匠坊</span><span style="--c:#fb7185">乌巢</span><span style="--c:#a3e635">大粮仓</span><span style="--c:#a3b1cc">小粮仓 · 霹雳车</span></div>
       <p class="hint" style="line-height:1.7;margin-top:6px">前期：兵器坊 > 工匠坊 > 乌巢、小粮仓<br>后期：官渡 > 乌巢 > 大粮仓 > 霹雳车<br>首要建筑本阶段没人去会闪红。</p></div>
-    <div class="sec"><button class="btn primary" style="width:100%" id="gdExport">导出排表图</button></div>`
+    <div class="sec"><button class="btn primary" style="width:100%" id="gdExport">导出排表（图片 / Excel）</button></div>`
   el.querySelectorAll('.tgt').forEach((x) => { x.onclick = () => setPhase(Number(x.dataset.ph)) })
   el.querySelectorAll('select').forEach((s) => {
     s.onchange = () => { const k = Number(s.dataset.k); D.tasks[k][g.id] = Object.assign(D.tasks[k][g.id] || {}, { [s.dataset.f]: s.value }); savePlan() }
@@ -685,13 +685,27 @@ function battleText(l) {
 function exportSheet() {
   const l = Number(S.legion), D = DATA[l]
   const names = Object.fromEntries(Object.values(MEMBERS).map((m) => [m.id, m.name]))
-  const c = GD.drawSheet({ alliance: res.alliance, legion: l, battleText: battleText(l), plan: D, names, subs: D.subs.map((id) => MEMBERS[id].name), notes: D.notes, channel: INFO.channel, commander: INFO.commander[l] })
-  // 先弹预览，看过再下载
-  preview.value = { url: c.toDataURL('image/png'), canvas: c, name: `官渡${l === 1 ? '一团' : '二团'}安排表.png` }
+  const opts = { alliance: res.alliance, legion: l, battleText: battleText(l), plan: D, names, subs: D.subs.map((id) => MEMBERS[id].name), notes: D.notes, channel: INFO.channel, commander: INFO.commander[l] }
+  const c = GD.drawSheet(opts)
+  // 先弹预览，看过再选下载图片还是 Excel
+  preview.value = { url: c.toDataURL('image/png'), canvas: c, opts, name: `官渡${l === 1 ? '一团' : '二团'}安排表` }
 }
 function savePreview() {
   const p = preview.value
-  p.canvas.toBlob((blob) => { if (blob) download(blob, p.name); else message.error('生成图片失败') }, 'image/png')
+  p.canvas.toBlob((blob) => { if (blob) download(blob, p.name + '.png'); else message.error('生成图片失败') }, 'image/png')
+}
+const xlsxBusy = ref(false)
+async function savePreviewXlsx() {
+  const p = preview.value
+  if (!p || xlsxBusy.value) return
+  xlsxBusy.value = true
+  try {
+    await buildStyledExcel(GD.buildSheetXlsx(p.opts), p.opts.legion === 1 ? '一团' : '二团', p.name + '.xlsx')
+  } catch (e) {
+    message.error('导出 Excel 失败：' + e.message)
+  } finally {
+    xlsxBusy.value = false
+  }
 }
 function toggleFull() {
   if (document.fullscreenElement) document.exitFullscreen()
@@ -747,6 +761,7 @@ onBeforeUnmount(() => {
       <img :src="preview.url" alt="排表预览" />
       <div class="pv-ops">
         <button class="btn primary" @click="savePreview">下载图片</button>
+        <button class="btn" :disabled="xlsxBusy" @click="savePreviewXlsx">{{ xlsxBusy ? '生成中…' : '下载 Excel' }}</button>
         <button class="btn" @click="preview = null">关闭</button>
       </div>
     </div>
