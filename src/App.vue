@@ -125,13 +125,22 @@ const shown = (k) => {
  * full = 开发版的管理员扫码进来，全部菜单；self = 其余情况，只有「我的」两页。
  */
 const selfOnly = computed(() => !me.value || me.value.webScope !== 'full')
+/** lite = 免费版的管理员：「我的」两页之外多一页「全员数据」 */
+const liteAdmin = computed(() => Boolean(me.value && me.value.webScope === 'lite'))
+/** 非 full 档位能打开的页 */
+const limitedViews = (scope) => (scope === 'lite' ? ['mine', 'myattrs', 'fulldata'] : ['mine', 'myattrs'])
 const menuOptions = computed(() => selfOnly.value
   ? [{
       type: 'group',
       label: '我的',
       key: 'g0',
       children: ['mine', 'myattrs'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
-    }]
+    }].concat(liteAdmin.value ? [{
+      type: 'group',
+      label: '成员数据',
+      key: 'g1',
+      children: [{ label: VIEWS.fulldata.label, key: 'fulldata', icon: icon(VIEWS.fulldata.icon) }]
+    }] : [])
   : [
   {
     type: 'group',
@@ -192,7 +201,7 @@ async function boot() {
     const who = await call('identity.whoami')
     if (!who.alliance || !who.alliance.active) throw fatal('这个账号还没加入已激活的同盟')
     me.value = who
-    if (who.webScope !== 'full' && !['mine', 'myattrs'].includes(view.value)) view.value = 'mine'
+    if (who.webScope !== 'full' && !limitedViews(who.webScope).includes(view.value)) view.value = 'mine'
     screen.value = 'app'
     await reload()
     refreshNotices()
@@ -222,9 +231,13 @@ async function reload() {
   try {
     // 只有「我的」两页时用不着全盟名单（服务端也不让拉），只要赛季配置
     if (selfOnly.value) {
-      const seasonRes = await call('season.list', {})
+      // 免费版管理员要给「全员数据」拉名单；普通成员用不着（服务端也不让拉）
+      const [seasonRes, list] = await Promise.all([
+        call('season.list', {}),
+        liteAdmin.value ? call('admin.memberList', { roster: 'in', sort: 'powerDesc', page: 1, pageSize: 200 }) : null
+      ])
       season.value = seasonRes.season
-      members.value = []
+      members.value = list ? list.rows : []
       return
     }
     const [list, seasonRes, users] = await Promise.all([
@@ -274,7 +287,8 @@ const title = computed(() => VIEWS[view.value].label)
 const selfTip = computed(() => {
   const who = me.value || {}
   const free = who.alliance && who.alliance.level !== 'ultra'
-  if (free && who.alliance.trial) return `${who.alliance.name} 的开发版试用已结束，现在是免费版：浏览器版只开放「我的信息」「我的属性」，盟主在小程序「管理 → 版本」输入兑换码可继续使用全部管理功能，数据都还在。`
+  if (free && who.alliance.trial) return `${who.alliance.name} 的开发版试用已结束，现在是免费版：浏览器版只开放「我的信息」「我的属性」${who.webScope === 'lite' ? '，管理员另有「全员数据」' : ''}，盟主在小程序「管理 → 版本」输入兑换码可继续使用全部管理功能，数据都还在。`
+  if (free && who.webScope === 'lite') return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：管理员在浏览器版能用「我的信息」「我的属性」「全员数据」，名单、集结、考勤这些管理功能要开发版。`
   if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：浏览器版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
   return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只对开发版的管理员开放。'
 })
