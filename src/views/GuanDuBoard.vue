@@ -477,7 +477,7 @@ function chip(id, pos) {
   if (!m) return ''
   // 只给车头打标；车身不再每行写「车身」，省出宽度两列排
   const tag = pos === 'head' ? '<span class="pos head">头</span>' : ''
-  return `<div class="row chip${pos === 'head' ? ' cap' : ''}${S.pick === id ? ' picked' : ''}" draggable="true" data-m="${id}" title="拖到别的组，或点一下再点目标组；双击设为车头">${tag}<span class="nm">${esc(m.name)}</span><span class="rv">${metricText(id)}</span><span class="t ${m.role === '主力' ? 'main' : 'sub'}">${m.role === '主力' ? '主' : '替'}</span></div>`
+  return `<div class="row chip${pos === 'head' ? ' cap' : ''}${S.pick === id ? ' picked' : ''}" draggable="true" data-m="${id}" title="${esc(m.name)}（拖到别的组，或点一下再点目标组；双击设为车头）">${tag}<span class="nm">${esc(m.name)}</span><span class="rv">${metricText(id)}</span><span class="t ${m.role === '主力' ? 'main' : 'sub'}">${m.role === '主力' ? '主' : '替'}</span></div>`
 }
 function renderLeft() {
   // 整块重画会把滚动位置冲掉，人多时拖完一个就跳回顶上：先记下来，画完放回去
@@ -813,7 +813,9 @@ onBeforeUnmount(() => {
 .gdb .gop { color: var(--mute); padding: 0 3px; cursor: pointer; }
 .gdb .gop:hover { color: #fbbf24; }
 .gdb .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.gdb .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; min-height: 26px; }
+/* minmax(0, 1fr)：不然长名字会把格子撑开（grid 子项默认 min-width:auto），挤出侧栏 */
+.gdb .chips { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; min-height: 26px; }
+.gdb .chips > .row { min-width: 0; overflow: hidden; }
 .gdb .chips > .hint { grid-column: 1 / -1; }
 .gdb .row { display: flex; align-items: center; gap: 6px; background: #0d1630; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; cursor: grab; user-select: none; }
 .gdb .row:hover { border-color: #3a4d75; }
@@ -823,7 +825,8 @@ onBeforeUnmount(() => {
 .gdb .row .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gdb .row.cap { border-color: #fbbf24; }
 .gdb .row.cap .nm { color: #fde68a; font-weight: 700; }
-.gdb .row .rv { font-variant-numeric: tabular-nums; color: #cbd6ee; font-size: 12px; }
+.gdb .row .rv { flex: none; font-variant-numeric: tabular-nums; color: #cbd6ee; font-size: 12px; }
+.gdb .chips > .row { gap: 4px; padding: 4px 5px; }
 .gdb .row .t { font-size: 10px; padding: 0 3px; border-radius: 3px; flex: none; }
 .gdb .t.main { background: #1e3a8a; color: #bfdbfe; }
 .gdb .t.sub { background: #3f2a0a; color: #fcd34d; }
