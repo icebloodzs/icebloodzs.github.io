@@ -12,17 +12,44 @@ import { sorter } from '../fmt'
 import * as GD from '../lib/guandu'
 import GuanDuBoard from './GuanDuBoard.vue'
 
-const { narrow } = inject('app')
+const { narrow, me } = inject('app')
 const message = useMessage()
 const res = ref(null)
 const loading = ref(false)
 const boardLegion = ref(0) // 0 = 没开沙盘
 const tab = ref('1')
 
+/*
+ * 模拟报名（只给开发者）：和小程序同一套，请求带 sim，云函数核过是开发者才当成「报名中」，
+ * 数据单独存一场，成员看到的真实报名不受影响。开关记在本机。
+ */
+const isDev = computed(() => Boolean(me && me.value && me.value.isDev))
+const SIM_KEY = 'gd_sim'
+const sim = ref(false)
+try { sim.value = localStorage.getItem(SIM_KEY) === '1' } catch (e) {}
+function toggleSim(v) {
+  sim.value = v
+  try { localStorage.setItem(SIM_KEY, v ? '1' : '0') } catch (e) {}
+  load()
+}
+const simOn = computed(() => isDev.value && sim.value)
+
+/** 名单排序：按属性（六维总和）或按集结值，默认按属性，记在本机，和沙盘共用 */
+const SORT_KEY = 'gd_sort'
+const sortBy = ref('attrs')
+try { if (localStorage.getItem(SORT_KEY) === 'rally') sortBy.value = 'rally' } catch (e) {}
+function setSort(v) { sortBy.value = v; try { localStorage.setItem(SORT_KEY, v) } catch (e) {} }
+const SORTS = [{ label: '按属性', value: 'attrs' }, { label: '按集结值', value: 'rally' }]
+const val = (r, k) => (r[k] == null ? -Infinity : Number(r[k]))
+const byMetric = (a, b) => {
+  const k = sortBy.value, o = k === 'rally' ? 'attrs' : 'rally'
+  return val(b, k) - val(a, k) || val(b, o) - val(a, o)
+}
+
 async function load() {
   loading.value = true
   try {
-    res.value = await call('admin.guanduOverview', { withPlans: true })
+    res.value = await call('admin.guanduOverview', simOn.value ? { withPlans: true, sim: true } : { withPlans: true })
   } catch (e) {
     message.error(e.message)
   } finally {
@@ -73,21 +100,23 @@ const signColumns = [
   { title: '#', key: '_i', width: 50, render: (_r, i) => i + 1 },
   { title: '成员', key: 'name', sorter: sorter((r) => r.name) },
   { title: '身份', key: 'role', width: 90, render: (r) => roleTag(r.role), sorter: sorter((r) => r.role) },
+  { title: '六维总和', key: 'attrs', width: 100, render: (r) => (r.attrs == null ? '-' : Math.round(r.attrs)), sorter: sorter((r) => r.attrs) },
   { title: '集结值', key: 'rally', width: 100, render: (r) => (r.rally == null ? '-' : r.rally.toFixed(2)), sorter: sorter((r) => r.rally) },
-  { title: '报名时间', key: 'at', width: 130, render: (r) => stamp(r.at), sorter: sorter((r) => r.at) },
-  { title: '', key: 'byAdmin', width: 70, render: (r) => (r.byAdmin ? h('span', { style: 'color:#8a9099;font-size:12px' }, '代报') : '') }
+  { title: '报名时间', key: 'at', width: 130, render: (r) => stamp(r.at), sorter: sorter((r) => r.at) }
 ]
 const pendingColumns = [
   { title: '#', key: '_i', width: 50, render: (_r, i) => i + 1 },
   { title: '成员', key: 'name', sorter: sorter((r) => r.name) },
+  { title: '六维总和', key: 'attrs', width: 100, render: (r) => (r.attrs == null ? '-' : Math.round(r.attrs)), sorter: sorter((r) => r.attrs) },
   { title: '集结值', key: 'rally', width: 100, render: (r) => (r.rally == null ? '-' : r.rally.toFixed(2)), sorter: sorter((r) => r.rally) },
   { title: '绑定', key: 'bound', width: 90, render: (r) => (r.bound ? '已绑定' : h('span', { style: 'color:#d97706' }, '未绑定（只能代报）')) }
 ]
 const tableRows = computed(() => {
   const r = res.value
   if (!r) return []
-  if (tab.value === 'pending') return r.pending
-  return r.rows.filter((x) => x.legion === Number(tab.value)).sort((a, b) => (a.role === b.role ? (b.rally ?? -1) - (a.rally ?? -1) : a.role === 'main' ? -1 : 1))
+  if (tab.value === 'pending') return r.pending.slice().sort(byMetric)
+  // 主力在前、替补在后，各自按选的排序从高到低
+  return r.rows.filter((x) => x.legion === Number(tab.value)).sort((a, b) => (a.role === b.role ? byMetric(a, b) : a.role === 'main' ? -1 : 1))
 })
 
 function exportSheet(l) {
@@ -126,6 +155,7 @@ function closeBoard() {
       报名截止后在这里进沙盘排表，排完点「发布给成员」，成员在小程序里就能看到自己的任务；也可以导出排表图发群。催报、代报、游戏勾选清单在小程序「管理 → 官渡管理」。
     </n-alert>
     <n-alert v-if="narrow" type="warning" :bordered="false">沙盘排表需要电脑的大屏幕，手机上只能看报名情况。</n-alert>
+    <n-alert v-if="simOn" type="warning" :bordered="false">模拟报名中：只有你看得到，数据单独存一场，不影响成员的真实报名和排表</n-alert>
 
     <n-spin :show="loading && !res">
       <n-grid v-if="res" cols="1 l:2" responsive="screen" :x-gap="16" :y-gap="16">
@@ -172,12 +202,22 @@ function closeBoard() {
     </n-spin>
 
     <n-card v-if="res" :bordered="false" title="报名名单">
-      <template #header-extra><n-button size="small" :loading="loading" @click="load">刷新</n-button></template>
-      <n-tabs v-model:value="tab" type="segment" style="max-width: 420px; margin-bottom: 12px">
-        <n-tab name="1">一团 {{ res.rows.filter((r) => r.legion === 1).length }}</n-tab>
-        <n-tab name="2">二团 {{ res.rows.filter((r) => r.legion === 2).length }}</n-tab>
-        <n-tab name="pending">未报名 {{ res.pending.length }}</n-tab>
-      </n-tabs>
+      <template #header-extra>
+        <n-space align="center" :size="12">
+          <span v-if="isDev" class="gd-sim">模拟报名（开发者）<n-switch size="small" :value="sim" @update:value="toggleSim" /></span>
+          <n-button size="small" :loading="loading" @click="load">刷新</n-button>
+        </n-space>
+      </template>
+      <div class="gd-bar">
+        <n-tabs v-model:value="tab" type="segment" style="max-width: 420px">
+          <n-tab name="1">一团 {{ res.rows.filter((r) => r.legion === 1).length }}</n-tab>
+          <n-tab name="2">二团 {{ res.rows.filter((r) => r.legion === 2).length }}</n-tab>
+          <n-tab name="pending">未报名 {{ res.pending.length }}</n-tab>
+        </n-tabs>
+        <n-radio-group :value="sortBy" size="small" @update:value="setSort">
+          <n-radio-button v-for="o in SORTS" :key="o.value" :value="o.value" :label="o.label" />
+        </n-radio-group>
+      </div>
       <n-data-table :columns="tab === 'pending' ? pendingColumns : signColumns" :data="tableRows" :row-key="(r) => r.memberId" size="small" :max-height="520" />
     </n-card>
 
@@ -188,12 +228,14 @@ function closeBoard() {
       </template>
     </n-modal>
 
-    <GuanDuBoard v-if="boardLegion && res" :data="res" :legion="boardLegion" @close="closeBoard" />
+    <GuanDuBoard v-if="boardLegion && res" :data="res" :legion="boardLegion" :sim="simOn" @close="closeBoard" />
   </n-space>
 </template>
 
 <style scoped>
 .gd-card { position: relative; overflow: hidden; }
+.gd-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.gd-sim { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #8a9099; }
 .gd-card::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px; background: var(--c); }
 .gd-sub { color: #8a9099; font-size: 13px; margin-top: -6px; }
 .gd-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 14px 0 10px; }

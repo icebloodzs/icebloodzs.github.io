@@ -14,7 +14,9 @@ import { call } from '../api'
 import { download } from '../xlsx'
 import * as GD from '../lib/guandu'
 
-const props = defineProps({ data: { type: Object, required: true }, legion: { type: Number, default: 1 } })
+const props = defineProps({ data: { type: Object, required: true }, legion: { type: Number, default: 1 }, sim: { type: Boolean, default: false } })
+/** 开发者模拟报名时，所有写操作都带上 sim，落到单独的测试场次 */
+const withSim = (o) => (props.sim ? { ...o, sim: true } : o)
 const emit = defineEmits(['close', 'saved'])
 const message = useMessage()
 const root = ref(null)
@@ -26,7 +28,7 @@ const { BUILDINGS, BM, BASE_US, BASE_THEM, PHASES, fullName, shortName, isOpen, 
 // ===================== 数据 =====================
 const res = props.data
 const MEMBERS = {}
-res.rows.forEach((r) => { MEMBERS[r.memberId] = { id: r.memberId, name: r.name, rally: r.rally, role: r.role === 'main' ? '主力' : '替补', legion: r.legion } })
+res.rows.forEach((r) => { MEMBERS[r.memberId] = { id: r.memberId, name: r.name, rally: r.rally, attrs: r.attrs, role: r.role === 'main' ? '主力' : '替补', legion: r.legion } })
 const tpl = res.tpl
 const DATA = {}
 ;[1, 2].forEach((l) => {
@@ -51,7 +53,20 @@ const PUB = reactive({ 1: { at: res.plans[1].publishedAt || null, dirty: Boolean
 const curLegion = ref(Number(props.legion))
 const publishing = ref(false)
 
-const S = { legion: String(props.legion), phase: 0, sel: null, drag: null, playing: false, playT: 0, playStart: 0, t0: performance.now() }
+/*
+ * 左栏名单的排序：按属性（六维总和）或按集结值，默认属性。只影响「未分组 / 替补」的顺序和名字右边显示的数，
+ * 组里的顺序是车头在前，不跟着变。记在本机。
+ */
+const SORT_KEY = 'gd_sort'
+let sortBy = 'attrs'
+try { if (localStorage.getItem(SORT_KEY) === 'rally') sortBy = 'rally' } catch (e) {}
+const metric = (id) => { const v = MEMBERS[id] && MEMBERS[id][sortBy]; return v == null ? null : Number(v) }
+const metricText = (id) => { const v = metric(id); return v == null ? '-' : v.toFixed(sortBy === 'rally' ? 2 : 0) }
+const sorted = (ids) => ids.slice().sort((a, b) => (metric(b) ?? -Infinity) - (metric(a) ?? -Infinity))
+// 收起的分组（人多时只看组名和人数，拖进去照样能放）
+const folded = new Set()
+
+const S = { legion: String(props.legion), phase: 0, sel: null, pick: null, drag: null, playing: false, playT: 0, playStart: 0, t0: performance.now() }
 const L = () => DATA[S.legion]
 const groupOf = (gid) => L().groups.find((g) => g.id === gid)
 S.sel = (L().groups[0] || {}).id || null
@@ -82,12 +97,12 @@ function savePlan() {
   const l = Number(S.legion)
   const D = DATA[l]
   PUB[l].dirty = true
-  debounce('plan' + l, () => call('admin.guanduSavePlan', { legion: l, plan: { groups: D.groups, assign: D.assign, tasks: D.tasks } }))
+  debounce('plan' + l, () => call('admin.guanduSavePlan', withSim({ legion: l, plan: { groups: D.groups, assign: D.assign, tasks: D.tasks } })))
 }
 function saveTpl(key, payload) {
   // 频道两个团共用，指挥、要点按团
   ;(payload.legion ? [payload.legion] : [1, 2]).forEach((l) => { PUB[l].dirty = true })
-  debounce('tpl' + key, () => call('admin.guanduSaveTpl', payload), 1000)
+  debounce('tpl' + key, () => call('admin.guanduSaveTpl', withSim(payload)), 1000)
 }
 
 // ===================== 发布给成员 =====================
@@ -111,7 +126,7 @@ async function publish() {
     // 先把还在排队的保存发出去，发布的是最新的
     Object.keys(timers).forEach((k) => clearTimeout(timers[k]))
     await Promise.all([...pending.keys()].map((k) => flush(k)))
-    const r = await call('admin.guanduPublish', { legion: l })
+    const r = await call('admin.guanduPublish', withSim({ legion: l }))
     PUB[l].at = r.publishedAt; PUB[l].dirty = false
     message.success(`${name}排表已发布，${r.members} 人能看到自己的任务`)
     emit('saved')
@@ -460,33 +475,80 @@ function select(gid) { S.sel = gid; renderSide() }
 function chip(id, pos) {
   const m = MEMBERS[id]
   if (!m) return ''
-  const tag = pos === 'head' ? '<span class="pos head">车头</span>' : pos === 'body' ? '<span class="pos body">车身</span>' : ''
-  return `<div class="row chip${pos === 'head' ? ' cap' : ''}" draggable="true" data-m="${id}" title="双击设为车头">${tag}<span class="nm">${esc(m.name)}</span><span class="rv">${m.rally == null ? '-' : m.rally.toFixed(2)}</span><span class="t ${m.role === '主力' ? 'main' : 'sub'}">${m.role === '主力' ? '主' : '替'}</span></div>`
+  // 只给车头打标；车身不再每行写「车身」，省出宽度两列排
+  const tag = pos === 'head' ? '<span class="pos head">头</span>' : ''
+  return `<div class="row chip${pos === 'head' ? ' cap' : ''}${S.pick === id ? ' picked' : ''}" draggable="true" data-m="${id}" title="拖到别的组，或点一下再点目标组；双击设为车头">${tag}<span class="nm">${esc(m.name)}</span><span class="rv">${metricText(id)}</span><span class="t ${m.role === '主力' ? 'main' : 'sub'}">${m.role === '主力' ? '主' : '替'}</span></div>`
 }
 function renderLeft() {
+  // 整块重画会把滚动位置冲掉，人多时拖完一个就跳回顶上：先记下来，画完放回去
+  const old = root.value.querySelector('.lscroll'), oldDock = root.value.querySelector('.dockbody')
+  const keep = [old ? old.scrollTop : 0, oldDock ? oldDock.scrollTop : 0]
+  renderLeftInner()
+  const nw = $('.lscroll'), nd = $('.dockbody')
+  if (nw) nw.scrollTop = keep[0]
+  if (nd) nd.scrollTop = keep[1]
+}
+function renderLeftInner() {
   const D = L()
   const l = Number(S.legion)
   const mainN = res.rows.filter((r) => r.legion === l && r.role === 'main').length
   const subN = res.rows.filter((r) => r.legion === l && r.role === 'sub').length
   const q = (label, n, max, color) => `<div class="q"><small>${label}</small><div><b>${n}</b> / ${max}　<small>剩 ${Math.max(0, max - n)} 个</small></div><div class="bar"><i style="width:${Math.min(100, n / max * 100)}%;background:${color}"></i></div></div>`
-  $('.left').innerHTML = `
+  const sortSeg = `<span class="seg">${[['attrs', '按属性'], ['rally', '按集结值']].map(([k, t]) => `<button data-sort="${k}" class="${sortBy === k ? 'on' : ''}">${t}</button>`).join('')}</span>`
+  const allFolded = D.groups.length && D.groups.every((g) => folded.has(g.id))
+  $('.left').innerHTML = `<div class="lscroll">
     <div class="sec"><h3>排表信息</h3>
       <div class="field"><label>频道</label><input id="gdChannel" placeholder="如 xx频道：xxx" value="${esc(INFO.channel)}" /></div>
       <div class="field"><label>指挥</label><input id="gdCommander" placeholder="如 指挥：xxx" value="${esc(INFO.commander[S.legion])}" /></div>
       <p class="hint">写进导出的排表图；频道两个团共用，指挥按团分开，下周自动带上</p></div>
     <div class="sec"><h3>报名情况</h3><div class="quota">${q('主力', mainN, res.caps.main, '#3b82f6')}${q('替补', subN, res.caps.sub, '#f59e0b')}</div>
       ${D.fromLastWeek ? '<p class="hint" style="margin-top:6px;color:#fbbf24">本周还没排过：分组和任务照上周起了个头，组里只留了这周报名的人</p>' : ''}</div>
-    <div class="sec"><h3>分组 <button class="mini" id="gdAddGroup">＋ 新建分组</button></h3><p class="hint" style="margin:-4px 0 8px">数字是集结值 · 拖名字换组 · 双击设车头</p>
-      ${D.groups.map((g) => `<div class="group${g.id === S.sel ? ' sel' : ''}" data-g="${g.id}">
-        <div class="ghead" data-pick="${g.id}"><span class="dot" style="background:${g.color};box-shadow:0 0 8px ${g.color}"></span><b>${esc(g.name)}</b><span class="hint">${g.members.length} 人</span>
+    <div class="sec"><h3>分组 <button class="mini" id="gdFoldAll">${allFolded ? '全部展开' : '全部收起'}</button><button class="mini" id="gdAddGroup" style="margin-left:6px">＋ 新建</button></h3>
+      <p class="hint" id="gdPickHint" style="margin:-4px 0 8px">${S.pick ? `已选「${esc(MEMBERS[S.pick].name)}」，点一个分组或下面的名单放进去 · 再点一下名字取消` : PICK_HINT}</p>
+      ${D.groups.map((g) => `<div class="group${g.id === S.sel ? ' sel' : ''}${folded.has(g.id) ? ' fold' : ''}${S.pick ? ' target' : ''}" data-g="${g.id}">
+        <div class="ghead" data-pick="${g.id}"><span class="gop" data-fold="${g.id}" title="收起 / 展开">${folded.has(g.id) ? '▸' : '▾'}</span><span class="dot" style="background:${g.color};box-shadow:0 0 8px ${g.color}"></span><b>${esc(g.name)}</b><span class="hint">${g.members.length} 人${folded.has(g.id) && g.members[0] ? ' · 头 ' + esc(MEMBERS[g.members[0]].name) : ''}</span>
           <span class="gop" data-rename="${g.id}" title="改名">✎</span>${g.members.length ? '' : `<span class="gop" data-del="${g.id}" title="删除空组">✕</span>`}</div>
-        <div class="chips">${g.members.map((id, i) => chip(id, i === 0 ? 'head' : 'body')).join('') || '<span class="hint">把名字拖进来</span>'}</div></div>`).join('')}
-    </div>
-    <div class="sec"><h3>未分组主力 <span class="hint">${D.pool.length}</span></h3><div class="pool chips" data-g="pool">${D.pool.map((id) => chip(id)).join('') || '<span class="hint">都分好了</span>'}</div></div>
-    <div class="sec"><h3>替补 <span class="hint">${D.subs.length}</span></h3><div class="pool chips" data-g="subs">${D.subs.map((id) => chip(id)).join('') || '<span class="hint">没有替补</span>'}</div></div>`
+        ${folded.has(g.id) ? '' : `<div class="chips">${g.members.map((id, i) => chip(id, i === 0 ? 'head' : 'body')).join('') || '<span class="hint">把名字拖进来</span>'}</div>`}</div>`).join('')}
+    </div></div>
+    <div class="ldock">
+      <h3>未分组 ${sortSeg}</h3>
+      <div class="dockbody">
+        <div class="sub-h">主力 <span class="hint">${D.pool.length}</span></div>
+        <div class="pool chips${S.pick ? ' target' : ''}" data-g="pool">${sorted(D.pool).map((id) => chip(id)).join('') || '<span class="hint">都分好了</span>'}</div>
+        <div class="sub-h">替补 <span class="hint">${D.subs.length}</span></div>
+        <div class="pool chips${S.pick ? ' target' : ''}" data-g="subs">${sorted(D.subs).map((id) => chip(id)).join('') || '<span class="hint">没有替补</span>'}</div>
+      </div>
+    </div>`
   bindLeft()
 }
 function listOf(key) { const D = L(); return key === 'pool' ? D.pool : key === 'subs' ? D.subs : groupOf(key).members }
+/** 把人挪到 key（组 id / pool / subs）。拖回「未分组」时替补自动回替补栏、主力回主力栏 */
+function moveTo(id, key) {
+  if (!MEMBERS[id]) return
+  const D = L()
+  ;[D.pool, D.subs, ...D.groups.map((g) => g.members)].forEach((arr) => { const i = arr.indexOf(id); if (i >= 0) arr.splice(i, 1) })
+  if ((key === 'pool' || key === 'subs')) (MEMBERS[id].role === '替补' ? D.subs : D.pool).push(id)
+  else listOf(key).push(id)
+  S.pick = null
+  savePlan(); renderSide()
+}
+/** 选中 / 取消选中某人：只切样式和提示，不重画左栏 */
+function markPick() {
+  const left = $('.left')
+  left.querySelectorAll('.chip').forEach((c) => c.classList.toggle('picked', c.dataset.m === S.pick))
+  left.querySelectorAll('.group, .pool').forEach((g) => g.classList.toggle('target', Boolean(S.pick)))
+  const h = $('#gdPickHint')
+  if (h) h.textContent = S.pick ? `已选「${MEMBERS[S.pick].name}」，点一个分组或下面的名单放进去 · 再点一下名字取消` : PICK_HINT
+}
+const PICK_HINT = '拖名字换组，或点名字再点目标组 · 双击设车头 · 点 ▾ 收起分组'
+/** 拖动时靠近滚动区上下边缘就自动滚，人多时不用松手去滚 */
+function edgeScroll(e) {
+  const box = e.target.closest && e.target.closest('.lscroll, .dockbody')
+  if (!box) return
+  const r = box.getBoundingClientRect(), zone = 48
+  if (e.clientY < r.top + zone) box.scrollTop -= Math.ceil((r.top + zone - e.clientY) / 3)
+  else if (e.clientY > r.bottom - zone) box.scrollTop += Math.ceil((e.clientY - (r.bottom - zone)) / 3)
+}
 function bindLeft() {
   const left = $('.left')
   $('#gdChannel').oninput = (e) => { INFO.channel = e.target.value.trim(); saveTpl('channel', { channel: INFO.channel }) }
@@ -500,7 +562,28 @@ function bindLeft() {
     D.groups.push({ id: 'g' + i, name, short: name.replace(/组$/, '').slice(0, 2), color: GD.GROUP_COLORS[D.groups.length % GD.GROUP_COLORS.length], members: [] })
     S.sel = 'g' + i; savePlan(); renderSide()
   }
-  left.querySelectorAll('[data-pick]').forEach((el) => { el.onclick = (e) => { if (!e.target.closest('.gop')) select(el.dataset.pick) } })
+  left.ondragover = edgeScroll
+  left.querySelectorAll('[data-sort]').forEach((el) => {
+    el.onclick = () => { sortBy = el.dataset.sort; try { localStorage.setItem(SORT_KEY, sortBy) } catch (e) {} ; renderLeft() }
+  })
+  $('#gdFoldAll').onclick = () => {
+    const D = L()
+    if (D.groups.every((g) => folded.has(g.id))) D.groups.forEach((g) => folded.delete(g.id))
+    else D.groups.forEach((g) => folded.add(g.id))
+    renderLeft()
+  }
+  left.querySelectorAll('[data-fold]').forEach((el) => {
+    el.onclick = (e) => { e.stopPropagation(); const id = el.dataset.fold; if (folded.has(id)) folded.delete(id); else folded.add(id); renderLeft() }
+  })
+  // 选中了人：点分组 / 名单就放进去（点组头也算）；没选人时点组头是选中这个组
+  left.querySelectorAll('[data-g]').forEach((box) => {
+    box.addEventListener('click', (e) => {
+      if (!S.pick || e.target.closest('.chip') || e.target.closest('.gop')) return
+      e.stopPropagation()
+      moveTo(S.pick, box.dataset.g)
+    })
+  })
+  left.querySelectorAll('[data-pick]').forEach((el) => { el.onclick = (e) => { if (S.pick || e.target.closest('.gop')) return; select(el.dataset.pick) } })
   left.querySelectorAll('[data-rename]').forEach((el) => {
     el.onclick = () => {
       const g = groupOf(el.dataset.rename)
@@ -522,10 +605,13 @@ function bindLeft() {
     }
   })
   left.querySelectorAll('.chip').forEach((el) => {
-    el.ondragstart = (e) => e.dataTransfer.setData('text/plain', el.dataset.m)
+    el.ondragstart = (e) => { S.pick = null; e.dataTransfer.setData('text/plain', el.dataset.m) }
+    // 只改样式不重画：重画会换掉这个元素，双击就收不到了
+    el.onclick = () => { S.pick = S.pick === el.dataset.m ? null : el.dataset.m; markPick() }
     el.ondblclick = () => {
+      S.pick = null
       const key = el.closest('[data-g]').dataset.g
-      if (key === 'pool' || key === 'subs') return
+      if (key === 'pool' || key === 'subs') return renderLeft()
       const arr = listOf(key); arr.splice(arr.indexOf(el.dataset.m), 1); arr.unshift(el.dataset.m); savePlan(); renderSide()
     }
   })
@@ -534,16 +620,8 @@ function bindLeft() {
     box.ondragleave = () => box.classList.remove('over')
     box.ondrop = (e) => {
       e.preventDefault(); box.classList.remove('over')
-      const id = e.dataTransfer.getData('text/plain')
-      if (!MEMBERS[id]) return
-      const D = L()
-      ;[D.pool, D.subs, ...D.groups.map((g) => g.members)].forEach((arr) => { const i = arr.indexOf(id); if (i >= 0) arr.splice(i, 1) })
-      // 拖回「未分组」：替补自动回替补栏
-      const key = box.dataset.g
-      if (key === 'pool' && MEMBERS[id].role === '替补') D.subs.push(id)
-      else if (key === 'subs' && MEMBERS[id].role === '主力') D.pool.push(id)
-      else listOf(key).push(id)
-      savePlan(); renderSide()
+      e.stopPropagation()
+      moveTo(e.dataTransfer.getData('text/plain'), box.dataset.g)
     }
   })
 }
@@ -679,7 +757,7 @@ onBeforeUnmount(() => {
 /* 沙盘的侧栏是手写 DOM，scoped 管不到，全部挂在 .gdb 下面 */
 .gdb {
   --bg: #0a0f1d; --panel: #111a2e; --panel2: #16213a; --line: #24324f; --ink: #e6ecf7; --mute: #8a9bbd;
-  position: fixed; inset: 0; z-index: 2000; display: grid; grid-template-columns: 300px 1fr 330px; grid-template-rows: 56px 1fr;
+  position: fixed; inset: 0; z-index: 2000; display: grid; grid-template-columns: 340px 1fr 330px; grid-template-rows: 56px 1fr;
   background: var(--bg); color: var(--ink); font-size: 13px; font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
 }
 .gdb * { box-sizing: border-box; }
@@ -699,7 +777,20 @@ onBeforeUnmount(() => {
 .gdb .hint { color: var(--mute); font-size: 12px; }
 .gdb .saved { color: #34d399; min-width: 50px; }
 .gdb aside { background: var(--panel); overflow: auto; padding: 14px; }
-.gdb aside.left { border-right: 1px solid var(--line); }
+.gdb aside.left { border-right: 1px solid var(--line); padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+/* 左栏上下两块各自滚：上面是分组，下面固定是未分组/替补，拖名字时两头都在眼前 */
+.gdb .lscroll { flex: 1; min-height: 0; overflow: auto; padding: 14px; }
+.gdb .ldock { flex: none; max-height: 42%; display: flex; flex-direction: column; border-top: 1px solid var(--line); background: #0e1628; padding: 10px 14px 12px; }
+.gdb .ldock h3 { font-size: 13px; color: var(--mute); font-weight: 600; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
+.gdb .dockbody { overflow: auto; min-height: 0; }
+.gdb .sub-h { font-size: 12px; color: var(--mute); margin: 6px 0 4px; }
+.gdb .seg { margin-left: auto; display: inline-flex; background: #0b1324; border: 1px solid var(--line); border-radius: 7px; padding: 2px; }
+.gdb .seg button { border: 0; background: none; padding: 2px 8px; border-radius: 5px; cursor: pointer; color: var(--mute); font-size: 12px; font-weight: 500; }
+.gdb .seg button.on { background: #3b82f6; color: #fff; }
+.gdb .group.fold { padding-bottom: 2px; }
+.gdb .group.fold .ghead { margin-bottom: 4px; }
+.gdb .group.target, .gdb .pool.target { border-style: dashed; border-color: #4b6aa8; cursor: pointer; }
+.gdb .row.picked { border-color: #34d399; background: #0f2a2a; box-shadow: 0 0 0 1px #34d399 inset; }
 .gdb aside.right { border-left: 1px solid var(--line); }
 .gdb .sec { margin-bottom: 16px; }
 .gdb .sec h3 { font-size: 13px; color: var(--mute); font-weight: 600; margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
@@ -722,7 +813,8 @@ onBeforeUnmount(() => {
 .gdb .gop { color: var(--mute); padding: 0 3px; cursor: pointer; }
 .gdb .gop:hover { color: #fbbf24; }
 .gdb .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.gdb .chips { display: flex; flex-direction: column; gap: 3px; min-height: 26px; }
+.gdb .chips { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; min-height: 26px; }
+.gdb .chips > .hint { grid-column: 1 / -1; }
 .gdb .row { display: flex; align-items: center; gap: 6px; background: #0d1630; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; cursor: grab; user-select: none; }
 .gdb .row:hover { border-color: #3a4d75; }
 .gdb .row .pos { font-size: 10px; padding: 1px 4px; border-radius: 3px; flex: none; }
