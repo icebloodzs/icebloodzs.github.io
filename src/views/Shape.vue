@@ -5,7 +5,7 @@
  * 和「黑土落位」的区别：这里的字是沿**游戏的 X/Y 网格**画的，格子边对边紧挨着，
  * 在菱形视角下看才是正的。这里只算「哪些格子要站人、每格的序号和坐标」，不排成员。
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useMessage } from 'naive-ui'
 import * as S from '../lib/shape'
 import * as P from '../lib/placement'
@@ -94,6 +94,22 @@ const auto = computed(() => {
  */
 const editing = ref(false)
 const brush = ref('erase') // 'erase'、块下标（数字）、或者 'c0'~'c3'（自定义块）
+/*
+ * 按住 E 或 Alt（Mac 是 Option）临时变橡皮擦，松开回到原来的画笔；鼠标也跟着变成橡皮擦。
+ * 焦点在输入框里时按 E 是打字，不算。
+ */
+const holdErase = ref(false)
+const curBrush = computed(() => (holdErase.value ? 'erase' : brush.value))
+const typing = (ev) => { const t = ev.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) }
+function onKey(ev) {
+  if (!editing.value) { holdErase.value = false; return }
+  const down = ev.type === 'keydown'
+  if (ev.key === 'Alt') { holdErase.value = down; if (down) ev.preventDefault(); return }
+  if ((ev.key === 'e' || ev.key === 'E') && !typing(ev) && !ev.metaKey && !ev.ctrlKey) holdErase.value = down
+}
+const releaseErase = () => { holdErase.value = false }
+onMounted(() => { window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey); window.addEventListener('blur', releaseErase) })
+onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); window.removeEventListener('blur', releaseErase) })
 const erased = ref(new Set())
 const added = ref(new Map())
 const history = ref([])
@@ -165,16 +181,17 @@ function paint(id) {
   const inCustom = cu.findIndex((b) => b.includes(id))
   const dropCustom = () => { if (inCustom >= 0) cu[inCustom] = cu[inCustom].filter((x) => x !== id) }
   const original = auto.value.blocks.findIndex((b) => b.ok && b.cells.some((c) => c.id === id))
-  if (brush.value === 'erase') {
+  const b = curBrush.value
+  if (b === 'erase') {
     if (!hit) return
     if (inCustom >= 0) dropCustom()
     else {
       if (a.has(id)) a.delete(id)
       if (original >= 0) e.add(id)
     }
-  } else if (String(brush.value).startsWith('c')) {
+  } else if (String(b).startsWith('c')) {
     // 画进自定义块：从别的块里拿出来，接到这一块最后（序号按画的先后）
-    const k = Number(String(brush.value).slice(1))
+    const k = Number(String(b).slice(1))
     if (inCustom === k) return
     dropCustom()
     a.delete(id)
@@ -182,7 +199,7 @@ function paint(id) {
     cu[k].push(id)
   } else {
     dropCustom()
-    const to = Number(brush.value)
+    const to = Number(b)
     if (hit && hit.block === to) return
     a.delete(id); e.delete(id)
     if (original === to) { /* 原来就是这块的，取消擦除就行 */ } else {
@@ -433,12 +450,12 @@ function savePng() {
           </n-radio-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span class="lab">点格子或按住拖过去；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
+          <span class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited" class="lab">已手动改 {{ edited }} 格</span>
       </div>
       <div class="wrap">
-        <svg id="shape-map" :class="{ editing }" :width="box.w" :height="box.h" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
+        <svg id="shape-map" :class="{ editing, erasing: editing && curBrush === 'erase' }" :width="box.w" :height="box.h" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
           <g v-for="c in cells" :key="c.id" :class="{ paintable: editing }" @pointerdown.prevent="startPaint(c.id, $event)" @pointerenter="overPaint(c.id, $event)">
             <g :transform="`translate(${c.x},${c.y}) rotate(45)`">
               <rect
@@ -482,11 +499,13 @@ function savePng() {
 .edit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; }
 .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
+#shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
 .paintable:hover rect { opacity: 0.75; }
 .quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px 90px; }
 @media (max-width: 639px) { .edit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; }
 .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
+#shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
 .paintable:hover rect { opacity: 0.75; }
 .quick { margin-left: 0; } }
 /* 手机：整张图缩到屏幕宽度（要看细节双指放大）；下载图片读的是 svg 自身尺寸，不受影响 */
