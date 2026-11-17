@@ -192,9 +192,22 @@ function paint(id) {
   }
   erased.value = e; added.value = a; custom.value = cu
 }
-function startPaint(id) { if (!editing.value) return; snapshot(); painting = true; paint(id) }
-function overPaint(id) { if (painting) paint(id) }
-function endPaint() { painting = false }
+/*
+ * 只有鼠标真的挪了位置才接着画：画第一格后上方会多出一行（自定义块的统计、按钮状态），格子图往下挪，
+ * 鼠标没动也会「进入」旁边那格 —— 第一下总是出来两格就是这个（11-17 修）。
+ */
+let lastXY = null
+function startPaint(id, ev) { if (!editing.value) return; snapshot(); painting = true; lastXY = ev ? [ev.clientX, ev.clientY] : null; paint(id) }
+function overPaint(id, ev) {
+  if (!painting) return
+  if (ev) {
+    if (ev.pointerType === 'mouse' && !(ev.buttons & 1)) { painting = false; return }
+    if (lastXY && ev.clientX === lastXY[0] && ev.clientY === lastXY[1]) return
+    lastXY = [ev.clientX, ev.clientY]
+  }
+  paint(id)
+}
+function endPaint() { painting = false; lastXY = null }
 function undo() { const h = history.value.pop(); if (h) { erased.value = h.e; added.value = h.a; custom.value = h.c } }
 function resetEdits() { snapshot(); erased.value = new Set(); added.value = new Map(); custom.value = Array.from({ length: CUSTOM_N }, () => []) }
 
@@ -378,7 +391,8 @@ function savePng() {
         <n-button size="small" @click="fillExample()">填示例（满屏 · 上下菱形 + N + B）</n-button>
         <n-button size="small" @click="fillExample('heart')">满屏特例：爱心围城</n-button>
         <n-button size="small" @click="clearAll">清空</n-button>
-        <span class="lab">字能写：{{ CHAR_HINT }}；图案：{{ PATTERNS.join('、') }}</span>
+        <span class="lab">字能写：{{ CHAR_HINT }}</span>
+        <span class="lab">图案：{{ PATTERNS.join('、') }}</span>
       </n-space>
 
       <n-space align="center" :size="14" style="margin-bottom: 10px">
@@ -425,7 +439,7 @@ function savePng() {
       </div>
       <div class="wrap">
         <svg id="shape-map" :class="{ editing }" :width="box.w" :height="box.h" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
-          <g v-for="c in cells" :key="c.id" :class="{ paintable: editing }" @pointerdown.prevent="startPaint(c.id)" @pointerenter="overPaint(c.id)">
+          <g v-for="c in cells" :key="c.id" :class="{ paintable: editing }" @pointerdown.prevent="startPaint(c.id, $event)" @pointerenter="overPaint(c.id, $event)">
             <g :transform="`translate(${c.x},${c.y}) rotate(45)`">
               <rect
                 :x="-D / 2.83" :y="-D / 2.83" :width="D / 1.414" :height="D / 1.414" rx="2"
