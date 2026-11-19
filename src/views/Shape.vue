@@ -5,7 +5,7 @@
  * 和「黑土落位」的区别：这里的字是沿**游戏的 X/Y 网格**画的，格子边对边紧挨着，
  * 在菱形视角下看才是正的。这里只算「哪些格子要站人、每格的序号和坐标」，不排成员。
  */
-import { ref, computed, watch, inject, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, inject, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { call } from '../api'
 import * as S from '../lib/shape'
@@ -379,10 +379,18 @@ async function copyList() {
   }
 }
 
-function savePng() {
+/** 下载用最大的格子画（字最清楚），文件名：画着特例就用特例名 */
+const D_MAX = 80
+async function savePng() {
+  const keep = D.value
+  D.value = D_MAX
+  await nextTick()
   const svg = document.getElementById('shape-map')
-  if (!svg) return
-  const blob = new Blob(['<?xml version="1.0"?>' + new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml;charset=utf-8' })
+  const xml = svg ? new XMLSerializer().serializeToString(svg) : ''
+  D.value = keep
+  if (!xml) return
+  const fileName = (current.value ? current.value.name.replace(/[\\/:*?"<>|]+/g, ' ').trim() || '摆图形' : '摆图形') + '.png'
+  const blob = new Blob(['<?xml version="1.0"?>' + xml], { type: 'image/svg+xml;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const img = new Image()
   img.onload = () => {
@@ -394,7 +402,7 @@ function savePng() {
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
     URL.revokeObjectURL(url)
-    canvas.toBlob((b) => download(b, '摆图形.png'))
+    canvas.toBlob((b) => download(b, fileName))
   }
   img.onerror = () => {
     URL.revokeObjectURL(url)
@@ -416,7 +424,6 @@ const BUILTIN = [
 ].map((p) => ({ ...p, total: p.slots.reduce((n, x) => n + x.length, 0) }))
 
 const PRESET_CACHE = 'shape_presets_v1'
-const PICK_KEY = 'shape_preset_pick'
 const readJSON = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null') } catch (e) { return null } }
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} }
 
@@ -424,8 +431,6 @@ const cached = readJSON(PRESET_CACHE)
 const presetRows = ref(Array.isArray(cached) && cached.length ? cached : BUILTIN)
 const serverDev = ref(false)
 const isDev = computed(() => serverDev.value || Boolean(me && me.value && me.value.isDev))
-/** 每个范围记一个选中的：{ full: { id, name }, screen: { id, name } } */
-const picked = ref(readJSON(PICK_KEY) || {})
 /** 图上现在画着的是哪个特例（{ id, name, scope }）；下拉只显示它，切范围不会自动换 */
 const drawn = ref(null)
 const loadedSnap = ref('')
@@ -445,8 +450,6 @@ const dirty = computed(() => Object.values(texts.value).some(Boolean) || erased.
 
 function pick(p) {
   drawn.value = p ? { id: p._id, name: p.name, scope: scope.value } : null
-  picked.value = { ...picked.value, [scope.value]: p ? { id: p._id, name: p.name } : null }
-  writeJSON(PICK_KEY, picked.value)
 }
 function applyPreset(p) {
   texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' }
@@ -460,12 +463,8 @@ function onPick(id) {
   if (!dirty.value || !result.value.total) return applyPreset(p)
   dialog.warning({ title: '换成这个特例？', content: '现在图上摆的会被替换掉（可以先「保存为特例」留着）。', positiveText: '换', negativeText: '不换', onPositiveClick: () => applyPreset(p) })
 }
-/** 只在打开页面时：图上是空的，直接画这个范围上次选的（没选过就第一个）。切换范围不自动加载 */
-function autoDraw() {
-  if (result.value.total) return
-  const p = findPreset(picked.value[scope.value], scopePresets.value) || scopePresets.value.find((x) => x.status === 'ok')
-  if (p) applyPreset(p)
-}
+/** 打开页面是空的，不自动加载特例；切换范围时把图清空（两个范围的特例不通用） */
+watch(scope, () => clearAll())
 
 async function fetchPresets() {
   try {
@@ -478,12 +477,11 @@ async function fetchPresets() {
     // 画着的特例在云端被改过（开发者微调了），而且自己没动过：换成新版
     const now = current.value
     if (now && before && !dirty.value && JSON.stringify(now.slots) !== JSON.stringify(before.slots)) applyPreset(now)
-    else if (!result.value.total) autoDraw()
   } catch (e) {
     // 拉不到就用缓存 / 内置的，不打扰
   }
 }
-onMounted(() => { autoDraw(); fetchPresets() })
+onMounted(fetchPresets)
 
 /** 当前图的最终格子，按颜色分成 6 串（顺序就是序号顺序） */
 function currentSlots() {
