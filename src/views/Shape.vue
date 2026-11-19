@@ -367,10 +367,19 @@ function transformSel(f, what) {
 const TURNS = {
   cw: (r, c, S, Dd) => [c + Dd, S - r],
   ccw: (r, c, S, Dd) => [S - c, r - Dd],
-  flipH: (r, c, S, Dd) => [c + Dd, r - Dd],
-  flipV: (r, c, S, Dd) => [S - c, S - r]
+  // 斜翻（沿游戏网格的两个方向）：↗ 斜翻 = c 镜像（轴是右上—左下那条斜线，左下那块的字等于左右反过来），
+  // ↖ 斜翻 = r 镜像（轴是左上—右下那条斜线，等于上下倒过来）。S − Dd = 2·cc、S + Dd = 2·rc，见 flipPivots
+  flipA: (r, c, S, Dd) => [r, S - Dd - c],
+  flipB: (r, c, S, Dd) => [S + Dd - r, c]
 }
-const TURN_NAME = { cw: '右转', ccw: '左转', flipH: '左右翻转', flipV: '上下翻转' }
+const TURN_NAME = { cw: '右转', ccw: '左转', flipA: '↗ 斜翻', flipB: '↖ 斜翻' }
+/** 斜翻用外框中心精确翻（2·rc、2·cc 总是整数），翻两下一定回原样；不和旋转共用记住的轴 */
+function flipPivots(rcs) {
+  const rc2 = Math.min(...rcs.map((x) => x[0])) + Math.max(...rcs.map((x) => x[0]))
+  const cc2 = Math.min(...rcs.map((x) => x[1])) + Math.max(...rcs.map((x) => x[1]))
+  return [[(rc2 + cc2) / 2, (rc2 - cc2) / 2]]
+}
+const isFlip = (kind) => kind === 'flipA' || kind === 'flipB'
 /** 连着转 / 翻同一个选区时一直用第一次的中心，转四下、翻两下才会分毫不差地回到原样 */
 let turnPivot = null
 const selKeyOf = () => Array.from(selIds.value).sort().join(',')
@@ -386,8 +395,8 @@ function turnGhost(kind) {
   const d = selDrag
   const now = d.ids.map((id) => rcOf(d.map.get(id)))
   // 同一次拖动里连着转，一直绕第一次的轴，转四下回原样
-  const [S, Dd] = d.pivot || pivotsOf(now)[0]
-  d.pivot = [S, Dd]
+  const [S, Dd] = isFlip(kind) ? flipPivots(now)[0] : d.pivot || pivotsOf(now)[0]
+  if (!isFlip(kind)) d.pivot = [S, Dd]
   const t = TURNS[kind]
   d.ids.forEach((id, i) => { const [nr, nc] = t(now[i][0], now[i][1], S, Dd); d.map.set(id, cellId(nr, nc)) })
   d.turned = true
@@ -400,8 +409,8 @@ function selTurn(kind) {
   const rc = (Math.min(...rcs.map((x) => x[0])) + Math.max(...rcs.map((x) => x[0]))) / 2
   const cc = (Math.min(...rcs.map((x) => x[1])) + Math.max(...rcs.map((x) => x[1]))) / 2
   const S0 = rc + cc, D0 = rc - cc
-  const fresh = Number.isInteger(S0) ? [[S0, D0]] : [[S0 + 0.5, D0 + 0.5], [S0 - 0.5, D0 - 0.5], [S0 + 0.5, D0 - 0.5], [S0 - 0.5, D0 + 0.5]]
-  const pivots = turnPivot && turnPivot.key === selKeyOf() ? [turnPivot.p].concat(fresh) : fresh
+  const fresh = isFlip(kind) ? flipPivots(rcs) : Number.isInteger(S0) ? [[S0, D0]] : [[S0 + 0.5, D0 + 0.5], [S0 - 0.5, D0 - 0.5], [S0 + 0.5, D0 - 0.5], [S0 - 0.5, D0 + 0.5]]
+  const pivots = !isFlip(kind) && turnPivot && turnPivot.key === selKeyOf() ? [turnPivot.p].concat(fresh) : fresh
   const shifts = [[0, 0]]
   for (const k of [1, 2]) for (const [a, b] of [[-k, -k], [k, k], [k, -k], [-k, k], [-k, 0], [k, 0], [0, -k], [0, k]]) shifts.push([a, b])
   const { base, occ, origOf, ids } = selBase()
@@ -412,7 +421,7 @@ function selTurn(kind) {
       if (st) {
         snapshot(); applyMove(st)
         // 没错开位置才记住中心；错开过说明靠边了，下次重新算
-        turnPivot = sr || sc ? null : { p: [S, Dd], key: selKeyOf() }
+        if (!isFlip(kind)) turnPivot = sr || sc ? null : { p: [S, Dd], key: selKeyOf() }
         return
       }
     }
@@ -588,7 +597,7 @@ function selKey(ev) {
     return true
   }
   if (!ev.metaKey && !ev.ctrlKey && (!ev.altKey || selDrag)) {
-    const turn = ev.code === 'KeyR' ? (ev.shiftKey ? 'ccw' : 'cw') : ev.code === 'KeyH' ? 'flipH' : ev.code === 'KeyV' ? 'flipV' : ''
+    const turn = ev.code === 'KeyR' ? (ev.shiftKey ? 'ccw' : 'cw') : ev.code === 'KeyH' ? 'flipA' : ev.code === 'KeyV' ? 'flipB' : ''
     if (turn) { ev.preventDefault(); selTurn(turn); return true }
     if (!selDrag && (ev.code === 'Minus' || ev.code === 'Equal' || ev.code === 'NumpadSubtract' || ev.code === 'NumpadAdd')) {
       ev.preventDefault(); selScale(ev.code === 'Minus' || ev.code === 'NumpadSubtract' ? -1 : 1); return true
@@ -1002,8 +1011,8 @@ const textOpen = ref([])
           <n-button-group v-if="brush === 'select'" size="small">
             <n-button :disabled="!selIds.size" title="左转 90°（Shift+R）" @click="selTurn('ccw')">⟲ 左转</n-button>
             <n-button :disabled="!selIds.size" title="右转 90°（R）" @click="selTurn('cw')">⟳ 右转</n-button>
-            <n-button :disabled="!selIds.size" title="左右翻转（H）" @click="selTurn('flipH')">⇋ 左右翻</n-button>
-            <n-button :disabled="!selIds.size" title="上下翻转（V）" @click="selTurn('flipV')">⇅ 上下翻</n-button>
+            <n-button :disabled="!selIds.size" title="沿右上—左下的斜线翻（H）：左下那块的字等于左右反过来" @click="selTurn('flipA')">↗ 斜翻</n-button>
+            <n-button :disabled="!selIds.size" title="沿左上—右下的斜线翻（V）：等于上下倒过来" @click="selTurn('flipB')">↖ 斜翻</n-button>
           </n-button-group>
           <n-button-group v-if="brush === 'select'" size="small">
             <n-button :disabled="!selIds.size" title="按比例缩小 25%（-）" @click="selScale(-1)">－ 缩小</n-button>
@@ -1012,7 +1021,7 @@ const textOpen = ref([])
           </n-button-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖（跟着虚影走，蓝 = 放得下、橙 = 和原有格子融合、红 = 会去掉），按住 Alt 拖是复制；拖的时候按 R / H / V 转虚影；方向键挪一格，R / Shift+R 转、H / V 翻、- / = 缩放；Delete 删掉，Esc 取消{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
+          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖（跟着虚影走，蓝 = 放得下、橙 = 和原有格子融合、红 = 会去掉），按住 Alt 拖是复制；拖的时候按 R / H / V 转虚影；方向键挪一格，R / Shift+R 转、H / V 斜翻、- / = 缩放；Delete 删掉，Esc 取消{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
           <span v-else class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited && dirty" class="lab">{{ current ? `在「${current.name}」上改过` : `已手动改 ${edited} 格` }}</span>
