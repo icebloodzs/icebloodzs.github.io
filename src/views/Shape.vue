@@ -140,7 +140,7 @@ function onKey(ev) {
   if (!editing.value) { holdErase.value = false; return }
   const down = ev.type === 'keydown'
   if (down && selIds.value.size && !typing(ev) && selKey(ev)) return
-  if (ev.key === 'Alt') { holdErase.value = down; if (down) ev.preventDefault(); return }
+  if (ev.key === 'Alt') { holdErase.value = down && brush.value !== 'select'; if (down) ev.preventDefault(); return }
   // 认物理键位（ev.code）：开着中文输入法时按 E，ev.key 是 'Process' 不是 'e'，以前就是这样「有时按 E 没反应」（11-20 修）
   const isE = ev.code === 'KeyE' || ev.key === 'e' || ev.key === 'E'
   if (isE && !ev.metaKey && !ev.ctrlKey && (!down || !typing(ev))) {
@@ -290,19 +290,34 @@ const hitMap = computed(() => {
  */
 const selIds = ref(new Set())
 const marquee = ref(null)
+const selMode = ref('new')
 let selDrag = null
 const cellId = (r, c) => `${r}_${c}`
 const rcOf = (id) => id.split('_').map(Number)
 
-function moveState(base, ids, occ, origOf, dr, dc) {
+function moveState(base, ids, occ, origOf, dr, dc, copy) {
   const free = new Set(board.value.free.map((x) => x.id))
   const sel = new Set(ids)
   const mv = (id) => { const [r, c] = rcOf(id); return cellId(r + dr, c + dc) }
+  // 复制时原来那份还在，新的一份连它也不能压
   for (const id of ids) {
     const t = mv(id)
-    if (!free.has(t) || (occ.has(t) && !sel.has(t))) return null
+    if (!free.has(t) || (occ.has(t) && (copy || !sel.has(t)))) return null
   }
   const e = new Set(base.e), a = new Map(base.a)
+  if (copy) {
+    // 复制：原样留着，新的一份接到同一块后面（序号续在那块最后）
+    const c = base.c.map((arr) => arr.slice())
+    ids.forEach((id) => {
+      const k = base.c.findIndex((arr) => arr.includes(id))
+      const t = mv(id)
+      if (k >= 0) { c[k].push(t); return }
+      const bi = a.has(id) ? a.get(id) : origOf.get(id)
+      if (origOf.get(t) === bi) e.delete(t)
+      else a.set(t, bi)
+    })
+    return { e, a, c, ids: ids.map(mv) }
+  }
   const inCustom = new Set(base.c.flat())
   const src = new Map()
   ids.forEach((id) => {
@@ -323,6 +338,27 @@ function selBase() {
   auto.value.blocks.forEach((b, bi) => { if (b.ok) b.cells.forEach((c) => origOf.set(c.id, bi)) })
   return { base: { e: new Set(erased.value), a: new Map(added.value), c: custom.value.map((b) => b.slice()) }, occ: new Set(hitMap.value.keys()), origOf, ids: Array.from(selIds.value) }
 }
+/**
+ * 选区外轮廓：每格是个菱形，四条边各对着一个邻格（右上 r−1、右下 c+1、左下 r+1、左上 c−1），
+ * 邻格也选中了那条边就是内部的、不画，只剩最外面一圈。画在所有格子上面，不会被后画的格子盖住。
+ */
+const selOutline = computed(() => {
+  if (!selIds.value.size) return ''
+  const b = board.value
+  const h = D.value / 2
+  const has = (r, c) => selIds.value.has(cellId(r, c))
+  let d = ''
+  selIds.value.forEach((id) => {
+    const [r, c] = rcOf(id)
+    const { x, y } = P.cellCenter(r, c, b.size, D.value)
+    const T = `${x} ${y - h}`, R = `${x + h} ${y}`, B = `${x} ${y + h}`, L = `${x - h} ${y}`
+    if (!has(r - 1, c)) d += `M${T}L${R}`
+    if (!has(r, c + 1)) d += `M${R}L${B}`
+    if (!has(r + 1, c)) d += `M${B}L${L}`
+    if (!has(r, c - 1)) d += `M${L}L${T}`
+  })
+  return d
+})
 function applyMove(st) {
   erased.value = st.e; added.value = st.a; custom.value = st.c; selIds.value = new Set(st.ids)
 }
@@ -339,39 +375,54 @@ function selDown(ev) {
   const g = ev.target.closest && ev.target.closest('[data-id]')
   const id = g ? g.dataset.id : null
   try { ev.currentTarget.setPointerCapture(ev.pointerId) } catch (e) {}
-  if (id && selIds.value.has(id)) {
+  const how = ev.shiftKey ? 'add' : ev.altKey ? 'sub' : selMode.value
+  // 按住选中的格子拖 = 挪；按着 Alt 拖 = 复制一份。减选模式下点选中的格子是去掉它，不拖
+  if (id && selIds.value.has(id) && (selMode.value !== 'sub' || ev.altKey)) {
     snapshot()
-    selDrag = { mode: 'move', x0: p.x, y0: p.y, last: '0,0', ...selBase() }
+    selDrag = { mode: 'move', x0: p.x, y0: p.y, last: '0,0', copy: ev.altKey, id, ...selBase() }
   } else {
-    selDrag = { mode: 'box', x0: p.x, y0: p.y, id, add: ev.shiftKey, keep: ev.shiftKey ? new Set(selIds.value) : new Set() }
-    if (!ev.shiftKey) selIds.value = new Set()
+    selDrag = { mode: 'box', x0: p.x, y0: p.y, id, how, keep: how === 'new' ? new Set() : new Set(selIds.value) }
+    if (how === 'new') selIds.value = new Set()
   }
 }
 function selMove(ev) {
   if (!selDrag) return
   const p = svgPoint(ev)
   const dx = p.x - selDrag.x0, dy = p.y - selDrag.y0
+  if (Math.abs(dx) + Math.abs(dy) > 4) selDrag.moved = true
   if (selDrag.mode === 'box') {
     const box = { x: Math.min(p.x, selDrag.x0), y: Math.min(p.y, selDrag.y0), w: Math.abs(dx), h: Math.abs(dy) }
     marquee.value = box
     const s = new Set(selDrag.keep)
-    cells.value.forEach((c) => { if (c.seq && c.x >= box.x && c.x <= box.x + box.w && c.y >= box.y && c.y <= box.y + box.h) s.add(c.id) })
+    cells.value.forEach((c) => {
+      if (!c.seq || c.x < box.x || c.x > box.x + box.w || c.y < box.y || c.y > box.y + box.h) return
+      if (selDrag.how === 'sub') s.delete(c.id); else s.add(c.id)
+    })
     selIds.value = s
     return
   }
   const dr = Math.round((dy - dx) / D.value), dc = Math.round((dx + dy) / D.value)
   const key = dr + ',' + dc
   if (key === selDrag.last) return
-  const st = moveState(selDrag.base, selDrag.ids, selDrag.occ, selDrag.origOf, dr, dc)
+  const st = moveState(selDrag.base, selDrag.ids, selDrag.occ, selDrag.origOf, dr, dc, selDrag.copy)
   if (st) { applyMove(st); selDrag.last = key }
+  // 复制拖回原位（重叠了放不下）：恢复成没复制的样子，选中的还是原来那些
+  else if (selDrag.copy && key === '0,0') { applyMove({ ...selDrag.base, ids: selDrag.ids }); selDrag.last = key }
 }
 function selUp() {
   if (!selDrag) return
   // 没怎么拖 = 点了一下：点格子选它（按住 Shift 是加选 / 取消）
   if (selDrag.mode === 'box' && (!marquee.value || marquee.value.w + marquee.value.h < 4) && selDrag.id && hitMap.value.has(selDrag.id)) {
     const s = new Set(selDrag.keep)
-    if (selDrag.add && s.has(selDrag.id)) s.delete(selDrag.id); else s.add(selDrag.id)
+    if (selDrag.how === 'sub') s.delete(selDrag.id)
+    else if (selDrag.how === 'add' && selDrag.keep.has(selDrag.id) && selMode.value !== 'add') s.delete(selDrag.id)
+    else s.add(selDrag.id)
     selIds.value = s
+  }
+  // 按着 Alt 点了一下选中的格子、鼠标没动：当减选用，把它去掉（复制没发生，撤销记录也不要）
+  if (selDrag.mode === 'move' && selDrag.copy && selDrag.last === '0,0' && !selDrag.moved) {
+    history.value.pop()
+    const s = new Set(selIds.value); s.delete(selDrag.id); selIds.value = s
   }
   selDrag = null
   marquee.value = null
@@ -520,7 +571,13 @@ async function savePng() {
   D.value = D_MAX
   await nextTick()
   const svg = document.getElementById('shape-map')
-  const xml = svg ? new XMLSerializer().serializeToString(svg) : ''
+  // 选区的蚂蚁线、框选框不进图片
+  let xml = ''
+  if (svg) {
+    const copy = svg.cloneNode(true)
+    copy.querySelectorAll('.no-export').forEach((n) => n.remove())
+    xml = new XMLSerializer().serializeToString(copy)
+  }
   D.value = keep
   if (!xml) return
   // 空格去掉：有的浏览器会把文件名里的空格换成下划线（11-20 用户碰到的）
@@ -764,9 +821,14 @@ const textOpen = ref([])
               <span class="sw" :style="{ background: b.color }"></span>{{ b.label }}
             </n-radio-button>
           </n-radio-group>
+          <n-radio-group v-if="curBrush === 'select' || brush === 'select'" v-model:value="selMode" size="small">
+            <n-radio-button value="new">新选</n-radio-button>
+            <n-radio-button value="add">加选</n-radio-button>
+            <n-radio-button value="sub">减选</n-radio-button>
+          </n-radio-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span v-if="curBrush === 'select'" class="lab">拖一个框选中格子（按住 Shift 加选，点一格也能选）；按住选中的格子拖动，或用方向键一格格挪；Delete 删掉选中的，Esc 取消选择{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
+          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖动、方向键一格格挪，按住 Alt 拖是复制一份；Delete 删掉选中的，Esc 取消选择{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
           <span v-else class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited && dirty" class="lab">{{ current ? `在「${current.name}」上改过` : `已手动改 ${edited} 格` }}</span>
@@ -777,7 +839,7 @@ const textOpen = ref([])
             <g :transform="`translate(${c.x},${c.y}) rotate(45)`">
               <rect
                 :x="-D / 2.83" :y="-D / 2.83" :width="D / 1.414" :height="D / 1.414" rx="2"
-                :fill="c.fill" :stroke="c.sel ? '#0f172a' : c.stroke" :stroke-width="c.sel ? 2.5 : 1"
+                :fill="c.fill" :stroke="c.stroke" stroke-width="1"
               />
             </g>
             <template v-if="c.seq">
@@ -797,7 +859,11 @@ const textOpen = ref([])
           </g>
           <text :x="city.x" :y="city.y + 8" text-anchor="middle"
             :font-size="Math.max(10, Math.round(city.d * 0.16))" font-weight="700" fill="#7c2d12">{{ city.label }}</text>
-          <rect v-if="marquee" :x="marquee.x" :y="marquee.y" :width="marquee.w" :height="marquee.h"
+          <g v-if="selOutline" class="no-export" pointer-events="none" fill="none" stroke-linecap="round">
+            <path :d="selOutline" stroke="#ffffff" stroke-width="4" />
+            <path :d="selOutline" class="ants" stroke="#0ea5e9" stroke-width="4" stroke-dasharray="7 6" />
+          </g>
+          <rect v-if="marquee" class="no-export" :x="marquee.x" :y="marquee.y" :width="marquee.w" :height="marquee.h"
             fill="rgba(14,165,233,0.12)" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none" />
         </svg>
       </div>
@@ -827,6 +893,8 @@ const textOpen = ref([])
 .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
 #shape-map.selecting { cursor: default; }
+#shape-map .ants { animation: ants 0.9s linear infinite; }
+@keyframes ants { to { stroke-dashoffset: -26; } }
 #shape-map.selecting .picked { cursor: move; }
 #shape-map.selecting .paintable:hover rect { opacity: 1; }
 #shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
