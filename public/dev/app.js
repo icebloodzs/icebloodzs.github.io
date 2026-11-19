@@ -323,10 +323,8 @@ async function renderOverview() {
   const d = await call('dev.overview')
   meta = { levels: d.levels, features: d.features }
 
-  // 下架的版本只在 byLevel 里（有历史码才有），接在现行版本后面
-  const retired = Object.keys(d.byLevel).filter((k) => d.byLevel[k].retired).map((k) => ({ key: k, name: d.byLevel[k].name, price: null }))
+  // 只列现行版本；下架版本（基础版、高级版）的历史数据不在总览里显示
   const lv = d.levels
-    .concat(retired)
     .map((l) => {
       const x = d.byLevel[l.key] || {}
       return `<tr>
@@ -431,7 +429,9 @@ async function renderCodes(refresh = true) {
   if (!meta.levels.length) meta.levels = d.levels
 
   const opts = d.levels.map((l) => `<option value="${l.key}">${esc(l.name)} ${l.price} 元</option>`).join('')
-  const picked = d.rows.filter((r) => codeFilter === 'all' || r.status === codeFilter)
+  // 下架版本（基础版、高级版）的老码不在列表里显示；数据还在库里，总览的历史收入照算
+  const live = d.rows.filter((r) => d.levels.some((l) => l.key === r.level))
+  const picked = live.filter((r) => codeFilter === 'all' || r.status === codeFilter)
   if (!sortState('code').key) sorts.code = { key: 'created', dir: -1 }
   const rows = applySort('code', CODE_COLS, picked)
 
@@ -440,7 +440,7 @@ async function renderCodes(refresh = true) {
         .map(
           (r) => `<tr>
           <td><code>${esc(r.code)}</code> <button class="btn link small" data-copy="${esc(r.code)}">复制</button></td>
-          <td>${meta.levels.some((l) => l.key === r.level) ? `<span class="tag purple">${esc(r.levelName)}</span>` : `<span class="tag" title="这一档已经下架，兑换时按现行版本算">${esc(r.levelName)}（已下架）</span>`}</td>
+          <td><span class="tag purple">${esc(r.levelName)}</span></td>
           <td class="num">${money(r.price)}</td>
           <td class="num">${r.days ? r.days + ' 天' : '不限期'}</td>
           <td>${CODE_STATUS[r.status] || r.status}</td>
@@ -482,7 +482,7 @@ async function renderCodes(refresh = true) {
 
     <div class="card">
       <div class="row" style="justify-content:space-between">
-        <h3>全部兑换码（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+        <h3>全部兑换码（${rows.length}${rows.length !== live.length ? ' / ' + live.length : ''}）</h3>
       </div>
       <div class="filters">
           <select id="cFilter">
@@ -605,6 +605,7 @@ const ALLY_COLS = [
   { label: '识别次数', key: 'calls', sort: (a) => a.vision.calls, num: true },
   { label: 'token / 成本', key: 'tokens', sort: (a) => a.vision.tokens, num: true },
   { label: '活跃', key: 'login', sort: (a) => (a.lastLoginAt ? new Date(a.lastLoginAt).getTime() : null) },
+  { label: '创建', key: 'created', sort: (a) => (a.createdAt ? new Date(a.createdAt).getTime() : null) },
   { label: '' }
 ]
 
@@ -655,6 +656,7 @@ async function renderAlliances(refresh = true) {
             <td class="num">${num(a.vision.calls)}<br /><span class="muted tiny">本月 ${a.vision.monthCalls}</span></td>
             <td class="num">${num(a.vision.tokens)}<br /><span class="muted tiny">${money(a.vision.cost)}</span></td>
             <td class="tiny">${ago(a.lastLoginAt)}<br /><span class="muted">导入 ${a.imports} 次</span></td>
+            <td class="tiny">${a.createdAt ? when(a.createdAt) : '—'}</td>
             <td style="white-space:nowrap">
               <button class="btn link" data-grant="${esc(a._id)}" data-name="${esc(a.name)}" data-level="${esc(a.level || '')}">授权 / 续期</button>
               <button class="btn link" data-extras="${esc(a._id)}" data-name="${esc(a.name)}">附加功能</button>
@@ -665,7 +667,7 @@ async function renderAlliances(refresh = true) {
           </tr>`
         })
         .join('')
-    : '<tr><td colspan="10" class="empty">没有符合条件的同盟</td></tr>'
+    : '<tr><td colspan="11" class="empty">没有符合条件的同盟</td></tr>'
 
   const levelOpts = [`<option value="">全部版本</option>`]
     .concat(
