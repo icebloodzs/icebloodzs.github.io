@@ -593,12 +593,13 @@ async function codeAct(action, data, ask) {
 // ---------------- 同盟 ----------------
 
 /** 同盟那一屏的筛选条件，翻来翻去保持住 */
-const allyFilter = { server: '', name: '', status: '', level: '' }
+const allyFilter = { server: '', name: '', level: '', expire: '', kind: '', login: '' }
+/** 免费版的 key（云函数 lib/membership.js 的 DEFAULT_LEVEL）；没设版本的老盟也算免费版 */
+const FREE_KEY = 'free'
 
 const ALLY_COLS = [
   { label: '同盟', key: 'name', sort: (a) => a.name },
   { label: '区', key: 'serverNo', sort: (a) => Number(a.serverNo) || a.serverNo },
-  { label: '状态', key: 'active', sort: (a) => (a.active ? 1 : 0) },
   { label: '版本', key: 'level', sort: (a) => a.levelOrder || 0 },
   { label: '到期', key: 'expire', sort: (a) => (a.memberExpiresAt ? new Date(a.memberExpiresAt).getTime() : null) },
   { label: '成员', key: 'members', sort: (a) => a.members, num: true },
@@ -623,11 +624,19 @@ async function renderAlliances(refresh = true) {
   const kw = allyFilter.name.trim().toLowerCase()
   const picked = d.rows.filter((a) => {
     if (allyFilter.server && String(a.serverNo) !== allyFilter.server) return false
-    if (allyFilter.status === 'on' && !a.active) return false
-    if (allyFilter.status === 'off' && a.active) return false
-    if (allyFilter.status === 'expired' && !(a.daysLeft !== null && a.daysLeft < 0)) return false
-    if (allyFilter.status === 'soon' && !(a.daysLeft !== null && a.daysLeft >= 0 && a.daysLeft <= 14)) return false
-    if (allyFilter.level && a.level !== allyFilter.level) return false
+    // 版本：开发版再拆成付费和试用两种，试用不算收入
+    const lv = allyFilter.level
+    if (lv === 'trial' && !a.trial) return false
+    if (lv === 'paid' && !(a.level && a.level !== FREE_KEY && !a.trial)) return false
+    if (lv && lv !== 'trial' && lv !== 'paid' && (a.level || FREE_KEY) !== lv) return false
+    if (allyFilter.expire === 'soon' && !(a.daysLeft !== null && a.daysLeft >= 0 && a.daysLeft <= 14)) return false
+    if (allyFilter.expire === 'expired' && !(a.daysLeft !== null && a.daysLeft < 0)) return false
+    if (allyFilter.kind === 'real' && (a.isTest || a.isDemo)) return false
+    if (allyFilter.kind === 'test' && !a.isTest) return false
+    if (allyFilter.kind === 'demo' && !a.isDemo) return false
+    const idle = a.lastLoginAt ? (Date.now() - new Date(a.lastLoginAt).getTime()) / 86400000 : Infinity
+    if (allyFilter.login === '7' && !(idle <= 7)) return false
+    if (allyFilter.login === '30' && !(idle > 30)) return false
     if (kw && !(`${a.name} ${a.serverNo} ${a.ownerName || ''}`.toLowerCase().includes(kw))) return false
     return true
   })
@@ -647,9 +656,8 @@ async function renderAlliances(refresh = true) {
                   ? `<span class="tag amber">${a.daysLeft} 天</span>`
                   : `${a.daysLeft} 天`
           return `<tr>
-            <td><b>${esc(a.name)}</b>${a.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${a.isDemo ? ' <span class="tag tiny">演示</span>' : ''}${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
+            <td><b>${esc(a.name)}</b>${a.active ? '' : ' <span class="tag red tiny">已停用</span>'}${a.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${a.isDemo ? ' <span class="tag tiny">演示</span>' : ''}${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
             <td class="tiny">${esc(a.serverNo)} 区<br /><span class="muted">${esc(a.season)}</span></td>
-            <td>${a.active ? '<span class="tag green">已激活</span>' : '<span class="tag red">已停用</span>'}</td>
             <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}${a.trial ? ' <span class="tag amber tiny" title="建盟自动送的开发版试用，不是付费">试用</span>' : ''}${extrasText(a)}</td>
             <td class="tiny">${a.memberExpiresAt ? day(a.memberExpiresAt) : '—'}<br />${left}</td>
             <td class="num">${num(a.members)}<br /><span class="muted tiny">绑定 ${a.bound}</span></td>
@@ -667,31 +675,28 @@ async function renderAlliances(refresh = true) {
           </tr>`
         })
         .join('')
-    : '<tr><td colspan="11" class="empty">没有符合条件的同盟</td></tr>'
+    : '<tr><td colspan="10" class="empty">没有符合条件的同盟</td></tr>'
 
-  const levelOpts = [`<option value="">全部版本</option>`]
-    .concat(
-      meta.levels.map(
-        (l) => `<option value="${esc(l.key)}"${l.key === allyFilter.level ? ' selected' : ''}>${esc(l.name)}</option>`
-      )
-    )
-    .join('')
+  const sel = (pairs, cur) => pairs.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${t}</option>`).join('')
+  const top = meta.levels[meta.levels.length - 1] || { name: '开发版' }
+  const levelOpts = sel(
+    [['', '全部版本']]
+      .concat(meta.levels.map((l) => [esc(l.key), esc(l.name)]))
+      .concat([['paid', esc(top.name) + '（付费）'], ['trial', esc(top.name) + '（试用中）']]),
+    allyFilter.level
+  )
 
   $('body').innerHTML = `
     <div class="card">
       <h3>同盟（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
       <div class="filters">
           <select id="fServer">${optionsOf(servers.map(String), allyFilter.server, '全部区')}</select>
-          <select id="fStatus">
-            <option value="">全部状态</option>
-            <option value="on"${allyFilter.status === 'on' ? ' selected' : ''}>已激活</option>
-            <option value="off"${allyFilter.status === 'off' ? ' selected' : ''}>已停用</option>
-            <option value="soon"${allyFilter.status === 'soon' ? ' selected' : ''}>14 天内到期</option>
-            <option value="expired"${allyFilter.status === 'expired' ? ' selected' : ''}>已过期</option>
-          </select>
           <select id="fLevel">${levelOpts}</select>
+          <select id="fExpire">${sel([['', '到期：全部'], ['soon', '14 天内到期'], ['expired', '已过期']], allyFilter.expire)}</select>
+          <select id="fKind">${sel([['', '全部同盟'], ['real', '正式盟'], ['test', '测试盟'], ['demo', '演示盟']], allyFilter.kind)}</select>
+          <select id="fLogin">${sel([['', '活跃：全部'], ['7', '7 天内有人登录'], ['30', '超过 30 天没人登录']], allyFilter.login)}</select>
           <input id="fName" placeholder="搜盟名 / 区 / 盟主" value="${esc(allyFilter.name)}" style="width:170px" />
-          ${allyFilter.server || allyFilter.status || allyFilter.level || allyFilter.name ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
+          ${Object.values(allyFilter).some(Boolean) ? '<button class="btn ghost small" id="fClear">清空</button>' : ''}
       </div>
       <p class="hint">「授权 / 续期」不用兑换码，直接给这个盟记上版本和天数；「停用」之后盟里所有人都只剩「等激活」那一屏，用来处理到期不续费的。自己建来测试的盟先「标为测试」，就能「删除」。点表头可以排序。</p>
       <table>
@@ -702,13 +707,15 @@ async function renderAlliances(refresh = true) {
 
   const redraw = () => renderAlliances(false)
   $('fServer').onchange = (e) => { allyFilter.server = e.target.value; redraw() }
-  $('fStatus').onchange = (e) => { allyFilter.status = e.target.value; redraw() }
+  $('fExpire').onchange = (e) => { allyFilter.expire = e.target.value; redraw() }
+  $('fKind').onchange = (e) => { allyFilter.kind = e.target.value; redraw() }
+  $('fLogin').onchange = (e) => { allyFilter.login = e.target.value; redraw() }
   $('fLevel').onchange = (e) => { allyFilter.level = e.target.value; redraw() }
   // 搜索框打字时不重绘整屏（会丢焦点），回车或失焦再筛
   const nameBox = $('fName')
   nameBox.onchange = (e) => { allyFilter.name = e.target.value; redraw() }
   nameBox.onkeydown = (e) => { if (e.key === 'Enter') { allyFilter.name = e.target.value; redraw() } }
-  if ($('fClear')) $('fClear').onclick = () => { Object.assign(allyFilter, { server: '', name: '', status: '', level: '' }); redraw() }
+  if ($('fClear')) $('fClear').onclick = () => { Object.keys(allyFilter).forEach((k) => (allyFilter[k] = '')); redraw() }
   bindSort(redraw)
 
   $('body').querySelectorAll('[data-grant]').forEach((b) => (b.onclick = () => grant(b.dataset.grant, b.dataset.name, b.dataset.level)))
