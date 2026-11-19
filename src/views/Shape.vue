@@ -426,14 +426,14 @@ const serverDev = ref(false)
 const isDev = computed(() => serverDev.value || Boolean(me && me.value && me.value.isDev))
 /** 每个范围记一个选中的：{ full: { id, name }, screen: { id, name } } */
 const picked = ref(readJSON(PICK_KEY) || {})
+/** 图上现在画着的是哪个特例（{ id, name, scope }）；下拉只显示它，切范围不会自动换 */
+const drawn = ref(null)
 const loadedSnap = ref('')
 
 const scopePresets = computed(() => presetRows.value.filter((p) => p.scope === scope.value))
-const current = computed(() => {
-  const want = picked.value[scope.value]
-  if (!want) return null
-  return scopePresets.value.find((p) => p._id === want.id) || scopePresets.value.find((p) => p.name === want.name) || null
-})
+/** 按 id 找，找不到再按名字（本机缓存的内置特例换成云端那份时 id 会变） */
+const findPreset = (want, list) => (want ? list.find((p) => p._id === want.id) || list.find((p) => p.name === want.name) || null : null)
+const current = computed(() => (drawn.value && drawn.value.scope === scope.value ? findPreset(drawn.value, scopePresets.value) : null))
 const presetOptions = computed(() => {
   const opt = (p) => ({ label: `${p.name}（${p.total} 格）`, value: p._id })
   const ok = scopePresets.value.filter((p) => p.status === 'ok').map(opt)
@@ -444,6 +444,7 @@ const presetOptions = computed(() => {
 const dirty = computed(() => Object.values(texts.value).some(Boolean) || erased.value.size > 0 || added.value.size > 0 || JSON.stringify(custom.value) !== loadedSnap.value)
 
 function pick(p) {
+  drawn.value = p ? { id: p._id, name: p.name, scope: scope.value } : null
   picked.value = { ...picked.value, [scope.value]: p ? { id: p._id, name: p.name } : null }
   writeJSON(PICK_KEY, picked.value)
 }
@@ -459,13 +460,12 @@ function onPick(id) {
   if (!dirty.value || !result.value.total) return applyPreset(p)
   dialog.warning({ title: '换成这个特例？', content: '现在图上摆的会被替换掉（可以先「保存为特例」留着）。', positiveText: '换', negativeText: '不换', onPositiveClick: () => applyPreset(p) })
 }
-/** 打开页面 / 切换范围时：图上是空的、或者就是原样的特例，直接画这个范围选过的（没选过就第一个） */
+/** 只在打开页面时：图上是空的，直接画这个范围上次选的（没选过就第一个）。切换范围不自动加载 */
 function autoDraw() {
-  if (result.value.total && dirty.value) return
-  const p = current.value || scopePresets.value.find((x) => x.status === 'ok')
+  if (result.value.total) return
+  const p = findPreset(picked.value[scope.value], scopePresets.value) || scopePresets.value.find((x) => x.status === 'ok')
   if (p) applyPreset(p)
 }
-watch(scope, () => setTimeout(autoDraw, 0))
 
 async function fetchPresets() {
   try {
@@ -669,7 +669,7 @@ const textOpen = ref([])
 
     <n-modal v-model:show="nameBox.show" preset="dialog" :title="nameBox.mode === 'rename' ? '改名' : '保存为特例'"
       positive-text="保存" negative-text="取消" :loading="nameBox.busy" @positive-click="() => { confirmName(); return false }">
-      <n-input v-model:value="nameBox.name" maxlength="20" show-count placeholder="给这个图案起个名字，比如「183 + I♥U」" @keyup.enter="confirmName" />
+      <n-input v-model:value="nameBox.name" maxlength="20" show-count placeholder="给这个图案起个名字，比如「183 + I♥U」" />
       <div v-if="nameBox.mode === 'new'" class="lab" style="margin-top: 8px">
         存的是现在图上的 {{ result.total }} 格（{{ scope === 'screen' ? '满屏截图' : '整块黑土' }}）。{{ isDev ? '你是开发者，保存后直接给所有人。' : '开发者确认后，所有人都能在下拉里加载。' }}
       </div>
