@@ -456,12 +456,27 @@ function selScale(dir) {
   const nh = Math.round(scaleSrc.h * f), nw = Math.round(scaleSrc.w * f)
   if (f <= 0 || nh < 1 || nw < 1) return message.warning('不能再小了')
   if (nh > board.value.size || nw > board.value.size) return message.warning('不能再大了')
-  // 新外框里每一格回原样里找对应的那格
+  /*
+   * 新外框里每一格按面积取样：它在原样里盖住的那一片，有一半以上是格子就填上，颜色 / 序号跟盖得最多的那格走。
+   * 以前是取左上角那一格，缩小时一律偏向左上，对称的图案（右下爱心）会明显歪掉（11-20 修）。按面积取样左右上下都对称。
+   */
   const gen = []
+  const sy = scaleSrc.h / nh, sx = scaleSrc.w / nw
   for (let i = 0; i < nh; i += 1) for (let j = 0; j < nw; j += 1) {
-    const src = scaleSrc.at.get(cellId(Math.floor((i * scaleSrc.h) / nh), Math.floor((j * scaleSrc.w) / nw)))
-    if (src) gen.push({ i, j, src })
+    let area = 0, best = null, bestA = 0
+    for (let r = Math.floor(i * sy); r < Math.min(scaleSrc.h, Math.ceil((i + 1) * sy - 1e-9)); r += 1) {
+      for (let c = Math.floor(j * sx); c < Math.min(scaleSrc.w, Math.ceil((j + 1) * sx - 1e-9)); c += 1) {
+        const src = scaleSrc.at.get(cellId(r, c))
+        if (!src) continue
+        const ov = (Math.min(r + 1, (i + 1) * sy) - Math.max(r, i * sy)) * (Math.min(c + 1, (j + 1) * sx) - Math.max(c, j * sx))
+        if (ov <= 0) continue
+        area += ov
+        if (ov > bestA) { bestA = ov; best = src }
+      }
+    }
+    if (best && area / (sy * sx) >= 0.5 - 1e-9) gen.push({ i, j, src: best })
   }
+  if (!gen.length) return message.warning('不能再小了')
   const free = new Set(board.value.free.map((x) => x.id))
   const sel = new Set(ids)
   const r0 = Math.round(scaleSrc.cr - (nh - 1) / 2), c0 = Math.round(scaleSrc.ccen - (nw - 1) / 2)
