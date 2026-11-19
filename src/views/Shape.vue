@@ -220,7 +220,7 @@ const brushes = computed(() => [{ key: 'erase', label: '橡皮擦', color: '#6b7
 
 /** 点一格（或按住拖过去）：橡皮擦掉、画笔补进选中的那块 */
 let painting = false
-function snapshot() { history.value.push({ e: new Set(erased.value), a: new Map(added.value), c: custom.value.map((b) => b.slice()) }); if (history.value.length > 50) history.value.shift() }
+function snapshot() { history.value.push({ e: new Set(erased.value), a: new Map(added.value), c: custom.value.map((b) => b.slice()), s: new Set(selIds.value) }); if (history.value.length > 50) history.value.shift() }
 function paint(id) {
   if (!editing.value) return
   const hit = hitMap.value.get(id)
@@ -273,7 +273,7 @@ function overPaint(id, ev) {
   paint(id)
 }
 function endPaint() { painting = false; lastXY = null }
-function undo() { const h = history.value.pop(); if (h) { erased.value = h.e; added.value = h.a; custom.value = h.c } }
+function undo() { const h = history.value.pop(); if (h) { erased.value = h.e; added.value = h.a; custom.value = h.c; if (h.s) selIds.value = h.s } }
 function resetEdits() { snapshot(); erased.value = new Set(); added.value = new Map(); custom.value = Array.from({ length: CUSTOM_N }, () => []) }
 
 /** 格子 id → 它属于哪一块、序号、坐标 */
@@ -283,60 +283,234 @@ const hitMap = computed(() => {
   return m
 })
 
-/* ---------------- 选区：框选格子，拖动或方向键整体挪 ----------------
- * 屏幕上 x = (c − r)·D/2、y = (c + r)·D/2，反过来拖了 (dx, dy) 就是 dr = (dy − dx)/D、dc = (dx + dy)/D，取整对齐格子。
- * 挪的时候每一步都从按下那一刻的状态重算（不是一步步累加），撞到城池、出了范围、压到没选中的格子就停在上一个能放的位置。
+/* ---------------- 选区：框选格子，拖动 / 方向键挪、复制、旋转、翻转 ----------------
+ * 屏幕上 x = (c − r)·D/2、y = (c + r)·D/2，拖了 (dx, dy) 就是 dr = (dy − dx)/D、dc = (dx + dy)/D，取整对齐格子。
+ * 拖的时候格子先不动，只画一个虚影跟着鼠标（蓝 = 放得下、橙 = 和原有格子融合、红 = 出界 / 压到城池会去掉），松手才落下。
+ * 松手时放不下的：压到原有格子的算融合（两格并成一格），出界 / 压城池的去掉；会提示几格，能撤销。
+ * 方向键、旋转、翻转要整块都放得下才动，放不下就提示，不丢格子。
  * 自定义块里的格子原地换 id（序号不变）；填字块里的格子是「擦掉原位 + 补到新位」，序号照那块的读法重排。
  */
 const selIds = ref(new Set())
 const marquee = ref(null)
 const selMode = ref('new')
+/** 拖动时的虚影：[{ id, x, y, s }]，s = 'ok' | 'merge' | 'drop' */
+const ghost = ref(null)
 let selDrag = null
 const cellId = (r, c) => `${r}_${c}`
 const rcOf = (id) => id.split('_').map(Number)
 
-function moveState(base, ids, occ, origOf, dr, dc, copy) {
+/**
+ * 把选中的格子按 f（id → 新 id）变过去。copy = 原来的留着、新的接在同一块后面；
+ * partial = 放不下的不整体作废：融合（压到别的格子）/ 去掉（出界、压城池），否则有一格放不下就返回 null。
+ */
+function transformState(base, ids, occ, origOf, f, { copy = false, partial = false } = {}) {
   const free = new Set(board.value.free.map((x) => x.id))
   const sel = new Set(ids)
-  const mv = (id) => { const [r, c] = rcOf(id); return cellId(r + dr, c + dc) }
-  // 复制时原来那份还在，新的一份连它也不能压
-  for (const id of ids) {
-    const t = mv(id)
-    if (!free.has(t) || (occ.has(t) && (copy || !sel.has(t)))) return null
-  }
-  const e = new Set(base.e), a = new Map(base.a)
-  if (copy) {
-    // 复制：原样留着，新的一份接到同一块后面（序号续在那块最后）
-    const c = base.c.map((arr) => arr.slice())
-    ids.forEach((id) => {
-      const k = base.c.findIndex((arr) => arr.includes(id))
-      const t = mv(id)
-      if (k >= 0) { c[k].push(t); return }
-      const bi = a.has(id) ? a.get(id) : origOf.get(id)
-      if (origOf.get(t) === bi) e.delete(t)
-      else a.set(t, bi)
-    })
-    return { e, a, c, ids: ids.map(mv) }
-  }
-  const inCustom = new Set(base.c.flat())
-  const src = new Map()
+  const fate = new Map()
+  let dropped = 0, merged = 0
   ids.forEach((id) => {
-    if (inCustom.has(id)) return
-    if (a.has(id)) { src.set(id, a.get(id)); a.delete(id) } else { src.set(id, origOf.get(id)); e.add(id) }
+    const t = f(id)
+    if (!free.has(t)) { fate.set(id, null); dropped += 1 } else if (occ.has(t) && (copy || !sel.has(t))) { fate.set(id, null); merged += 1 } else fate.set(id, t)
   })
-  src.forEach((bi, id) => {
-    const t = mv(id)
-    if (origOf.get(t) === bi) e.delete(t)
-    else a.set(t, bi)
-  })
-  const c = base.c.map((arr) => arr.map((x) => (sel.has(x) ? mv(x) : x)))
-  return { e, a, c, ids: ids.map(mv) }
+  if (!partial && (dropped || merged)) return null
+  const e = new Set(base.e), a = new Map(base.a)
+  const inCustom = new Set(base.c.flat())
+  const blockOf = (id) => (a.has(id) ? a.get(id) : origOf.get(id))
+  const put = (t, bi) => { if (origOf.get(t) === bi) e.delete(t); else a.set(t, bi) }
+  let c
+  if (copy) {
+    c = base.c.map((arr) => arr.slice())
+    ids.forEach((id) => {
+      const t = fate.get(id)
+      if (!t) return
+      const k = base.c.findIndex((arr) => arr.includes(id))
+      if (k >= 0) c[k].push(t)
+      else put(t, blockOf(id))
+    })
+  } else {
+    const src = new Map()
+    ids.forEach((id) => {
+      if (inCustom.has(id)) return
+      src.set(id, blockOf(id))
+      if (a.has(id)) a.delete(id); else e.add(id)
+    })
+    src.forEach((bi, id) => { const t = fate.get(id); if (t) put(t, bi) })
+    c = base.c.map((arr) => arr.map((x) => (sel.has(x) ? fate.get(x) : x)).filter(Boolean))
+  }
+  return { e, a, c, ids: ids.map((id) => fate.get(id)).filter(Boolean), dropped, merged }
 }
-/** 按下那一刻的状态：挪动都从这里重算 */
+/** 当前的状态快照：挪动都从这里重算 */
 function selBase() {
   const origOf = new Map()
   auto.value.blocks.forEach((b, bi) => { if (b.ok) b.cells.forEach((c) => origOf.set(c.id, bi)) })
   return { base: { e: new Set(erased.value), a: new Map(added.value), c: custom.value.map((b) => b.slice()) }, occ: new Set(hitMap.value.keys()), origOf, ids: Array.from(selIds.value) }
+}
+function applyMove(st) {
+  erased.value = st.e; added.value = st.a; custom.value = st.c; selIds.value = new Set(st.ids)
+}
+const shiftBy = (dr, dc) => (id) => { const [r, c] = rcOf(id); return cellId(r + dr, c + dc) }
+/** 整块变一下（方向键、旋转、翻转）：放不下就不动，返回 false */
+function transformSel(f, what) {
+  if (!selIds.value.size) return false
+  const { base, occ, origOf, ids } = selBase()
+  const st = transformState(base, ids, occ, origOf, f)
+  if (!st) { if (what) message.warning(`${what}放不下：会出界、压到城池或别的格子，先挪开一点再试`); return false }
+  snapshot(); applyMove(st)
+  return true
+}
+/**
+ * 旋转 / 翻转：绕选区外框的中心 (rc, cc)，屏幕上转 90° 或翻转。记 S = rc + cc、Dd = rc − cc，
+ *   右转 (r, c) → (c + Dd, S − r)，左转 → (S − c, r − Dd)，左右翻 → (c + Dd, r − Dd)，上下翻 → (S − c, S − r)。
+ * S、Dd 是整数时正好落在格子上、外框中心不动（转四次、翻两次都回原样）；是半格时只能偏半格，四种偏法挑放得下的。
+ * 靠边转不开的，再把结果整体错开 1~2 格找个放得下的位置。
+ */
+const TURNS = {
+  cw: (r, c, S, Dd) => [c + Dd, S - r],
+  ccw: (r, c, S, Dd) => [S - c, r - Dd],
+  flipH: (r, c, S, Dd) => [c + Dd, r - Dd],
+  flipV: (r, c, S, Dd) => [S - c, S - r]
+}
+const TURN_NAME = { cw: '右转', ccw: '左转', flipH: '左右翻转', flipV: '上下翻转' }
+/** 连着转 / 翻同一个选区时一直用第一次的中心，转四下、翻两下才会分毫不差地回到原样 */
+let turnPivot = null
+const selKeyOf = () => Array.from(selIds.value).sort().join(',')
+function selTurn(kind) {
+  const rcs = Array.from(selIds.value).map(rcOf)
+  if (!rcs.length) return
+  const rc = (Math.min(...rcs.map((x) => x[0])) + Math.max(...rcs.map((x) => x[0]))) / 2
+  const cc = (Math.min(...rcs.map((x) => x[1])) + Math.max(...rcs.map((x) => x[1]))) / 2
+  const S0 = rc + cc, D0 = rc - cc
+  const fresh = Number.isInteger(S0) ? [[S0, D0]] : [[S0 + 0.5, D0 + 0.5], [S0 - 0.5, D0 - 0.5], [S0 + 0.5, D0 - 0.5], [S0 - 0.5, D0 + 0.5]]
+  const pivots = turnPivot && turnPivot.key === selKeyOf() ? [turnPivot.p].concat(fresh) : fresh
+  const shifts = [[0, 0]]
+  for (const k of [1, 2]) for (const [a, b] of [[-k, -k], [k, k], [k, -k], [-k, k], [-k, 0], [k, 0], [0, -k], [0, k]]) shifts.push([a, b])
+  const { base, occ, origOf, ids } = selBase()
+  const t = TURNS[kind]
+  for (const [sr, sc] of shifts) {
+    for (const [S, Dd] of pivots) {
+      const st = transformState(base, ids, occ, origOf, (id) => { const [r, c] = rcOf(id); const [nr, nc] = t(r, c, S, Dd); return cellId(nr + sr, nc + sc) })
+      if (st) {
+        snapshot(); applyMove(st)
+        // 没错开位置才记住中心；错开过说明靠边了，下次重新算
+        turnPivot = sr || sc ? null : { p: [S, Dd], key: selKeyOf() }
+        return
+      }
+    }
+  }
+  message.warning(`${TURN_NAME[kind]}放不下：会出界、压到城池或别的格子，先挪开一点再试`)
+}
+function svgPoint(ev) {
+  const svg = document.getElementById('shape-map')
+  const pt = svg.createSVGPoint()
+  pt.x = ev.clientX; pt.y = ev.clientY
+  return pt.matrixTransform(svg.getScreenCTM().inverse())
+}
+function selDown(ev) {
+  if (!editing.value || curBrush.value !== 'select') return
+  dropFocus()
+  const p = svgPoint(ev)
+  const g = ev.target.closest && ev.target.closest('[data-id]')
+  const id = g ? g.dataset.id : null
+  try { ev.currentTarget.setPointerCapture(ev.pointerId) } catch (e) {}
+  const how = ev.shiftKey ? 'add' : ev.altKey ? 'sub' : selMode.value
+  // 按住选中的格子拖 = 挪；按着 Alt 拖 = 复制一份。减选模式下点选中的格子是去掉它，不拖
+  if (id && selIds.value.has(id) && (selMode.value !== 'sub' || ev.altKey)) {
+    selDrag = { mode: 'move', x0: p.x, y0: p.y, key: '0,0', dr: 0, dc: 0, copy: ev.altKey, id, ...selBase() }
+  } else {
+    selDrag = { mode: 'box', x0: p.x, y0: p.y, id, how, keep: how === 'new' ? new Set() : new Set(selIds.value) }
+    if (how === 'new') selIds.value = new Set()
+  }
+}
+/** 虚影：每个选中的格子挪到哪、放不放得下 */
+function ghostOf(drag) {
+  const free = new Set(board.value.free.map((x) => x.id))
+  const sel = new Set(drag.ids)
+  const f = shiftBy(drag.dr, drag.dc)
+  return drag.ids.map((id) => {
+    const t = f(id)
+    const [r, c] = rcOf(t)
+    const ctr = P.cellCenter(r, c, board.value.size, D.value)
+    const s = !free.has(t) ? 'drop' : drag.occ.has(t) && (drag.copy || !sel.has(t)) ? 'merge' : 'ok'
+    return { id: t, x: ctr.x, y: ctr.y, s }
+  })
+}
+function selMove(ev) {
+  if (!selDrag) return
+  const p = svgPoint(ev)
+  const dx = p.x - selDrag.x0, dy = p.y - selDrag.y0
+  if (Math.abs(dx) + Math.abs(dy) > 4) selDrag.moved = true
+  if (selDrag.mode === 'box') {
+    const box = { x: Math.min(p.x, selDrag.x0), y: Math.min(p.y, selDrag.y0), w: Math.abs(dx), h: Math.abs(dy) }
+    marquee.value = box
+    const s = new Set(selDrag.keep)
+    cells.value.forEach((c) => {
+      if (!c.seq || c.x < box.x || c.x > box.x + box.w || c.y < box.y || c.y > box.y + box.h) return
+      if (selDrag.how === 'sub') s.delete(c.id); else s.add(c.id)
+    })
+    selIds.value = s
+    return
+  }
+  const dr = Math.round((dy - dx) / D.value), dc = Math.round((dx + dy) / D.value)
+  const key = dr + ',' + dc
+  if (key === selDrag.key) return
+  Object.assign(selDrag, { key, dr, dc })
+  ghost.value = key === '0,0' ? null : ghostOf(selDrag)
+}
+function selUp() {
+  if (!selDrag) return
+  const d = selDrag
+  selDrag = null
+  marquee.value = null
+  ghost.value = null
+  // 没怎么拖 = 点了一下：点格子选它（Shift 是加选 / 取消，减选模式是去掉）
+  if (d.mode === 'box') {
+    if (!d.moved && d.id && hitMap.value.has(d.id)) {
+      const s = new Set(d.keep)
+      if (d.how === 'sub') s.delete(d.id)
+      else if (d.how === 'add' && d.keep.has(d.id) && selMode.value !== 'add') s.delete(d.id)
+      else s.add(d.id)
+      selIds.value = s
+    }
+    return
+  }
+  // 按着 Alt 点了一下选中的格子、鼠标没动：当减选用，把它去掉
+  if (d.key === '0,0') {
+    if (d.copy && !d.moved) { const s = new Set(selIds.value); s.delete(d.id); selIds.value = s }
+    return
+  }
+  const st = transformState(d.base, d.ids, d.occ, d.origOf, shiftBy(d.dr, d.dc), { copy: d.copy, partial: true })
+  snapshot()
+  applyMove(st)
+  if (st.dropped || st.merged) {
+    const bits = []
+    if (st.merged) bits.push(`${st.merged} 格和原有格子融合`)
+    if (st.dropped) bits.push(`${st.dropped} 格出界或压到城池，去掉了`)
+    message.info(bits.join('，') + '（不想要可以点「撤销」）')
+  }
+}
+/** 方向键挪一格（屏幕上的上下左右），R 右转（Shift+R 左转）、H 左右翻、V 上下翻，Delete 删掉，Esc 取消；处理了返回 true */
+const ARROWS = { ArrowUp: [-1, -1], ArrowDown: [1, 1], ArrowLeft: [1, -1], ArrowRight: [-1, 1] }
+function selKey(ev) {
+  if (ev.key === 'Escape') { selIds.value = new Set(); return true }
+  if (ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault()
+    snapshot()
+    const { base, origOf, ids } = selBase()
+    const sel = new Set(ids)
+    ids.forEach((id) => { if (base.a.has(id)) base.a.delete(id); else if (origOf.has(id)) base.e.add(id) })
+    erased.value = base.e; added.value = base.a; custom.value = base.c.map((arr) => arr.filter((x) => !sel.has(x)))
+    selIds.value = new Set()
+    return true
+  }
+  if (!ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+    const turn = ev.code === 'KeyR' ? (ev.shiftKey ? 'ccw' : 'cw') : ev.code === 'KeyH' ? 'flipH' : ev.code === 'KeyV' ? 'flipV' : ''
+    if (turn) { ev.preventDefault(); selTurn(turn); return true }
+  }
+  const d = ARROWS[ev.key]
+  if (!d) return false
+  ev.preventDefault()
+  transformSel(shiftBy(d[0], d[1]))
+  return true
 }
 /**
  * 选区外轮廓：每格是个菱形，四条边各对着一个邻格（右上 r−1、右下 c+1、左下 r+1、左上 c−1），
@@ -359,96 +533,7 @@ const selOutline = computed(() => {
   })
   return d
 })
-function applyMove(st) {
-  erased.value = st.e; added.value = st.a; custom.value = st.c; selIds.value = new Set(st.ids)
-}
-function svgPoint(ev) {
-  const svg = document.getElementById('shape-map')
-  const pt = svg.createSVGPoint()
-  pt.x = ev.clientX; pt.y = ev.clientY
-  return pt.matrixTransform(svg.getScreenCTM().inverse())
-}
-function selDown(ev) {
-  if (!editing.value || curBrush.value !== 'select') return
-  dropFocus()
-  const p = svgPoint(ev)
-  const g = ev.target.closest && ev.target.closest('[data-id]')
-  const id = g ? g.dataset.id : null
-  try { ev.currentTarget.setPointerCapture(ev.pointerId) } catch (e) {}
-  const how = ev.shiftKey ? 'add' : ev.altKey ? 'sub' : selMode.value
-  // 按住选中的格子拖 = 挪；按着 Alt 拖 = 复制一份。减选模式下点选中的格子是去掉它，不拖
-  if (id && selIds.value.has(id) && (selMode.value !== 'sub' || ev.altKey)) {
-    snapshot()
-    selDrag = { mode: 'move', x0: p.x, y0: p.y, last: '0,0', copy: ev.altKey, id, ...selBase() }
-  } else {
-    selDrag = { mode: 'box', x0: p.x, y0: p.y, id, how, keep: how === 'new' ? new Set() : new Set(selIds.value) }
-    if (how === 'new') selIds.value = new Set()
-  }
-}
-function selMove(ev) {
-  if (!selDrag) return
-  const p = svgPoint(ev)
-  const dx = p.x - selDrag.x0, dy = p.y - selDrag.y0
-  if (Math.abs(dx) + Math.abs(dy) > 4) selDrag.moved = true
-  if (selDrag.mode === 'box') {
-    const box = { x: Math.min(p.x, selDrag.x0), y: Math.min(p.y, selDrag.y0), w: Math.abs(dx), h: Math.abs(dy) }
-    marquee.value = box
-    const s = new Set(selDrag.keep)
-    cells.value.forEach((c) => {
-      if (!c.seq || c.x < box.x || c.x > box.x + box.w || c.y < box.y || c.y > box.y + box.h) return
-      if (selDrag.how === 'sub') s.delete(c.id); else s.add(c.id)
-    })
-    selIds.value = s
-    return
-  }
-  const dr = Math.round((dy - dx) / D.value), dc = Math.round((dx + dy) / D.value)
-  const key = dr + ',' + dc
-  if (key === selDrag.last) return
-  const st = moveState(selDrag.base, selDrag.ids, selDrag.occ, selDrag.origOf, dr, dc, selDrag.copy)
-  if (st) { applyMove(st); selDrag.last = key }
-  // 复制拖回原位（重叠了放不下）：恢复成没复制的样子，选中的还是原来那些
-  else if (selDrag.copy && key === '0,0') { applyMove({ ...selDrag.base, ids: selDrag.ids }); selDrag.last = key }
-}
-function selUp() {
-  if (!selDrag) return
-  // 没怎么拖 = 点了一下：点格子选它（按住 Shift 是加选 / 取消）
-  if (selDrag.mode === 'box' && (!marquee.value || marquee.value.w + marquee.value.h < 4) && selDrag.id && hitMap.value.has(selDrag.id)) {
-    const s = new Set(selDrag.keep)
-    if (selDrag.how === 'sub') s.delete(selDrag.id)
-    else if (selDrag.how === 'add' && selDrag.keep.has(selDrag.id) && selMode.value !== 'add') s.delete(selDrag.id)
-    else s.add(selDrag.id)
-    selIds.value = s
-  }
-  // 按着 Alt 点了一下选中的格子、鼠标没动：当减选用，把它去掉（复制没发生，撤销记录也不要）
-  if (selDrag.mode === 'move' && selDrag.copy && selDrag.last === '0,0' && !selDrag.moved) {
-    history.value.pop()
-    const s = new Set(selIds.value); s.delete(selDrag.id); selIds.value = s
-  }
-  selDrag = null
-  marquee.value = null
-}
-/** 方向键挪一格（屏幕上的上下左右），Delete 删掉选中的，Esc 取消选择；处理了返回 true */
-const ARROWS = { ArrowUp: [-1, -1], ArrowDown: [1, 1], ArrowLeft: [1, -1], ArrowRight: [-1, 1] }
-function selKey(ev) {
-  if (ev.key === 'Escape') { selIds.value = new Set(); return true }
-  if (ev.key === 'Delete' || ev.key === 'Backspace') {
-    ev.preventDefault()
-    snapshot()
-    const { base, origOf, ids } = selBase()
-    const sel = new Set(ids)
-    ids.forEach((id) => { if (base.a.has(id)) base.a.delete(id); else if (origOf.has(id)) base.e.add(id) })
-    erased.value = base.e; added.value = base.a; custom.value = base.c.map((arr) => arr.filter((x) => !sel.has(x)))
-    selIds.value = new Set()
-    return true
-  }
-  const d = ARROWS[ev.key]
-  if (!d) return false
-  ev.preventDefault()
-  const { base, occ, origOf, ids } = selBase()
-  const st = moveState(base, ids, occ, origOf, d[0], d[1])
-  if (st) { snapshot(); applyMove(st) }
-  return true
-}
+const GHOST_FILL = { ok: 'rgba(14,165,233,0.45)', merge: 'rgba(245,158,11,0.6)', drop: 'rgba(239,68,68,0.5)' }
 // 换了画笔、关了自定义：选中的作废；图变了（撤销、改字）只留还在图上的
 watch([brush, editing], () => { if (brush.value !== 'select' || !editing.value) selIds.value = new Set() })
 watch(hitMap, (m) => { if (selIds.value.size && Array.from(selIds.value).some((id) => !m.has(id))) selIds.value = new Set(Array.from(selIds.value).filter((id) => m.has(id))) })
@@ -826,9 +911,15 @@ const textOpen = ref([])
             <n-radio-button value="add">加选</n-radio-button>
             <n-radio-button value="sub">减选</n-radio-button>
           </n-radio-group>
+          <n-button-group v-if="brush === 'select'" size="small">
+            <n-button :disabled="!selIds.size" title="左转 90°（Shift+R）" @click="selTurn('ccw')">⟲ 左转</n-button>
+            <n-button :disabled="!selIds.size" title="右转 90°（R）" @click="selTurn('cw')">⟳ 右转</n-button>
+            <n-button :disabled="!selIds.size" title="左右翻转（H）" @click="selTurn('flipH')">⇋ 左右翻</n-button>
+            <n-button :disabled="!selIds.size" title="上下翻转（V）" @click="selTurn('flipV')">⇅ 上下翻</n-button>
+          </n-button-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖动、方向键一格格挪，按住 Alt 拖是复制一份；Delete 删掉选中的，Esc 取消选择{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
+          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖（跟着虚影走，蓝 = 放得下、橙 = 和原有格子融合、红 = 会去掉），按住 Alt 拖是复制；方向键挪一格，R / Shift+R 转、H / V 翻；Delete 删掉，Esc 取消{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
           <span v-else class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited && dirty" class="lab">{{ current ? `在「${current.name}」上改过` : `已手动改 ${edited} 格` }}</span>
@@ -860,8 +951,14 @@ const textOpen = ref([])
           <text :x="city.x" :y="city.y + 8" text-anchor="middle"
             :font-size="Math.max(10, Math.round(city.d * 0.16))" font-weight="700" fill="#7c2d12">{{ city.label }}</text>
           <g v-if="selOutline" class="no-export" pointer-events="none" fill="none" stroke-linecap="round">
-            <path :d="selOutline" stroke="#ffffff" stroke-width="4" />
-            <path :d="selOutline" class="ants" stroke="#0ea5e9" stroke-width="4" stroke-dasharray="7 6" />
+            <path :d="selOutline" stroke="#ffffff" stroke-width="2.2" />
+            <path :d="selOutline" class="ants" stroke="#0ea5e9" stroke-width="1.6" stroke-dasharray="5 4" />
+          </g>
+          <g v-if="ghost" class="no-export" pointer-events="none">
+            <g v-for="g in ghost" :key="g.id" :transform="`translate(${g.x},${g.y}) rotate(45)`">
+              <rect :x="-D / 2.83" :y="-D / 2.83" :width="D / 1.414" :height="D / 1.414" rx="2"
+                :fill="GHOST_FILL[g.s]" stroke="#ffffff" stroke-width="1" />
+            </g>
           </g>
           <rect v-if="marquee" class="no-export" :x="marquee.x" :y="marquee.y" :width="marquee.w" :height="marquee.h"
             fill="rgba(14,165,233,0.12)" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none" />
@@ -894,7 +991,7 @@ const textOpen = ref([])
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
 #shape-map.selecting { cursor: default; }
 #shape-map .ants { animation: ants 0.9s linear infinite; }
-@keyframes ants { to { stroke-dashoffset: -26; } }
+@keyframes ants { to { stroke-dashoffset: -18; } }
 #shape-map.selecting .picked { cursor: move; }
 #shape-map.selecting .paintable:hover rect { opacity: 1; }
 #shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
