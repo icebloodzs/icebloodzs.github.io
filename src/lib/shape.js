@@ -199,6 +199,26 @@ const PATTERNS_XS = {
   十字: mask(4, -4, 4, crossShape(2, 4))
 }
 
+/**
+ * 左下、右下（顺着游戏网格摆的）专用的图案：这两块的格子边对边，屏幕坐标画的菱形图案搬过来会歪，所以单独画一份。
+ * 爱心 = 开发者在页面上摆好存成特例「右下爱心」的那颗（2026-11-20，11 宽 10 高、65 格），圆顶朝城池。
+ * 没列在这里的图案照旧用 PATTERNS。
+ */
+const PATTERNS_GRID = {
+  爱心: [
+    '00100000100',
+    '01110001110',
+    '11111011111',
+    '11111111111',
+    '11111111111',
+    '01111111110',
+    '00111111100',
+    '00011111000',
+    '00001110000',
+    '00000100000'
+  ]
+}
+
 const PATTERN_NAMES = Object.keys(PATTERNS)
 const CHARS = Object.keys(FONT).filter((c) => c !== ' ')
 
@@ -852,7 +872,9 @@ function placeAll(board, items, origin) {
     const screenArea = ['top', 'bottom', 'left', 'right'].includes(item.area)
     // 上下左右这几块按屏幕摆正：菱形格子在屏幕上错开排，只有一半位置有格子中心。
     // 图案本来就按这个两倍精度画的；字的点阵要先放大两倍，不然一半的点落空，字就散了（1306 摆成一团就是这个）。
-    const rows = screenArea && !PATTERNS[text] ? screenTextRows(text) || upscale2(bmp.rows) : bmp.rows
+    const rows = screenArea
+      ? (PATTERNS[text] ? bmp.rows : screenTextRows(text) || upscale2(bmp.rows))
+      : (PATTERNS_GRID[text] || bmp.rows).slice()
     let hit = null
     if (!screenArea) hit = placeBitmap(board, rows, item.area, taken, target)
     else {

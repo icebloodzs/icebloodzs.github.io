@@ -133,13 +133,26 @@ const brush = ref('erase') // 'erase'、块下标（数字）、或者 'c0'~'c3'
  */
 const holdErase = ref(false)
 const curBrush = computed(() => (holdErase.value ? 'erase' : brush.value))
-const typing = (ev) => { const t = ev.target; return t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable) }
+// 只有能打字的框才算：点过画笔（单选按钮）后焦点在 radio 上，以前也被当成打字，按 E 没反应（11-20 修）
+const TEXT_INPUT = /^(text|search|number|email|password|tel|url|)$/
+const typing = (ev) => { const t = ev.target; return Boolean(t && ((t.tagName === 'INPUT' && TEXT_INPUT.test(t.type || '')) || t.tagName === 'TEXTAREA' || t.isContentEditable)) }
 function onKey(ev) {
   if (!editing.value) { holdErase.value = false; return }
   const down = ev.type === 'keydown'
   if (ev.key === 'Alt') { holdErase.value = down; if (down) ev.preventDefault(); return }
-  if ((ev.key === 'e' || ev.key === 'E') && !typing(ev) && !ev.metaKey && !ev.ctrlKey) holdErase.value = down
+  // 认物理键位（ev.code）：开着中文输入法时按 E，ev.key 是 'Process' 不是 'e'，以前就是这样「有时按 E 没反应」（11-20 修）
+  const isE = ev.code === 'KeyE' || ev.key === 'e' || ev.key === 'E'
+  if (isE && !ev.metaKey && !ev.ctrlKey && (!down || !typing(ev))) {
+    holdErase.value = down
+    if (down) ev.preventDefault()
+  }
 }
+/** 焦点还停在输入框 / 下拉的搜索框里时按 E 会被当成打字：开始画、打开自定义时先把焦点拿走 */
+function dropFocus() {
+  const a = document.activeElement
+  if (a && a !== document.body && typing({ target: a })) a.blur()
+}
+watch(editing, (on) => { if (on) dropFocus() })
 const releaseErase = () => { holdErase.value = false }
 onMounted(() => { window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey); window.addEventListener('blur', releaseErase) })
 onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); window.removeEventListener('blur', releaseErase) })
@@ -248,7 +261,7 @@ function paint(id) {
  * 鼠标没动也会「进入」旁边那格 —— 第一下总是出来两格就是这个（11-17 修）。
  */
 let lastXY = null
-function startPaint(id, ev) { if (!editing.value) return; snapshot(); painting = true; lastXY = ev ? [ev.clientX, ev.clientY] : null; paint(id) }
+function startPaint(id, ev) { if (!editing.value) return; dropFocus(); snapshot(); painting = true; lastXY = ev ? [ev.clientX, ev.clientY] : null; paint(id) }
 function overPaint(id, ev) {
   if (!painting) return
   if (ev) {
