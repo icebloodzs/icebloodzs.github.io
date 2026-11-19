@@ -90,7 +90,7 @@ function clearAll() {
 const baseX = ref('660')
 const baseY = ref('647')
 const texts = ref({ leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' })
-const D = ref(56)
+const D = ref(32)
 
 /**
  * 范围：整块黑土（原来的），或者「满屏截图」—— 游戏缩到最小、城池居中截一张图能看到的那些格子（S.VIEW），
