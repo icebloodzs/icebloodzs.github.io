@@ -374,7 +374,27 @@ const TURN_NAME = { cw: '右转', ccw: '左转', flipH: '左右翻转', flipV: '
 /** 连着转 / 翻同一个选区时一直用第一次的中心，转四下、翻两下才会分毫不差地回到原样 */
 let turnPivot = null
 const selKeyOf = () => Array.from(selIds.value).sort().join(',')
+/** 一组 [r, c] 的外框中心 → 能用的转轴（整数 S、Dd；半格时给四种偏法） */
+function pivotsOf(rcs) {
+  const rc = (Math.min(...rcs.map((x) => x[0])) + Math.max(...rcs.map((x) => x[0]))) / 2
+  const cc = (Math.min(...rcs.map((x) => x[1])) + Math.max(...rcs.map((x) => x[1]))) / 2
+  const S0 = rc + cc, D0 = rc - cc
+  return Number.isInteger(S0) ? [[S0, D0]] : [[S0 + 0.5, D0 + 0.5], [S0 - 0.5, D0 - 0.5], [S0 + 0.5, D0 - 0.5], [S0 - 0.5, D0 + 0.5]]
+}
+/** 拖动中按了 R / H / V：只转虚影，松手按转好的样子落下（drag.map：原格子 → 转完的格子，还没加上拖动的位移） */
+function turnGhost(kind) {
+  const d = selDrag
+  const now = d.ids.map((id) => rcOf(d.map.get(id)))
+  // 同一次拖动里连着转，一直绕第一次的轴，转四下回原样
+  const [S, Dd] = d.pivot || pivotsOf(now)[0]
+  d.pivot = [S, Dd]
+  const t = TURNS[kind]
+  d.ids.forEach((id, i) => { const [nr, nc] = t(now[i][0], now[i][1], S, Dd); d.map.set(id, cellId(nr, nc)) })
+  d.turned = true
+  ghost.value = ghostOf(d)
+}
 function selTurn(kind) {
+  if (selDrag && selDrag.mode === 'move') return turnGhost(kind)
   const rcs = Array.from(selIds.value).map(rcOf)
   if (!rcs.length) return
   const rc = (Math.min(...rcs.map((x) => x[0])) + Math.max(...rcs.map((x) => x[0]))) / 2
@@ -399,6 +419,68 @@ function selTurn(kind) {
   }
   message.warning(`${TURN_NAME[kind]}放不下：会出界、压到城池或别的格子，先挪开一点再试`)
 }
+/*
+ * 按比例缩放：每次 ±25%，按游戏网格逐格取样（格子边对边，笔画不会散），外框中心不动。
+ * 连着缩放同一个选区时一直从第一次的原样算，不会越缩越糊；新格子归原来那格所在的块（颜色不变），
+ * 自定义块里的序号照原来的先后排。放不下（出界、压城池、压别的格子）就错开 1~2 格再试，还不行就提示。
+ */
+let scaleSrc = null
+const scalePct = ref(100)
+function selScale(dir) {
+  if (!selIds.value.size) return
+  const { base, occ, origOf, ids } = selBase()
+  const key = selKeyOf()
+  if (!scaleSrc || scaleSrc.key !== key) {
+    const cells = ids.map((id) => {
+      const [r, c] = rcOf(id)
+      const k = base.c.findIndex((arr) => arr.includes(id))
+      return { r, c, k, idx: k >= 0 ? base.c[k].indexOf(id) : 0, bi: k >= 0 ? null : base.a.has(id) ? base.a.get(id) : origOf.get(id) }
+    })
+    const minR = Math.min(...cells.map((x) => x.r)), maxR = Math.max(...cells.map((x) => x.r))
+    const minC = Math.min(...cells.map((x) => x.c)), maxC = Math.max(...cells.map((x) => x.c))
+    const at = new Map(cells.map((x) => [cellId(x.r - minR, x.c - minC), x]))
+    scaleSrc = { at, h: maxR - minR + 1, w: maxC - minC + 1, cr: (minR + maxR) / 2, ccen: (minC + maxC) / 2, n: 0, key }
+  }
+  const n = scaleSrc.n + dir
+  const f = 1 + 0.25 * n
+  const nh = Math.round(scaleSrc.h * f), nw = Math.round(scaleSrc.w * f)
+  if (f <= 0 || nh < 1 || nw < 1) return message.warning('不能再小了')
+  if (nh > board.value.size || nw > board.value.size) return message.warning('不能再大了')
+  // 新外框里每一格回原样里找对应的那格
+  const gen = []
+  for (let i = 0; i < nh; i += 1) for (let j = 0; j < nw; j += 1) {
+    const src = scaleSrc.at.get(cellId(Math.floor((i * scaleSrc.h) / nh), Math.floor((j * scaleSrc.w) / nw)))
+    if (src) gen.push({ i, j, src })
+  }
+  const free = new Set(board.value.free.map((x) => x.id))
+  const sel = new Set(ids)
+  const r0 = Math.round(scaleSrc.cr - (nh - 1) / 2), c0 = Math.round(scaleSrc.ccen - (nw - 1) / 2)
+  const shifts = [[0, 0]]
+  for (const k of [1, 2]) for (const [a, b] of [[-k, -k], [k, k], [k, -k], [-k, k], [-k, 0], [k, 0], [0, -k], [0, k]]) shifts.push([a, b])
+  for (const [sr, sc] of shifts) {
+    const out = gen.map((g) => ({ ...g, id: cellId(r0 + g.i + sr, c0 + g.j + sc) }))
+    if (out.some((g) => !free.has(g.id) || (occ.has(g.id) && !sel.has(g.id)))) continue
+    // 先把选中的拿掉，再按新形状放回去
+    const e = new Set(base.e), a = new Map(base.a)
+    ids.forEach((id) => { if (base.c.some((arr) => arr.includes(id))) return; if (a.has(id)) a.delete(id); else e.add(id) })
+    out.forEach((g) => { if (g.src.k >= 0) return; if (origOf.get(g.id) === g.src.bi) e.delete(g.id); else a.set(g.id, g.src.bi) })
+    const c = base.c.map((arr, k) => {
+      const mine = out.filter((g) => g.src.k === k).sort((x, y) => x.src.idx - y.src.idx || x.i - y.i || x.j - y.j).map((g) => g.id)
+      const res = []
+      let done = false
+      arr.forEach((x) => { if (!sel.has(x)) res.push(x); else if (!done) { res.push(...mine); done = true } })
+      return res
+    })
+    snapshot()
+    applyMove({ e, a, c, ids: out.map((g) => g.id) })
+    scaleSrc.n = n
+    scaleSrc.key = selKeyOf()
+    scalePct.value = Math.round(f * 100)
+    return
+  }
+  message.warning(`${dir > 0 ? '放大' : '缩小'}放不下：会出界、压到城池或别的格子，先挪开一点再试`)
+}
+watch(selIds, () => { if (!scaleSrc || scaleSrc.key !== selKeyOf()) scalePct.value = 100 })
 function svgPoint(ev) {
   const svg = document.getElementById('shape-map')
   const pt = svg.createSVGPoint()
@@ -415,17 +497,20 @@ function selDown(ev) {
   const how = ev.shiftKey ? 'add' : ev.altKey ? 'sub' : selMode.value
   // 按住选中的格子拖 = 挪；按着 Alt 拖 = 复制一份。减选模式下点选中的格子是去掉它，不拖
   if (id && selIds.value.has(id) && (selMode.value !== 'sub' || ev.altKey)) {
-    selDrag = { mode: 'move', x0: p.x, y0: p.y, key: '0,0', dr: 0, dc: 0, copy: ev.altKey, id, ...selBase() }
+    const b0 = selBase()
+    selDrag = { mode: 'move', x0: p.x, y0: p.y, key: '0,0', dr: 0, dc: 0, copy: ev.altKey, id, map: new Map(b0.ids.map((x) => [x, x])), ...b0 }
   } else {
     selDrag = { mode: 'box', x0: p.x, y0: p.y, id, how, keep: how === 'new' ? new Set() : new Set(selIds.value) }
     if (how === 'new') selIds.value = new Set()
   }
 }
+/** 拖动中每个格子最后落到哪：先按 R / H / V 转过的样子，再加上拖动的位移 */
+const dragFn = (drag) => { const sh = shiftBy(drag.dr, drag.dc); return (id) => sh(drag.map.get(id) || id) }
 /** 虚影：每个选中的格子挪到哪、放不放得下 */
 function ghostOf(drag) {
   const free = new Set(board.value.free.map((x) => x.id))
   const sel = new Set(drag.ids)
-  const f = shiftBy(drag.dr, drag.dc)
+  const f = dragFn(drag)
   return drag.ids.map((id) => {
     const t = f(id)
     const [r, c] = rcOf(t)
@@ -454,7 +539,7 @@ function selMove(ev) {
   const key = dr + ',' + dc
   if (key === selDrag.key) return
   Object.assign(selDrag, { key, dr, dc })
-  ghost.value = key === '0,0' ? null : ghostOf(selDrag)
+  ghost.value = key === '0,0' && !selDrag.turned ? null : ghostOf(selDrag)
 }
 function selUp() {
   if (!selDrag) return
@@ -474,11 +559,11 @@ function selUp() {
     return
   }
   // 按着 Alt 点了一下选中的格子、鼠标没动：当减选用，把它去掉
-  if (d.key === '0,0') {
+  if (d.key === '0,0' && !d.turned) {
     if (d.copy && !d.moved) { const s = new Set(selIds.value); s.delete(d.id); selIds.value = s }
     return
   }
-  const st = transformState(d.base, d.ids, d.occ, d.origOf, shiftBy(d.dr, d.dc), { copy: d.copy, partial: true })
+  const st = transformState(d.base, d.ids, d.occ, d.origOf, dragFn(d), { copy: d.copy, partial: true })
   snapshot()
   applyMove(st)
   if (st.dropped || st.merged) {
@@ -502,9 +587,12 @@ function selKey(ev) {
     selIds.value = new Set()
     return true
   }
-  if (!ev.metaKey && !ev.ctrlKey && !ev.altKey) {
+  if (!ev.metaKey && !ev.ctrlKey && (!ev.altKey || selDrag)) {
     const turn = ev.code === 'KeyR' ? (ev.shiftKey ? 'ccw' : 'cw') : ev.code === 'KeyH' ? 'flipH' : ev.code === 'KeyV' ? 'flipV' : ''
     if (turn) { ev.preventDefault(); selTurn(turn); return true }
+    if (!selDrag && (ev.code === 'Minus' || ev.code === 'Equal' || ev.code === 'NumpadSubtract' || ev.code === 'NumpadAdd')) {
+      ev.preventDefault(); selScale(ev.code === 'Minus' || ev.code === 'NumpadSubtract' ? -1 : 1); return true
+    }
   }
   const d = ARROWS[ev.key]
   if (!d) return false
@@ -917,9 +1005,14 @@ const textOpen = ref([])
             <n-button :disabled="!selIds.size" title="左右翻转（H）" @click="selTurn('flipH')">⇋ 左右翻</n-button>
             <n-button :disabled="!selIds.size" title="上下翻转（V）" @click="selTurn('flipV')">⇅ 上下翻</n-button>
           </n-button-group>
+          <n-button-group v-if="brush === 'select'" size="small">
+            <n-button :disabled="!selIds.size" title="按比例缩小 25%（-）" @click="selScale(-1)">－ 缩小</n-button>
+            <n-button disabled style="min-width: 58px">{{ scalePct }}%</n-button>
+            <n-button :disabled="!selIds.size" title="按比例放大 25%（=）" @click="selScale(1)">＋ 放大</n-button>
+          </n-button-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖（跟着虚影走，蓝 = 放得下、橙 = 和原有格子融合、红 = 会去掉），按住 Alt 拖是复制；方向键挪一格，R / Shift+R 转、H / V 翻；Delete 删掉，Esc 取消{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
+          <span v-if="curBrush === 'select'" class="lab">拖框或点格子来选（按住 Shift 加选、Alt 拖框减选）；按住选中的格子拖（跟着虚影走，蓝 = 放得下、橙 = 和原有格子融合、红 = 会去掉），按住 Alt 拖是复制；拖的时候按 R / H / V 转虚影；方向键挪一格，R / Shift+R 转、H / V 翻、- / = 缩放；Delete 删掉，Esc 取消{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
           <span v-else class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited && dirty" class="lab">{{ current ? `在「${current.name}」上改过` : `已手动改 ${edited} 格` }}</span>
