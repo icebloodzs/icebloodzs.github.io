@@ -139,6 +139,7 @@ const typing = (ev) => { const t = ev.target; return Boolean(t && ((t.tagName ==
 function onKey(ev) {
   if (!editing.value) { holdErase.value = false; return }
   const down = ev.type === 'keydown'
+  if (down && selIds.value.size && !typing(ev) && selKey(ev)) return
   if (ev.key === 'Alt') { holdErase.value = down; if (down) ev.preventDefault(); return }
   // 认物理键位（ev.code）：开着中文输入法时按 E，ev.key 是 'Process' 不是 'e'，以前就是这样「有时按 E 没反应」（11-20 修）
   const isE = ev.code === 'KeyE' || ev.key === 'e' || ev.key === 'E'
@@ -212,7 +213,7 @@ const result = computed(() => {
 const edited = computed(() => erased.value.size + added.value.size + customCount.value)
 
 /** 画笔可选：擦除 + 每个摆成功的块 */
-const brushes = computed(() => [{ key: 'erase', label: '橡皮擦', color: '#6b7280' }].concat(
+const brushes = computed(() => [{ key: 'erase', label: '橡皮擦', color: '#6b7280' }, { key: 'select', label: '选区', color: '#0ea5e9' }].concat(
   auto.value.blocks.map((b, bi) => ({ key: bi, ok: b.ok, label: `补到${(S.AREAS.find((a) => a.key === b.area) || {}).label || b.area}「${b.text}」`, color: BLOCK_COLORS[bi % BLOCK_COLORS.length].fill }))
     .filter((x) => x.ok))
   .concat(custom.value.map((_ids, k) => ({ key: 'c' + k, label: `画到自定义${k + 1}`, color: BLOCK_COLORS[(auto.value.blocks.length + k) % BLOCK_COLORS.length].fill }))))
@@ -261,7 +262,7 @@ function paint(id) {
  * 鼠标没动也会「进入」旁边那格 —— 第一下总是出来两格就是这个（11-17 修）。
  */
 let lastXY = null
-function startPaint(id, ev) { if (!editing.value) return; dropFocus(); snapshot(); painting = true; lastXY = ev ? [ev.clientX, ev.clientY] : null; paint(id) }
+function startPaint(id, ev) { if (!editing.value || curBrush.value === 'select') return; dropFocus(); snapshot(); painting = true; lastXY = ev ? [ev.clientX, ev.clientY] : null; paint(id) }
 function overPaint(id, ev) {
   if (!painting) return
   if (ev) {
@@ -281,6 +282,125 @@ const hitMap = computed(() => {
   result.value.blocks.forEach((b, bi) => b.cells.forEach((c) => m.set(c.id, { ...c, block: b.ci ?? bi })))
   return m
 })
+
+/* ---------------- 选区：框选格子，拖动或方向键整体挪 ----------------
+ * 屏幕上 x = (c − r)·D/2、y = (c + r)·D/2，反过来拖了 (dx, dy) 就是 dr = (dy − dx)/D、dc = (dx + dy)/D，取整对齐格子。
+ * 挪的时候每一步都从按下那一刻的状态重算（不是一步步累加），撞到城池、出了范围、压到没选中的格子就停在上一个能放的位置。
+ * 自定义块里的格子原地换 id（序号不变）；填字块里的格子是「擦掉原位 + 补到新位」，序号照那块的读法重排。
+ */
+const selIds = ref(new Set())
+const marquee = ref(null)
+let selDrag = null
+const cellId = (r, c) => `${r}_${c}`
+const rcOf = (id) => id.split('_').map(Number)
+
+function moveState(base, ids, occ, origOf, dr, dc) {
+  const free = new Set(board.value.free.map((x) => x.id))
+  const sel = new Set(ids)
+  const mv = (id) => { const [r, c] = rcOf(id); return cellId(r + dr, c + dc) }
+  for (const id of ids) {
+    const t = mv(id)
+    if (!free.has(t) || (occ.has(t) && !sel.has(t))) return null
+  }
+  const e = new Set(base.e), a = new Map(base.a)
+  const inCustom = new Set(base.c.flat())
+  const src = new Map()
+  ids.forEach((id) => {
+    if (inCustom.has(id)) return
+    if (a.has(id)) { src.set(id, a.get(id)); a.delete(id) } else { src.set(id, origOf.get(id)); e.add(id) }
+  })
+  src.forEach((bi, id) => {
+    const t = mv(id)
+    if (origOf.get(t) === bi) e.delete(t)
+    else a.set(t, bi)
+  })
+  const c = base.c.map((arr) => arr.map((x) => (sel.has(x) ? mv(x) : x)))
+  return { e, a, c, ids: ids.map(mv) }
+}
+/** 按下那一刻的状态：挪动都从这里重算 */
+function selBase() {
+  const origOf = new Map()
+  auto.value.blocks.forEach((b, bi) => { if (b.ok) b.cells.forEach((c) => origOf.set(c.id, bi)) })
+  return { base: { e: new Set(erased.value), a: new Map(added.value), c: custom.value.map((b) => b.slice()) }, occ: new Set(hitMap.value.keys()), origOf, ids: Array.from(selIds.value) }
+}
+function applyMove(st) {
+  erased.value = st.e; added.value = st.a; custom.value = st.c; selIds.value = new Set(st.ids)
+}
+function svgPoint(ev) {
+  const svg = document.getElementById('shape-map')
+  const pt = svg.createSVGPoint()
+  pt.x = ev.clientX; pt.y = ev.clientY
+  return pt.matrixTransform(svg.getScreenCTM().inverse())
+}
+function selDown(ev) {
+  if (!editing.value || curBrush.value !== 'select') return
+  dropFocus()
+  const p = svgPoint(ev)
+  const g = ev.target.closest && ev.target.closest('[data-id]')
+  const id = g ? g.dataset.id : null
+  try { ev.currentTarget.setPointerCapture(ev.pointerId) } catch (e) {}
+  if (id && selIds.value.has(id)) {
+    snapshot()
+    selDrag = { mode: 'move', x0: p.x, y0: p.y, last: '0,0', ...selBase() }
+  } else {
+    selDrag = { mode: 'box', x0: p.x, y0: p.y, id, add: ev.shiftKey, keep: ev.shiftKey ? new Set(selIds.value) : new Set() }
+    if (!ev.shiftKey) selIds.value = new Set()
+  }
+}
+function selMove(ev) {
+  if (!selDrag) return
+  const p = svgPoint(ev)
+  const dx = p.x - selDrag.x0, dy = p.y - selDrag.y0
+  if (selDrag.mode === 'box') {
+    const box = { x: Math.min(p.x, selDrag.x0), y: Math.min(p.y, selDrag.y0), w: Math.abs(dx), h: Math.abs(dy) }
+    marquee.value = box
+    const s = new Set(selDrag.keep)
+    cells.value.forEach((c) => { if (c.seq && c.x >= box.x && c.x <= box.x + box.w && c.y >= box.y && c.y <= box.y + box.h) s.add(c.id) })
+    selIds.value = s
+    return
+  }
+  const dr = Math.round((dy - dx) / D.value), dc = Math.round((dx + dy) / D.value)
+  const key = dr + ',' + dc
+  if (key === selDrag.last) return
+  const st = moveState(selDrag.base, selDrag.ids, selDrag.occ, selDrag.origOf, dr, dc)
+  if (st) { applyMove(st); selDrag.last = key }
+}
+function selUp() {
+  if (!selDrag) return
+  // 没怎么拖 = 点了一下：点格子选它（按住 Shift 是加选 / 取消）
+  if (selDrag.mode === 'box' && (!marquee.value || marquee.value.w + marquee.value.h < 4) && selDrag.id && hitMap.value.has(selDrag.id)) {
+    const s = new Set(selDrag.keep)
+    if (selDrag.add && s.has(selDrag.id)) s.delete(selDrag.id); else s.add(selDrag.id)
+    selIds.value = s
+  }
+  selDrag = null
+  marquee.value = null
+}
+/** 方向键挪一格（屏幕上的上下左右），Delete 删掉选中的，Esc 取消选择；处理了返回 true */
+const ARROWS = { ArrowUp: [-1, -1], ArrowDown: [1, 1], ArrowLeft: [1, -1], ArrowRight: [-1, 1] }
+function selKey(ev) {
+  if (ev.key === 'Escape') { selIds.value = new Set(); return true }
+  if (ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault()
+    snapshot()
+    const { base, origOf, ids } = selBase()
+    const sel = new Set(ids)
+    ids.forEach((id) => { if (base.a.has(id)) base.a.delete(id); else if (origOf.has(id)) base.e.add(id) })
+    erased.value = base.e; added.value = base.a; custom.value = base.c.map((arr) => arr.filter((x) => !sel.has(x)))
+    selIds.value = new Set()
+    return true
+  }
+  const d = ARROWS[ev.key]
+  if (!d) return false
+  ev.preventDefault()
+  const { base, occ, origOf, ids } = selBase()
+  const st = moveState(base, ids, occ, origOf, d[0], d[1])
+  if (st) { snapshot(); applyMove(st) }
+  return true
+}
+// 换了画笔、关了自定义：选中的作废；图变了（撤销、改字）只留还在图上的
+watch([brush, editing], () => { if (brush.value !== 'select' || !editing.value) selIds.value = new Set() })
+watch(hitMap, (m) => { if (selIds.value.size && Array.from(selIds.value).some((id) => !m.has(id))) selIds.value = new Set(Array.from(selIds.value).filter((id) => m.has(id))) })
 
 const span = computed(() => board.value.size * D.value)
 /** svg 的可视范围：整块黑土就是整张；满屏截图只框住截图里那些格子 */
@@ -331,6 +451,7 @@ const cells = computed(() => {
       fill: color ? color.fill : '#f3f4f6',
       stroke: color ? color.fill : '#e2e4e8',
       text: color ? color.text : '',
+      sel: selIds.value.has(cell.id),
       seq: hit ? String(hit.seq).padStart(3, '0') : '',
       coord: hit ? `${hit.x},${hit.y}` : ''
     })
@@ -645,17 +766,18 @@ const textOpen = ref([])
           </n-radio-group>
           <n-button size="small" :disabled="!history.length" @click="undo">撤销</n-button>
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
-          <span class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
+          <span v-if="curBrush === 'select'" class="lab">拖一个框选中格子（按住 Shift 加选，点一格也能选）；按住选中的格子拖动，或用方向键一格格挪；Delete 删掉选中的，Esc 取消选择{{ selIds.size ? `　已选 ${selIds.size} 格` : '' }}</span>
+          <span v-else class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
         <span v-else-if="edited && dirty" class="lab">{{ current ? `在「${current.name}」上改过` : `已手动改 ${edited} 格` }}</span>
       </div>
       <div class="wrap">
-        <svg id="shape-map" :class="{ editing, erasing: editing && curBrush === 'erase' }" :width="box.w" :height="box.h" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
-          <g v-for="c in cells" :key="c.id" :class="{ paintable: editing }" @pointerdown.prevent="startPaint(c.id, $event)" @pointerenter="overPaint(c.id, $event)">
+        <svg id="shape-map" :class="{ editing, erasing: editing && curBrush === 'erase', selecting: editing && curBrush === 'select' }" :width="box.w" :height="box.h" @pointerdown="selDown" @pointermove="selMove" @pointerup="endPaint(); selUp()" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
+          <g v-for="c in cells" :key="c.id" :data-id="c.id" :class="{ paintable: editing, picked: c.sel }" @pointerdown.prevent="startPaint(c.id, $event)" @pointerenter="overPaint(c.id, $event)">
             <g :transform="`translate(${c.x},${c.y}) rotate(45)`">
               <rect
                 :x="-D / 2.83" :y="-D / 2.83" :width="D / 1.414" :height="D / 1.414" rx="2"
-                :fill="c.fill" :stroke="c.stroke" stroke-width="1"
+                :fill="c.fill" :stroke="c.sel ? '#0f172a' : c.stroke" :stroke-width="c.sel ? 2.5 : 1"
               />
             </g>
             <template v-if="c.seq">
@@ -675,6 +797,8 @@ const textOpen = ref([])
           </g>
           <text :x="city.x" :y="city.y + 8" text-anchor="middle"
             :font-size="Math.max(10, Math.round(city.d * 0.16))" font-weight="700" fill="#7c2d12">{{ city.label }}</text>
+          <rect v-if="marquee" :x="marquee.x" :y="marquee.y" :width="marquee.w" :height="marquee.h"
+            fill="rgba(14,165,233,0.12)" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="6 4" pointer-events="none" />
         </svg>
       </div>
     </n-card>
@@ -702,6 +826,9 @@ const textOpen = ref([])
 .edit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; }
 .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
+#shape-map.selecting { cursor: default; }
+#shape-map.selecting .picked { cursor: move; }
+#shape-map.selecting .paintable:hover rect { opacity: 1; }
 #shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
 .paintable:hover rect { opacity: 0.75; }
 .bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
