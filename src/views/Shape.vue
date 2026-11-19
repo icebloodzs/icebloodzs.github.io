@@ -125,8 +125,9 @@ const auto = computed(() => {
  * 改字后图会重新摆，手动改的就作废清空；只改参照坐标不影响格子，保留。
  * 序号照原来那块的读法重新编（左块逐行、右块逐列、上下按屏幕），报点顺序不会乱。
  */
-const editing = ref(false)
-const brush = ref('erase') // 'erase'、块下标（数字）、或者 'c0'~'c3'（自定义块）
+// 打开就是编辑状态（11-20 用户要的）；默认画笔用「选区」，随手点一下只是选中、不会把格子擦掉
+const editing = ref(true)
+const brush = ref('select') // 'erase'、'select'、块下标（数字）、或者 'c0'~'c5'（自定义块）
 /*
  * 按住 E 或 Alt（Mac 是 Option）临时变橡皮擦，松开回到原来的画笔；鼠标也跟着变成橡皮擦。
  * 焦点在输入框里时按 E 是打字，不算。
@@ -996,7 +997,7 @@ const textOpen = ref([])
       <!-- 自定义：摆好后手动擦掉 / 补上 -->
       <div class="edit-bar">
         <n-switch v-model:value="editing" size="small" />
-        <span class="lab" style="color:#4b5563">自定义（擦掉 / 补上）</span>
+        <span class="lab" style="color:#4b5563">自定义</span>
         <template v-if="editing">
           <n-radio-group v-model:value="brush" size="small">
             <n-radio-button v-for="b in brushes" :key="b.key" :value="b.key">
