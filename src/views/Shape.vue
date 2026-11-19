@@ -5,13 +5,16 @@
  * 和「黑土落位」的区别：这里的字是沿**游戏的 X/Y 网格**画的，格子边对边紧挨着，
  * 在菱形视角下看才是正的。这里只算「哪些格子要站人、每格的序号和坐标」，不排成员。
  */
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useMessage } from 'naive-ui'
+import { ref, computed, watch, inject, onMounted, onBeforeUnmount } from 'vue'
+import { useMessage, useDialog } from 'naive-ui'
+import { call } from '../api'
 import * as S from '../lib/shape'
 import * as P from '../lib/placement'
 import { download } from '../xlsx'
 
 const message = useMessage()
+const dialog = useDialog()
+const { me } = inject('app')
 
 /** 摆图形只在 7 级城池上摆：内 9×9 + 外 11 圈，边长 31 */
 const LEVEL = { label: '7级城池', city: 9, rings: 11 }
@@ -28,7 +31,6 @@ const AREAS = S.AREAS
 /** 快捷键：图案名一点就填进对应区域；示例一键把四块都填上，和小程序的快捷按钮同一套图案 */
 const PATTERNS = S.PATTERN_NAMES
 const CHAR_HINT = S.CHARS.join(' ')
-function fill(area, v) { texts.value[area] = texts.value[area] === v ? '' : v }
 /**
  * 默认示例：开发者在「满屏截图」上手动摆的一套（左 N、右 B、上 V、下「不」，共 159 格；N 沿用原来那套示例的 N），参照坐标 660,647，序号照他摆的顺序。
  * 都是自定义块、不靠填字生成；前两块空着，N、B、V+不 放在自定义 3~5，颜色就是红、橙、紫。
@@ -40,18 +42,49 @@ const EXAMPLE = [[], []].concat([["17_6", "17_7", "18_6", "18_7", "18_8", "19_7"
  * 序号按屏幕从上到下、从左到右。
  */
 const EXAMPLE_HEART = ["10_6", "6_10", "11_6", "10_7", "7_10", "6_11", "12_6", "11_7", "10_8", "8_10", "7_11", "6_12", "13_6", "12_7", "11_8", "10_9", "9_10", "8_11", "7_12", "6_13", "14_6", "13_7", "12_8", "11_9", "10_10", "9_11", "8_12", "7_13", "6_14", "15_6", "14_7", "13_8", "12_9", "11_10", "10_11", "9_12", "8_13", "7_14", "6_15", "16_6", "15_7", "14_8", "13_9", "12_10", "10_12", "9_13", "8_14", "7_15", "6_16", "17_6", "16_7", "15_8", "14_9", "13_10", "10_13", "9_14", "8_15", "7_16", "6_17", "18_6", "17_7", "16_8", "15_9", "14_10", "10_14", "9_15", "8_16", "7_17", "6_18", "19_6", "18_7", "17_8", "16_9", "15_10", "10_15", "9_16", "8_17", "7_18", "6_19", "20_6", "19_7", "18_8", "17_9", "16_10", "10_16", "9_17", "8_18", "7_19", "6_20", "21_6", "20_7", "19_8", "18_9", "17_10", "10_17", "9_18", "8_19", "7_20", "6_21", "21_7", "20_8", "19_9", "18_10", "10_18", "9_19", "8_20", "7_21", "21_8", "20_9", "19_10", "10_19", "9_20", "8_21", "21_9", "20_10", "10_20", "9_21", "21_10", "20_11", "11_20", "10_21", "21_11", "20_12", "12_20", "11_21", "21_12", "20_13", "13_20", "12_21", "21_13", "20_14", "14_20", "13_21", "21_14", "20_15", "15_20", "14_21", "21_15", "20_16", "16_20", "15_21", "21_16", "20_17", "17_20", "16_21", "21_17", "20_18", "18_20", "17_21", "21_18", "20_19", "19_20", "18_21", "21_19", "20_20", "19_21", "21_20", "20_21", "21_21"]
-function fillExample(which) {
-  texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' }
-  scope.value = 'screen'
-  baseX.value = '660'
-  baseY.value = '647'
-  const blocks = which === 'heart' ? [EXAMPLE_HEART] : EXAMPLE
-  // 等改字的 watch 先清完旧的手动修改，再铺示例
-  setTimeout(() => { snapshot(); custom.value = blocks.map((b) => b.slice()).concat(Array.from({ length: CUSTOM_N }, () => [])).slice(0, CUSTOM_N) }, 0)
-}
+/**
+ * 整块黑土特例：左下「183」、右下「I ♥ U」（爱心穿一支箭），照用户 11-19 给的参考图逐格搬过来，共 200 格。
+ * 位图按游戏网格画（行 → r、列 → c），和左下 / 右下填字的摆法一致：
+ *   左下：r = 21 + 行、c = 9 + 列，字头朝城池；
+ *   右下：先转 90° 顺着右下边排（第一个字 I 在靠下那一端），c = 21 + 行、r = 29 − 列。
+ * 序号也照这两块的读法：左块逐行、右块逐列从下往上。
+ */
+const LOVE_183 = [
+  '10111101111',
+  '10100100001',
+  '10100100001',
+  '10100100001',
+  '10111101111',
+  '10100100001',
+  '10100100001',
+  '10100100001',
+  '10111101111'
+]
+const LOVE_IU = [
+  '111100000100000100000001100011',
+  '111100001110001110000001100011',
+  '011000011111011111010001100011',
+  '011000011111111111001001100011',
+  '011001111111111111111101100011',
+  '011000001111111110001001100011',
+  '011000000111111100010001100011',
+  '011000000011111000000001100011',
+  '111100000001110000000001111111',
+  '111100000000100000000001111111'
+]
+const EXAMPLE_LOVE = (() => {
+  const left = []
+  LOVE_183.forEach((row, y) => { for (let x = 0; x < row.length; x += 1) if (row[x] === '1') left.push({ r: 21 + y, c: 9 + x }) })
+  left.sort((a, b) => a.r - b.r || a.c - b.c)
+  const right = []
+  LOVE_IU.forEach((row, y) => { for (let x = 0; x < row.length; x += 1) if (row[x] === '1') right.push({ r: 29 - x, c: 21 + y }) })
+  right.sort((a, b) => a.c - b.c || b.r - a.r)
+  return left.concat(right).map((x) => `${x.r}_${x.c}`)
+})()
 function clearAll() {
   texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' }
-  setTimeout(() => { custom.value = Array.from({ length: CUSTOM_N }, () => []) }, 0)
+  pick(null)
+  setTimeout(() => { custom.value = Array.from({ length: CUSTOM_N }, () => []); loadedSnap.value = '' }, 0)
 }
 
 const baseX = ref('660')
@@ -117,7 +150,8 @@ const history = ref([])
  * 自定义块：不靠填字，直接在格子上画出来的块（没填任何字也能画）。每块是一串格子 id，序号按画的先后编。
  * 改字不会清掉它们，只有「清空」「恢复原样」会。
  */
-const CUSTOM_N = 5
+/** 6 块，和 6 种颜色一一对应：特例按颜色存（见 currentSlots），加载回来颜色不变 */
+const CUSTOM_N = 6
 const custom = ref(Array.from({ length: CUSTOM_N }, () => []))
 const customCount = computed(() => custom.value.reduce((a, b) => a + b.length, 0))
 watch(texts, () => { erased.value = new Set(); added.value = new Map(); history.value = [] }, { deep: true })
@@ -368,7 +402,158 @@ function savePng() {
   }
   img.src = url
 }
+/* ---------------- 图案特例 ----------------
+ * 下拉里是开发者审核通过的图案（按范围分开），选一个整份铺进自定义块；谁都能把当前的图「保存为特例」，
+ * 开发者确认后所有人都能看到。开发者还能改名、用当前图覆盖（微调）、删除。
+ * 打开页面直接画上次选的（没选过就第一个），列表先用本机缓存，云端回来再换新。
+ * 云端还没有数据（或拉不到）时用下面三套内置的，和以前的「填示例」按钮一样。
+ */
+const pad = (slots) => Array.from({ length: CUSTOM_N }, (_v, i) => (Array.isArray(slots && slots[i]) ? slots[i].slice() : []))
+const BUILTIN = [
+  { _id: 'builtin-vnb', name: 'V + N + B + 不', scope: 'screen', slots: pad(EXAMPLE), status: 'ok', builtin: true },
+  { _id: 'builtin-heart', name: '爱心围城', scope: 'screen', slots: pad([EXAMPLE_HEART]), status: 'ok', builtin: true },
+  { _id: 'builtin-love', name: '183 + I♥U', scope: 'full', slots: pad([[], [], EXAMPLE_LOVE]), status: 'ok', builtin: true }
+].map((p) => ({ ...p, total: p.slots.reduce((n, x) => n + x.length, 0) }))
+
+const PRESET_CACHE = 'shape_presets_v1'
+const PICK_KEY = 'shape_preset_pick'
+const readJSON = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null') } catch (e) { return null } }
+const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)) } catch (e) {} }
+
+const cached = readJSON(PRESET_CACHE)
+const presetRows = ref(Array.isArray(cached) && cached.length ? cached : BUILTIN)
+const serverDev = ref(false)
+const isDev = computed(() => serverDev.value || Boolean(me && me.value && me.value.isDev))
+/** 每个范围记一个选中的：{ full: { id, name }, screen: { id, name } } */
+const picked = ref(readJSON(PICK_KEY) || {})
+const loadedSnap = ref('')
+
+const scopePresets = computed(() => presetRows.value.filter((p) => p.scope === scope.value))
+const current = computed(() => {
+  const want = picked.value[scope.value]
+  if (!want) return null
+  return scopePresets.value.find((p) => p._id === want.id) || scopePresets.value.find((p) => p.name === want.name) || null
+})
+const presetOptions = computed(() => {
+  const opt = (p) => ({ label: `${p.name}（${p.total} 格）`, value: p._id })
+  const ok = scopePresets.value.filter((p) => p.status === 'ok').map(opt)
+  const wait = scopePresets.value.filter((p) => p.status === 'pending').map((p) => ({ ...opt(p), label: `【待审】${p.name}（${p.total} 格）${isDev.value && p.by ? ' · ' + p.by.serverNo + '区' + p.by.alliance : ''}` }))
+  return wait.length ? [{ type: 'group', label: '审核通过', key: 'ok', children: ok }, { type: 'group', label: isDev.value ? '等你审核' : '我提交的（等开发者确认）', key: 'wait', children: wait }] : ok
+})
+/** 当前的图和加载进来的特例不一样了（填了字、擦补过、画过） */
+const dirty = computed(() => Object.values(texts.value).some(Boolean) || erased.value.size > 0 || added.value.size > 0 || JSON.stringify(custom.value) !== loadedSnap.value)
+
+function pick(p) {
+  picked.value = { ...picked.value, [scope.value]: p ? { id: p._id, name: p.name } : null }
+  writeJSON(PICK_KEY, picked.value)
+}
+function applyPreset(p) {
+  texts.value = { leftBottom: '', rightBottom: '', top: '', bottom: '', left: '', right: '' }
+  pick(p)
+  // 等改字的 watch 先清完旧的手动修改，再铺进来
+  setTimeout(() => { snapshot(); custom.value = pad(p.slots); loadedSnap.value = JSON.stringify(custom.value) }, 0)
+}
+function onPick(id) {
+  const p = scopePresets.value.find((x) => x._id === id)
+  if (!p) return
+  if (!dirty.value || !result.value.total) return applyPreset(p)
+  dialog.warning({ title: '换成这个特例？', content: '现在图上摆的会被替换掉（可以先「保存为特例」留着）。', positiveText: '换', negativeText: '不换', onPositiveClick: () => applyPreset(p) })
+}
+/** 打开页面 / 切换范围时：图上是空的、或者就是原样的特例，直接画这个范围选过的（没选过就第一个） */
+function autoDraw() {
+  if (result.value.total && dirty.value) return
+  const p = current.value || scopePresets.value.find((x) => x.status === 'ok')
+  if (p) applyPreset(p)
+}
+watch(scope, () => setTimeout(autoDraw, 0))
+
+async function fetchPresets() {
+  try {
+    const res = await call('shape.presets')
+    serverDev.value = Boolean(res.isDev)
+    const rows = res.rows && res.rows.length ? res.rows : BUILTIN
+    const before = current.value
+    presetRows.value = rows
+    writeJSON(PRESET_CACHE, rows)
+    // 画着的特例在云端被改过（开发者微调了），而且自己没动过：换成新版
+    const now = current.value
+    if (now && before && !dirty.value && JSON.stringify(now.slots) !== JSON.stringify(before.slots)) applyPreset(now)
+    else if (!result.value.total) autoDraw()
+  } catch (e) {
+    // 拉不到就用缓存 / 内置的，不打扰
+  }
+}
+onMounted(() => { autoDraw(); fetchPresets() })
+
+/** 当前图的最终格子，按颜色分成 6 串（顺序就是序号顺序） */
+function currentSlots() {
+  const slots = Array.from({ length: CUSTOM_N }, () => [])
+  result.value.blocks.forEach((b) => { if (b.ok) b.cells.forEach((c) => slots[(b.ci ?? 0) % CUSTOM_N].push(c.id)) })
+  return slots
+}
+function upsert(p) {
+  const rows = presetRows.value.filter((x) => !x.builtin && x._id !== p._id)
+  presetRows.value = rows.concat([p])
+  writeJSON(PRESET_CACHE, presetRows.value)
+}
+
+const nameBox = ref({ show: false, mode: 'new', name: '', busy: false })
+function openSave(mode) {
+  nameBox.value = { show: true, mode, name: mode === 'rename' && current.value ? current.value.name : '', busy: false }
+}
+async function confirmName() {
+  const box = nameBox.value
+  const name = box.name.trim()
+  if (!name) return message.warning('起个名字')
+  box.busy = true
+  try {
+    if (box.mode === 'rename') {
+      const res = await call('shape.presetEdit', { id: current.value._id, op: 'rename', name })
+      upsert(res.preset); pick(res.preset)
+      message.success('改好了')
+    } else {
+      const res = await call('shape.submit', { name, scope: scope.value, slots: currentSlots() })
+      upsert(res.preset)
+      applyPreset(res.preset)
+      message.success(res.preset.status === 'ok' ? '已保存，所有人的下拉里都有了' : '已提交，开发者确认后所有人都能看到')
+    }
+    box.show = false
+  } catch (e) {
+    message.error(e.message || '没保存上')
+  } finally {
+    box.busy = false
+  }
+}
+async function devOp(op) {
+  const p = current.value
+  if (!p) return
+  const run = async () => {
+    try {
+      const res = await call('shape.presetEdit', op === 'save' ? { id: p._id, op, scope: scope.value, slots: currentSlots() } : { id: p._id, op })
+      if (res.removed) {
+        presetRows.value = presetRows.value.filter((x) => x._id !== p._id)
+        writeJSON(PRESET_CACHE, presetRows.value)
+        pick(null)
+        message.success('已删除')
+      } else {
+        upsert(res.preset)
+        if (op === 'save') applyPreset(res.preset)
+        else pick(res.preset)
+        message.success(op === 'approve' ? '已通过，所有人都能看到了' : '已覆盖成现在的图')
+      }
+    } catch (e) {
+      message.error(e.message || '没成功')
+    }
+  }
+  if (op === 'remove') {
+    dialog.warning({ title: `${p.status === 'pending' ? '退回' : '删除'}「${p.name}」？`, content: '删了所有人的下拉里都没有了，恢复不了。', positiveText: '删除', negativeText: '取消', onPositiveClick: run })
+  } else run()
+}
+/** 按字摆：输入框下拉里给图案名，打了字就只留含这个字的 */
+const patternOpts = (v) => PATTERNS.filter((p) => !v || p.includes(v)).map((p) => ({ label: p, value: p }))
+const textOpen = ref([])
 </script>
+
 
 <template>
   <n-space vertical :size="16">
@@ -377,57 +562,55 @@ function savePng() {
         <n-button :disabled="!result.total" @click="savePng">下载图片</n-button>
       </template>
 
-      <n-alert type="info" :bordered="false" style="margin-bottom: 14px">
-        用 7 级城池的黑土格子拼字或图案，整幅图摆在城池下方：左下、右下各一块贴着下边，
-        正下方再放个图案，中间留出缝、左右对称；城池正左、正右也能各放一个图案。填了参照坐标之后每格都会标出实际坐标，照着报点位不会错。
-      </n-alert>
-
-      <n-form label-placement="left" :label-width="90" size="small">
-        <n-grid cols="1 s:2 l:3" responsive="screen" :x-gap="16">
-          <n-gi span="1 s:2 l:3">
-            <n-form-item label="参照坐标">
-              <n-space :size="8" align="center">
-                <n-input v-model:value="baseX" placeholder="X 如 521" style="width: 120px" />
-                <n-input v-model:value="baseY" placeholder="Y 如 1314" style="width: 120px" />
-                <span class="lab">填黑土最上面那一格的坐标，游戏里点一下那格就能看到</span>
-              </n-space>
-            </n-form-item>
-          </n-gi>
-          <n-gi v-for="a in AREAS" :key="a.key">
-            <n-form-item :label="a.label" :show-feedback="false" style="margin-bottom: 4px">
-              <n-input v-model:value="texts[a.key]" placeholder="字或图案名" clearable />
-            </n-form-item>
-            <!-- 快捷键：点一下填进这一块，再点一下清掉 -->
-            <div class="quick">
-              <n-tag v-for="p in PATTERNS" :key="p" size="small" round checkable :checked="texts[a.key] === p" @update:checked="fill(a.key, p)">{{ p }}</n-tag>
-            </div>
-          </n-gi>
-        </n-grid>
-      </n-form>
-      <n-space align="center" :size="10" style="margin: 2px 0 12px">
-        <n-button size="small" @click="fillExample()">填示例（满屏 · V + N + B + 不）</n-button>
-        <n-button size="small" @click="fillExample('heart')">满屏特例：爱心围城</n-button>
-        <n-button size="small" @click="clearAll">清空</n-button>
-        <span class="lab">字能写：{{ CHAR_HINT }}</span>
-        <span class="lab">图案：{{ PATTERNS.join('、') }}</span>
-      </n-space>
-
-      <n-space align="center" :size="14" style="margin-bottom: 10px">
-        <span class="lab">范围</span>
+      <!-- 第一行：范围 + 图案特例（打开页面就直接画上次选的那个） -->
+      <div class="bar">
         <n-radio-group v-model:value="scope" size="small">
           <n-radio-button value="full">整块黑土</n-radio-button>
           <n-radio-button value="screen">满屏截图（含 7 级城）</n-radio-button>
         </n-radio-group>
-        <span class="lab">{{ scope === 'screen' ? '只用游戏缩到最小、城池居中截一张图能看到的格子' : '整块黑土都能摆，截图可能拍不全' }}</span>
-      </n-space>
-      <n-space align="center" :size="14">
-        <span class="lab">格子大小</span>
-        <n-slider v-model:value="D" :min="20" :max="80" :step="2" style="width: 160px" />
-        <span v-if="corner" class="lab">
-          顶角 {{ corner.top }} · 底角 {{ corner.bottom }}
-        </span>
-        <span v-else class="lab">没填参照坐标，图上只有序号</span>
-      </n-space>
+        <n-select :value="current ? current._id : null" :options="presetOptions" placeholder="选一个图案特例" size="small"
+          filterable style="width: 260px" @update:value="onPick" />
+        <n-button size="small" :disabled="!result.total" @click="openSave('new')">保存为特例</n-button>
+        <template v-if="isDev && current && !current.builtin">
+          <n-button v-if="current.status === 'pending'" size="small" type="success" @click="devOp('approve')">通过</n-button>
+          <n-button size="small" :disabled="!dirty" @click="devOp('save')">用当前图覆盖</n-button>
+          <n-button size="small" @click="openSave('rename')">改名</n-button>
+          <n-button size="small" type="error" ghost @click="devOp('remove')">{{ current.status === 'pending' ? '退回' : '删除' }}</n-button>
+        </template>
+        <n-button size="small" @click="clearAll">清空</n-button>
+      </div>
+      <div class="lab" style="margin: 6px 0 12px">
+        {{ scope === 'screen' ? '只用游戏缩到最小、城池居中截一张图能看到的格子' : '整块黑土都能摆，截图可能拍不全' }}
+        <template v-if="current && current.status === 'pending'">
+          · <span style="color:#d97706">{{ isDev ? `待审核${current.by ? '：' + current.by.serverNo + '区' + current.by.alliance + (current.by.name ? ' · ' + current.by.name : '') : ''}，确认没问题点「通过」，可以先擦补再「用当前图覆盖」` : '你提交的，等开发者确认后所有人都能看到' }}</span>
+        </template>
+        <template v-else-if="isDev && current && !current.builtin && dirty"> · 改过了，点「用当前图覆盖」存回这个特例</template>
+      </div>
+
+      <!-- 第二行：参照坐标、格子大小 -->
+      <div class="bar">
+        <span class="lab">参照坐标</span>
+        <n-input v-model:value="baseX" placeholder="X 如 521" size="small" style="width: 100px" />
+        <n-input v-model:value="baseY" placeholder="Y 如 1314" size="small" style="width: 100px" />
+        <span class="lab">黑土最上面那一格的坐标</span>
+        <span class="lab" style="margin-left: 12px">格子大小</span>
+        <n-slider v-model:value="D" :min="20" :max="80" :step="2" style="width: 140px" />
+        <span class="lab">{{ corner ? `顶角 ${corner.top} · 底角 ${corner.bottom}` : '没填参照坐标，图上只有序号' }}</span>
+      </div>
+
+      <!-- 按字摆：收起来，要用再展开；6 个位置一套输入框，图案名在输入框的下拉里 -->
+      <n-collapse v-model:expanded-names="textOpen" style="margin-top: 12px">
+        <n-collapse-item name="text" :title="Object.values(texts).some(Boolean) ? '按字摆（已填）' : '按字摆：左下、右下、上、下、左、右各写字或选图案'">
+          <div class="areas">
+            <label v-for="a in AREAS" :key="a.key" class="area">
+              <span class="lab">{{ a.label }}</span>
+              <n-auto-complete v-model:value="texts[a.key]" :options="patternOpts(texts[a.key])" :get-show="() => true"
+                placeholder="字或图案" size="small" clearable />
+            </label>
+          </div>
+          <div class="lab" style="margin-top: 8px">字能写：{{ CHAR_HINT }}　图案：{{ PATTERNS.join('、') }}　左下、右下贴着下边，上下左右放图案；改字会清掉擦补，自定义块保留</div>
+        </n-collapse-item>
+      </n-collapse>
 
       <n-space v-if="blocks.length" :size="10" style="margin-top: 14px">
         <n-tag v-for="b in blocks" :key="b.area" :bordered="false" :color="{ color: b.color, textColor: '#fff' }">
@@ -452,7 +635,7 @@ function savePng() {
           <n-button size="small" :disabled="!edited" @click="resetEdits">恢复原样</n-button>
           <span class="lab">点格子或按住拖过去；按住 E 或 Alt（Option）临时变橡皮擦；不填字也能用「画到自定义」直接画，序号按画的先后编；改了字会重新摆，擦补填字块的会清掉，自定义块保留</span>
         </template>
-        <span v-else-if="edited" class="lab">已手动改 {{ edited }} 格</span>
+        <span v-else-if="edited && dirty" class="lab">{{ current ? `在「${current.name}」上改过` : `已手动改 ${edited} 格` }}</span>
       </div>
       <div class="wrap">
         <svg id="shape-map" :class="{ editing, erasing: editing && curBrush === 'erase' }" :width="box.w" :height="box.h" @pointerup="endPaint" @pointerleave="endPaint" :viewBox="`${box.x} ${box.y} ${box.w} ${box.h}`" xmlns="http://www.w3.org/2000/svg">
@@ -484,6 +667,14 @@ function savePng() {
       </div>
     </n-card>
 
+    <n-modal v-model:show="nameBox.show" preset="dialog" :title="nameBox.mode === 'rename' ? '改名' : '保存为特例'"
+      positive-text="保存" negative-text="取消" :loading="nameBox.busy" @positive-click="() => { confirmName(); return false }">
+      <n-input v-model:value="nameBox.name" maxlength="20" show-count placeholder="给这个图案起个名字，比如「183 + I♥U」" @keyup.enter="confirmName" />
+      <div v-if="nameBox.mode === 'new'" class="lab" style="margin-top: 8px">
+        存的是现在图上的 {{ result.total }} 格（{{ scope === 'screen' ? '满屏截图' : '整块黑土' }}）。{{ isDev ? '你是开发者，保存后直接给所有人。' : '开发者确认后，所有人都能在下拉里加载。' }}
+      </div>
+    </n-modal>
+
     <n-card v-if="list.length && origin" :bordered="false" title="点位清单">
       <template #header-extra>
         <n-button size="small" @click="copyList">复制清单</n-button>
@@ -501,13 +692,16 @@ function savePng() {
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
 #shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
 .paintable:hover rect { opacity: 0.75; }
-.quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px 90px; }
+.bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.areas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 16px; }
+.area { display: flex; align-items: center; gap: 8px; }
+.area .lab { width: 32px; flex: none; }
 @media (max-width: 639px) { .edit-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 12px; }
 .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
 #shape-map.editing { touch-action: none; cursor: crosshair; user-select: none; }
 #shape-map.editing.erasing { cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'><g transform='rotate(-45 12 12)'><rect x='3' y='8' width='18' height='9' rx='2' fill='%23f9a8d4' stroke='%23374151' stroke-width='1.5'/><rect x='3' y='8' width='7' height='9' rx='2' fill='%23e5e7eb' stroke='%23374151' stroke-width='1.5'/></g></svg>") 5 19, cell; }
 .paintable:hover rect { opacity: 0.75; }
-.quick { margin-left: 0; } }
+.areas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 /* 手机：整张图缩到屏幕宽度（要看细节双指放大）；下载图片读的是 svg 自身尺寸，不受影响 */
 @media (max-width: 767px) {
   #shape-map { width: 100%; height: auto; }
