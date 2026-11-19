@@ -159,6 +159,8 @@ const PATTERNS = {
  * 中间自然就空出一条缝，左右和下方三块连起来是对称的。
  */
 const SIDE_DOWN = 1.0
+/** 左下、右下贴好下边之后，整体再往城池挪几格（见 placeBitmap 最后） */
+const SIDE_INSET = 1
 /**
  * 正下方的图案和城池之间至少空几圈。
  * 只是「往下挪一点留条缝」，不是一路挪到底角 —— 底角那一片正是左下、右下两块要贴的边。
@@ -622,7 +624,18 @@ function placeBitmap(board, rawRows, area, occupied, target) {
   }
   if (!candidates.length) return null
   candidates.sort((a, b) => (target ? a.away - b.away : 0) || a.off - b.off || a.dist - b.dist)
-  return candidates[0]
+  /*
+   * 左下、右下贴死下边后，整体再往城池挪 SIDE_INSET 格（2026-11-20 用户要的）：左下是 r 往小挪、右下是 c 往小挪。
+   * 挪进去放不下（满屏截图时本来就贴着城池）就照旧。对面已经摆好的话，target 是照它镜像的，已经跟着挪了，不用再挪。
+   */
+  const best = candidates[0]
+  if (!target && (area === 'leftBottom' || area === 'rightBottom')) {
+    const dr = area === 'leftBottom' ? SIDE_INSET : 0
+    const dc = area === 'rightBottom' ? SIDE_INSET : 0
+    const moved = candidates.find((x) => x.r0 === best.r0 - dr && x.c0 === best.c0 - dc)
+    if (moved) return moved
+  }
+  return best
 }
 
 /** 菱形格子在屏幕上只和斜对角的四个格子共边 */

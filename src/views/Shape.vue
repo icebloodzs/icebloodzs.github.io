@@ -389,7 +389,8 @@ async function savePng() {
   const xml = svg ? new XMLSerializer().serializeToString(svg) : ''
   D.value = keep
   if (!xml) return
-  const fileName = (current.value ? current.value.name.replace(/[\\/:*?"<>|]+/g, ' ').trim() || '摆图形' : '摆图形') + '.png'
+  // 空格去掉：有的浏览器会把文件名里的空格换成下划线（11-20 用户碰到的）
+  const fileName = (current.value ? current.value.name.replace(/[\\/:*?"<>|\s]+/g, '') || '摆图形' : '摆图形') + '.png'
   const blob = new Blob(['<?xml version="1.0"?>' + xml], { type: 'image/svg+xml;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const img = new Image()
