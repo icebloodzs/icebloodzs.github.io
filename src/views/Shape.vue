@@ -10,7 +10,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import { call } from '../api'
 import * as S from '../lib/shape'
 import * as P from '../lib/placement'
-import { download } from '../xlsx'
+import { download, buildExcel } from '../xlsx'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -762,6 +762,23 @@ async function copyList() {
   }
 }
 
+/** 点位清单下载成 Excel（序号 / 区域 / 内容 / 坐标），文件名跟下载图片一样：画着特例就用特例名 */
+const xlsxBusy = ref(false)
+async function saveXlsx() {
+  if (xlsxBusy.value) return
+  xlsxBusy.value = true
+  try {
+    const aoa = [['序号', '区域', '内容', '坐标']].concat(list.value.map((r) => [r.seq, r.area, r.text, r.coord]))
+    const base = current.value ? current.value.name.replace(/[\\/:*?"<>|\s]+/g, '') || '摆图形' : '摆图形'
+    await buildExcel({ aoa, sheetName: '点位清单', name: base + '点位清单.xlsx' })
+    message.success(`已下载 ${list.value.length} 个点位`)
+  } catch (e) {
+    message.error(e.message || '下载失败')
+  } finally {
+    xlsxBusy.value = false
+  }
+}
+
 /** 下载用最大的格子画（字最清楚），文件名：画着特例就用特例名 */
 const D_MAX = 80
 async function savePng() {
@@ -1094,7 +1111,10 @@ const textOpen = ref([])
 
     <n-card v-if="list.length && origin" :bordered="false" title="点位清单">
       <template #header-extra>
-        <n-button size="small" @click="copyList">复制清单</n-button>
+        <n-space :size="8">
+          <n-button size="small" @click="copyList">复制清单</n-button>
+          <n-button size="small" type="primary" secondary :loading="xlsxBusy" @click="saveXlsx">下载 Excel</n-button>
+        </n-space>
       </template>
       <n-data-table :columns="listCols" :data="list" :max-height="360" size="small" :row-key="(r) => r.seq" virtual-scroll />
     </n-card>
