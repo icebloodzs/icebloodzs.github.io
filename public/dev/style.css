@@ -144,3 +144,6 @@ th.sortable .muted { opacity: 0.45; font-size: 11px; }
 /* 筛选条：标题下面单独一行，靠左排；清理、导入这类操作按钮用 .push 顶到最右 */
 .filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: flex-start; margin: 4px 0 12px; }
 .filters .push { margin-left: auto; }
+/* 同盟福利：近 14 天每天的打开次数小柱子 */
+.spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 24px; vertical-align: middle; }
+.spark i { display: block; width: 5px; border-radius: 1px; }

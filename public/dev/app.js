@@ -988,10 +988,161 @@ const ROLE_NAME = { super: '超管', admin: '管理员', member: '成员' }
 // ---------------- 同盟福利 ----------------
 
 /** 实时宝藏分享页的可见范围。存在 appSettings/treasure，小程序分享页每次打开都现查，切了立刻生效 */
-async function renderWelfare() {
-  const d = await call('dev.treasureSettings')
+/* ---------------- 同盟福利：哪些盟在用 ----------------
+ * 数据来自 dev.treasureUsage（云函数 handlers/treasure.js）：打开次数是「同一个人 10 分钟内算一次」，
+ * 11-20 才开始记，之前的没有。手动新增、采集任务、采集文件是一直都有的。
+ */
+const welFilter = { show: 'used', name: '' }
+const WEL_COLS = [
+  { label: '同盟', key: 'name', sort: (r) => r.name },
+  { label: '今天', key: 'today', sort: (r) => r.usage.today.views, num: true },
+  { label: '近 7 天', key: 'd7', sort: (r) => r.usage.d7.views, num: true },
+  { label: '近 30 天', key: 'd30', sort: (r) => r.usage.d30.views, num: true },
+  { label: '近 14 天每天', key: 'trend' },
+  { label: '最后打开', key: 'last', sort: (r) => (r.usage.lastAt ? new Date(r.usage.lastAt).getTime() : null) },
+  { label: '分享页被打开', key: 'share', sort: (r) => r.usage.d30.shareViews, num: true },
+  { label: '手动新增', key: 'manual', sort: (r) => r.manual.count, num: true },
+  { label: '采集', key: 'task', sort: (r) => (r.task && r.task.startedAt) || null },
+  { label: '宝藏文件', key: 'file', sort: (r) => (r.file && r.file.updatedAt) || null }
+]
+const SVC_COLS = [
+  { label: '服务', key: 'title', sort: (r) => r.title },
+  { label: '对应文件', key: 'ally', sort: (r) => `${r.serverNo}_${r.allianceName}` },
+  { label: '状态', key: 'enabled', sort: (r) => (r.enabled ? 1 : 0) },
+  { label: '今天', key: 'today', sort: (r) => r.usage.today.views, num: true },
+  { label: '近 7 天', key: 'd7', sort: (r) => r.usage.d7.views, num: true },
+  { label: '近 30 天', key: 'd30', sort: (r) => r.usage.d30.views, num: true },
+  { label: '最后打开', key: 'last', sort: (r) => (r.usage.lastAt ? new Date(r.usage.lastAt).getTime() : null) }
+]
+const TASK_NAME = { queued: '排队中', starting: '启动中', qr: '等扫码', entering: '进游戏', scanning: '采集中', done: '完成', failed: '失败', canceled: '已取消' }
+
+/** 精确一点的「多久以前」：几分钟 / 几小时 / 几天 */
+function agoFine(v) {
+  if (!v) return '—'
+  const m = Math.floor((Date.now() - new Date(v).getTime()) / 60000)
+  if (m < 1) return '刚刚'
+  if (m < 60) return m + ' 分钟前'
+  if (m < 1440) return Math.floor(m / 60) + ' 小时前'
+  return Math.floor(m / 1440) + ' 天前'
+}
+
+/** 近 14 天每天的打开次数，小柱子 */
+function sparkBars(arr) {
+  const max = Math.max(1, ...arr)
+  return `<span class="spark" title="${arr.join(' / ')}（从 14 天前到今天）">${arr
+    .map((v) => `<i style="height:${v ? Math.max(2, Math.round((v / max) * 22)) : 1}px;background:${v ? 'var(--brand)' : '#d9dce3'}"></i>`)
+    .join('')}</span>`
+}
+
+const usedAny = (r) => r.usage.d30.views > 0 || r.usage.d30.shareViews > 0 || r.manual.count > 0 || Boolean(r.task)
+const views = (u) => (u.views ? `${num(u.views)}<br /><span class="muted tiny">${u.users} 人${u.days !== undefined && u.days > 1 ? ' · ' + u.days + ' 天' : ''}</span>` : '<span class="muted">—</span>')
+
+function welfareUsageHtml(d) {
+  const kw = welFilter.name.trim().toLowerCase()
+  const picked = d.rows.filter((r) => {
+    if (welFilter.show === 'used' && !usedAny(r)) return false
+    if (welFilter.show === 'idle' && usedAny(r)) return false
+    if (welFilter.show === 'collect' && !r.canCollect) return false
+    if (kw && !`${r.name} ${r.serverNo}`.toLowerCase().includes(kw)) return false
+    return true
+  })
+  const rows = applySort('wel', WEL_COLS, picked)
+  const body = rows.length
+    ? rows
+        .map((r) => {
+          const t = r.task
+          const taskHtml = t
+            ? `<span class="tag ${t.status === 'done' ? 'green' : t.status === 'failed' ? 'red' : 'amber'} tiny">${esc(TASK_NAME[t.status] || t.status)}</span>${t.status === 'done' ? ' 找到 ' + num(t.found) : ''}<br /><span class="muted tiny">${agoFine(t.startedAt)}${t.todayCount ? ' · 今天 ' + t.todayCount + ' 次' : ''}</span>`
+            : `<span class="muted tiny">${r.canCollect ? '能采集，没发起过' : '—'}</span>`
+          const f = r.file
+          const fileHtml = f
+            ? `${agoFine(f.updatedAt)}<br /><span class="muted tiny">${num(f.rows)} 条</span>`
+            : '<span class="muted">—</span>'
+          return `<tr>
+            <td><b>${esc(r.name)}</b>${r.active ? '' : ' <span class="tag red tiny">已停用</span>'}${r.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${r.isDemo ? ' <span class="tag tiny">演示</span>' : ''}<br /><span class="muted tiny">${esc(r.serverNo)} 区 · ${esc(r.levelName)}${r.trial ? '（试用）' : ''}</span>${r.canCollect ? ' <span class="tag purple tiny" title="正式开发版：能在浏览器版发起采集">能采集</span>' : ''}</td>
+            <td class="num">${views(r.usage.today)}</td>
+            <td class="num">${views(r.usage.d7)}</td>
+            <td class="num">${views(r.usage.d30)}</td>
+            <td>${sparkBars(r.usage.trend)}</td>
+            <td class="tiny">${agoFine(r.usage.lastAt)}</td>
+            <td class="num">${r.usage.d30.shareViews ? num(r.usage.d30.shareViews) : '<span class="muted">—</span>'}</td>
+            <td class="num">${r.manual.count ? `${num(r.manual.count)}<br /><span class="muted tiny">${r.manual.people} 人 · ${agoFine(r.manual.last)}</span>` : '<span class="muted">—</span>'}</td>
+            <td class="tiny">${taskHtml}</td>
+            <td class="tiny">${fileHtml}</td>
+          </tr>`
+        })
+        .join('')
+    : `<tr><td colspan="${WEL_COLS.length}" class="empty">没有符合条件的同盟</td></tr>`
+
+  const real = d.rows.filter((r) => !r.isTest && !r.isDemo)
+  const used7 = real.filter((r) => r.usage.d7.views > 0 || r.usage.d7.shareViews > 0).length
+  const used30 = real.filter(usedAny).length
+  const todayViews = real.reduce((t, r) => t + r.usage.today.views, 0)
+  const todayUsers = real.reduce((t, r) => t + r.usage.today.users, 0)
+  const d7Views = real.reduce((t, r) => t + r.usage.d7.views, 0)
+  const d7Users = real.reduce((t, r) => t + r.usage.d7.users, 0)
+  const fresh = real.filter((r) => r.file && r.file.updatedAt && Date.now() - r.file.updatedAt < 86400000).length
+
+  const sel = (pairs, cur) => pairs.map(([v, t]) => `<option value="${v}"${v === cur ? ' selected' : ''}>${t}</option>`).join('')
+  const svcRows = applySort('svc', SVC_COLS, d.services)
+  const svcBody = svcRows.length
+    ? svcRows
+        .map((r) => `<tr>
+            <td><b>${esc(r.title || '（没起名）')}</b></td>
+            <td class="tiny">${esc(r.serverNo)}_${esc(r.allianceName)}.json</td>
+            <td>${r.enabled ? '<span class="tag green tiny">在用</span>' : '<span class="tag tiny">已停用</span>'}</td>
+            <td class="num">${views(r.usage.today)}</td>
+            <td class="num">${views(r.usage.d7)}</td>
+            <td class="num">${views(r.usage.d30)}</td>
+            <td class="tiny">${agoFine(r.usage.lastAt)}</td>
+          </tr>`)
+        .join('')
+    : `<tr><td colspan="${SVC_COLS.length}" class="empty">还没有采集服务</td></tr>`
+
+  return `
+    <div class="grid g4" style="margin-bottom:16px">
+      ${statCard('近 7 天在用的盟', num(used7), `近 30 天有动静 ${used30} 个（不含测试 / 演示盟）`)}
+      ${statCard('今天打开', num(todayViews), `${todayUsers} 人`)}
+      ${statCard('近 7 天打开', num(d7Views), `按盟累加 ${d7Users} 人`)}
+      ${statCard('宝藏文件 24 小时内更新', num(fresh), '个盟有新采集的数据')}
+    </div>
+    <div class="card">
+      <h3>哪些盟在用（${rows.length}${rows.length !== d.rows.length ? ' / ' + d.rows.length : ''}）</h3>
+      <div class="filters">
+        <select id="wShow">${sel([['used', '近 30 天有动静的'], ['idle', '没动静的'], ['collect', '能发起采集的'], ['', '全部同盟']], welFilter.show)}</select>
+        <input id="wName" placeholder="搜盟名 / 区" value="${esc(welFilter.name)}" style="width:150px" />
+      </div>
+      <p class="hint">
+        「打开」= 成员在小程序或浏览器版打开实时宝藏，同一个人 10 分钟内只算一次（页面自动刷新不重复算），下面小字是去重后的人数和有几天打开过。
+        打开记录从 ${esc(d.since || '今天')} 开始有，之前的没记。「分享页被打开」= 别人点开这个盟分享出去的宝藏卡片（近 30 天）。
+        「手动新增」是现在库里还在的条数（过期被删的不算）。「采集」是这个盟最近一次发起的采集任务，「宝藏文件」是采集程序给这个盟传的数据。点表头可以排序。
+      </p>
+      <table>
+        ${thead('wel', WEL_COLS)}
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>采集服务（${d.services.length}）</h3>
+      <p class="hint">给不在盟里的人用的单独宝藏页（小程序「同盟福利」顶上的「采集服务管理」里建的），这里看打开次数；没登录打开的人数不准，只看次数。</p>
+      <table>
+        ${thead('svc', SVC_COLS)}
+        <tbody>${svcBody}</tbody>
+      </table>
+    </div>`
+}
+
+async function renderWelfare(refresh = true) {
+  if (refresh || !cache.welfare) {
+    // 使用情况拉不到（接口还没部署 / 出错）时，下面的分享开关照样能用
+    const [settings, usage] = await Promise.all([call('dev.treasureSettings'), call('dev.treasureUsage').catch((e) => ({ error: e.message }))])
+    cache.welfare = { settings, usage }
+  }
+  if (!sortState('wel').key) sorts.wel = { key: 'd7', dir: -1 }
+  const d = cache.welfare.settings
   const on = d.shareMembersOnly
-  $('body').innerHTML = `
+  const u = cache.welfare.usage
+  $('body').innerHTML = (u.error ? `<div class="card"><h3>哪些盟在用</h3><p class="hint danger">拉不到使用情况：${esc(u.error)}</p></div>` : welfareUsageHtml(u)) + `
     <div class="card">
       <h3>实时宝藏分享页</h3>
       <p class="hint">
@@ -1016,6 +1167,13 @@ async function renderWelfare() {
       toast(e.message)
     }
   }
+  if (u.error) return
+  const redraw = () => renderWelfare(false)
+  $('wShow').onchange = (e) => { welFilter.show = e.target.value; redraw() }
+  const box = $('wName')
+  box.onchange = (e) => { welFilter.name = e.target.value; redraw() }
+  box.onkeydown = (e) => { if (e.key === 'Enter') { welFilter.name = e.target.value; redraw() } }
+  bindSort(redraw)
 }
 
 async function renderDemo() {
