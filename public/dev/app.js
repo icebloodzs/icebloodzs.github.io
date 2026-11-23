@@ -637,7 +637,7 @@ async function renderAlliances(refresh = true) {
     const idle = a.lastLoginAt ? (Date.now() - new Date(a.lastLoginAt).getTime()) / 86400000 : Infinity
     if (allyFilter.login === '7' && !(idle <= 7)) return false
     if (allyFilter.login === '30' && !(idle > 30)) return false
-    if (kw && !(`${a.name} ${a.serverNo} ${a.ownerName || ''}`.toLowerCase().includes(kw))) return false
+    if (kw && !(`${a.name} ${a.serverNo} ${a.leaderName || ''} ${a.ownerName || ''}`.toLowerCase().includes(kw))) return false
     return true
   })
 
@@ -656,7 +656,7 @@ async function renderAlliances(refresh = true) {
                   ? `<span class="tag amber">${a.daysLeft} 天</span>`
                   : `${a.daysLeft} 天`
           return `<tr>
-            <td><b>${esc(a.name)}</b>${a.active ? '' : ' <span class="tag red tiny">已停用</span>'}${a.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${a.isDemo ? ' <span class="tag tiny">演示</span>' : ''}${a.ownerName ? '<br /><span class="muted tiny">盟主 ' + esc(a.ownerName) + '</span>' : ''}</td>
+            <td><b>${esc(a.name)}</b>${a.active ? '' : ' <span class="tag red tiny">已停用</span>'}${a.isTest ? ' <span class="tag amber tiny">测试</span>' : ''}${a.isDemo ? ' <span class="tag tiny">演示</span>' : ''}${a.leaderName || a.ownerName ? '<br /><span class="muted tiny">' + [a.leaderName ? '盟主 ' + esc(a.leaderName) : '', a.ownerName ? '超管 ' + esc(a.ownerName) : ''].filter(Boolean).join(' · ') + '</span>' : ''}</td>
             <td class="tiny">${esc(a.serverNo)} 区<br /><span class="muted">${esc(a.season)}</span></td>
             <td>${a.level ? '<span class="tag purple">' + esc(a.levelName) + '</span>' : '<span class="muted">未设置</span>'}${a.trial ? ' <span class="tag amber tiny" title="建盟自动送的开发版试用，不是付费">试用</span>' : ''}${extrasText(a)}</td>
             <td class="tiny">${a.memberExpiresAt ? day(a.memberExpiresAt) : '—'}<br />${left}</td>
