@@ -313,6 +313,7 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
         <n-descriptions-item label="定位">
           <n-tag v-if="position" size="small" :type="position[1]" :bordered="false">{{ position[0] }}</n-tag>
           <span v-else>—</span>
+          <span v-if="season && season.limitsNote" style="margin-left: 8px; font-size: 12px; opacity: .6">（仅供参考）</span>
         </n-descriptions-item>
         <n-descriptions-item label="最后更新">{{ member.heroPowerUpdatedAt ? when(member.heroPowerUpdatedAt) : '从未上传' }}</n-descriptions-item>
       </n-descriptions>

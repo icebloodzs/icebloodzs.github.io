@@ -84,6 +84,7 @@ const bands = computed(() => {
       <n-space>
         <n-tag v-for="b in bands" :key="b[0]" :type="b[2]" :bordered="false">{{ b[0] }} {{ b[1] }}</n-tag>
       </n-space>
+      <div v-if="season && season.limitsNote" class="lab" style="margin-top: 8px">{{ season.limitsNote }}</div>
       <n-space align="center" :size="10" style="margin-top: 12px">
         <span class="lab">只看</span>
         <n-radio-group v-model:value="posFilter" size="small">
