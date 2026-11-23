@@ -11,7 +11,8 @@ const OPTS = [
   { label: '没填集结值', value: 'bonus' },
   { label: '没填兵力', value: 'troops' },
   { label: '没传属性', value: 'attrs' },
-  { label: '没填出征数量', value: 'march' }
+  { label: '没填出征数量', value: 'march' },
+  { label: '没填赛季评分', value: 'score' }
 ]
 
 // 「缺什么」只列勾上的条件：没勾的那项就算缺也不显示，免得和筛选对不上
@@ -19,7 +20,9 @@ const LACKS = [
   { key: 'bonus', text: '没填集结', type: 'warning', test: (r) => r.maxBonus == null },
   { key: 'troops', text: '没填兵力', type: 'warning', test: (r) => !r.troopsComplete },
   { key: 'attrs', text: '没传属性', type: 'error', test: (r) => !r.profileComplete },
-  { key: 'march', text: '没填出征', type: 'default', test: (r) => r.maxMarch == null }
+  { key: 'march', text: '没填出征', type: 'default', test: (r) => r.maxMarch == null },
+  // 跟赛季评分页的「未录入」同一个口径：武将战力没传（实力缺了是名单的事，不算成员漏填）
+  { key: 'score', text: '没填评分', type: 'info', test: (r) => r.heroPower == null }
 ]
 const lacksOf = (r) => LACKS.filter((l) => picked.value.includes(l.key) && l.test(r))
 
@@ -41,7 +44,7 @@ const columns = [nameCol, lackCol, boundCol, bigCol('战力', 'power'), timeCol(
   <div class="page">
     <TableCard
       title="遗漏排查"
-      desc="找出还没填集结值、没填兵力、没传属性截图的人。勾选条件是「或」的关系。"
+      desc="找出还没填集结值、没填兵力、没传属性截图、没传武将战力（赛季评分）的人。勾选条件是「或」的关系。"
       :columns="columns"
       :rows="rows"
       :scroll-x="860"
