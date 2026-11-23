@@ -26,6 +26,8 @@ import Attendance from './views/Attendance.vue'
 import FullData from './views/FullData.vue'
 import GuanDu from './views/GuanDu.vue'
 import Welfare from './views/Welfare.vue'
+import Groups from './views/Groups.vue'
+import Points from './views/Points.vue'
 import SideNav from './views/SideNav.vue'
 
 const VIEWS = {
@@ -38,6 +40,8 @@ const VIEWS = {
   missing: { label: '遗漏排查', icon: '🔍', comp: Missing },
   season: { label: '赛季评分', icon: '🏅', comp: Season },
   attendance: { label: '考勤功勋', icon: '🗓️', comp: Attendance },
+  points: { label: '积分考勤', icon: '🎯', comp: Points },
+  groups: { label: '同盟分组', icon: '🧩', comp: Groups },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
   guandu: { label: '官渡之战', icon: '⚔️', comp: GuanDu },
   welfare: { label: '同盟福利', icon: '🎁', comp: Welfare },
@@ -113,7 +117,7 @@ const can = (key) => {
   return !f || f[key] !== false
 }
 /** 菜单项对应的付费功能：等级不够（或者老客户单独没开）的就不摆出来 */
-const VIEW_FEATURE = { attendance: 'attendance', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice', welfare: 'collect' }
+const VIEW_FEATURE = { attendance: 'attendance', points: 'points', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice', welfare: 'collect' }
 const shown = (k) => {
   if (!VIEW_FEATURE[k]) return true
   // 同盟福利（采集）只给正式开发版：服务端明确给了 collect: true 才显示，没给（老版本云函数）也不显示
@@ -152,7 +156,7 @@ const menuOptions = computed(() => selfOnly.value
     type: 'group',
     label: '成员数据',
     key: 'g1',
-    children: ['roster', 'import', 'fulldata', 'attendance', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
+    children: ['roster', 'groups', 'import', 'fulldata', 'attendance', 'points', 'bonus', 'attrs', 'missing', 'season'].filter(shown).map((k) => ({
       label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon)
     }))
   },
