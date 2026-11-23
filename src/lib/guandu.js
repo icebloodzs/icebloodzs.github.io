@@ -76,6 +76,85 @@ export function progressOf(plan) {
   return { done, total, missing }
 }
 
+/*
+ * 阶段调动：plan.moves[k][memberId] = 组 id，意思是「从第 k 阶段起调到这个组」，后面的阶段跟着走，除非再调。
+ * moves[0] 一直是空的（第一阶段就是分组名单本身）。整个人调，不拆队伍。老排表没有 moves，当成没人调。
+ */
+export const PH_CN = ['一', '二', '三']
+export function baseGroupOf(plan, id) {
+  const g = plan.groups.find((x) => x.members.includes(id))
+  return g ? g.id : null
+}
+/** 第 k 阶段这个人在哪个组（没进组的返回 null） */
+export function groupAt(plan, id, k) {
+  let gid = baseGroupOf(plan, id)
+  if (!gid) return null
+  for (let i = 1; i <= k; i++) { const to = plan.moves && plan.moves[i] && plan.moves[i][id]; if (to) gid = to }
+  return gid
+}
+/** 第 k 阶段每组的人：{ 组id: [成员id] }。原组没走的按原顺序（车头在前），调进来的排在后面 */
+export function rosterAt(plan, k) {
+  const out = {}
+  plan.groups.forEach((g) => { out[g.id] = [] })
+  const moved = []
+  plan.groups.forEach((g) => g.members.forEach((id) => {
+    const at = groupAt(plan, id, k)
+    if (at === g.id) out[g.id].push(id)
+    else if (out[at]) moved.push([at, id])
+  }))
+  moved.forEach(([at, id]) => out[at].push(id))
+  return out
+}
+/** 第 k 阶段刚发生的调动：[{ id, from, to }]（k = 0 没有） */
+export function movesAt(plan, k) {
+  if (!k || !plan.moves || !plan.moves[k]) return []
+  return Object.keys(plan.moves[k]).map((id) => ({ id, from: groupAt(plan, id, k - 1), to: plan.moves[k][id] })).filter((m) => m.from && m.from !== m.to)
+}
+/** 一个人在各阶段的调动，给名单上打标：[{ k, to }] */
+export function movesOf(plan, id) {
+  const out = []
+  ;[1, 2].forEach((k) => { const to = plan.moves && plan.moves[k] && plan.moves[k][id]; if (to && groupAt(plan, id, k - 1) !== to) out.push({ k, to }) })
+  return out
+}
+/** 清理：不在任何组的人、调去不存在的组、和上一阶段同组（等于没调）的都删掉 */
+export function normalizeMoves(plan) {
+  const ids = new Set(plan.groups.map((g) => g.id))
+  const mv = [{}, {}, {}]
+  const src = plan.moves || []
+  plan.moves = mv
+  ;[1, 2].forEach((k) => {
+    Object.entries(src[k] || {}).forEach(([id, to]) => {
+      if (!ids.has(to) || !baseGroupOf(plan, id)) return
+      if (groupAt(plan, id, k - 1) !== to) mv[k][id] = to
+    })
+  })
+  return plan
+}
+/** 从第 k 阶段起把人调到 gid（调回上一阶段所在的组 = 撤销这一阶段的调动） */
+export function moveFrom(plan, id, k, gid) {
+  if (!plan.moves) plan.moves = [{}, {}, {}]
+  plan.moves[k][id] = gid
+  normalizeMoves(plan)
+}
+
+/** 名单上的调动标记：「二阶段→三组」，调了两次用 · 隔开 */
+function moveMark(plan, id, gname) {
+  const base = baseGroupOf(plan, id)
+  return movesOf(plan, id).map((m) => (m.to === base ? `${PH_CN[m.k]}阶段回本组` : `${PH_CN[m.k]}阶段→${gname(m.to)}`)).join(' · ')
+}
+/** 排表里一组一个阶段的格子：[文字, 样式]。任务三行 + 这一阶段的调入 / 调出 */
+function phaseLines(plan, g, i, names, gname) {
+  const a = plan.assign[i][g.id], tk = plan.tasks[i][g.id] || {}
+  const lines = [[`1队：${a ? fullName(a) : '待命'}`, a ? 'hot' : 'idle']]
+  if (tk.t23) lines.push([`2/3队：${fullName(tk.t23)}`, 'hot'])
+  if (tk.t456) lines.push([`4/5/6队：${tk.t456}`, 'ink'])
+  const mv = movesAt(plan, i)
+  const by = (list, key) => { const m = {}; list.forEach((x) => { (m[x[key]] = m[x[key]] || []).push(names[x.id] || '') }); return Object.entries(m) }
+  by(mv.filter((x) => x.to === g.id), 'from').forEach(([from, ns]) => lines.push([`调入：${ns.join('、')}（自${gname(from)}）`, 'move']))
+  by(mv.filter((x) => x.from === g.id), 'to').forEach(([to, ns]) => lines.push([`调出：${ns.join('、')} → ${gname(to)}`, 'move']))
+  return lines
+}
+
 /**
  * 导出排表图：照用户原来的 Excel 排表版式画。
  * opts: { alliance: { name, serverNo }, legion, battleText, plan, names: { memberId: 名字 }, subs: [名字], notes: { gid: 要点 }, channel, commander }
@@ -88,7 +167,21 @@ export function drawSheet(opts) {
   const X = COLS.reduce((a, w) => a.concat(a[a.length - 1] + w), [0])
   const WIDTH = X[X.length - 1]
   const RH = 32, TITLE = 64, HEAD = 58
-  const blocks = plan.groups.map((g) => ({ g, rows: Math.max(4, g.members.length) }))
+  const gname = (gid) => { const g = plan.groups.find((x) => x.id === gid); return g ? g.name : '' }
+  const mx = document.createElement('canvas').getContext('2d')
+  const wrapAt = (str, w, size) => {
+    mx.font = `400 ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`
+    const out = []; let line = ''
+    ;[...str].forEach((ch) => { if (line && mx.measureText(line + ch).width > w) { out.push(line); line = '　' + ch } else line += ch })
+    out.push(line)
+    return out
+  }
+  const blocks = plan.groups.map((g) => {
+    // 调入 / 调出人多时一行写不下，按格子宽度折行
+    const cells = PHASES.map((p, i) => phaseLines(plan, g, i, names, gname).flatMap(([t, kind]) => (kind === 'move' ? wrapAt(t, COLS[2 + i] - 24, 13).map((s) => [s, kind]) : [[t, kind]])))
+    const most = Math.max(...cells.map((c) => c.length))
+    return { g, cells, rows: Math.max(4, g.members.length, Math.ceil((most * 24 + 16) / RH)) }
+  })
   const HEIGHT = TITLE + HEAD + blocks.reduce((a, b) => a + b.rows, 0) * RH + RH * 2
   const k = 2
   const c = document.createElement('canvas')
@@ -120,21 +213,28 @@ export function drawSheet(opts) {
   })
   box(X[5], y, COLS[5], HEAD, S.head); text('官渡要点', X[5] + COLS[5] / 2, y + HEAD / 2, { bold: true, color: '#fff', align: 'center', size: 15 })
   y += HEAD
-  blocks.forEach(({ g, rows }) => {
+  blocks.forEach(({ g, rows, cells }) => {
     const h = rows * RH
     box(X[0], y, COLS[0], h, S.group)
     text(g.name, X[0] + COLS[0] / 2, y + h / 2, { bold: true, color: '#fff', align: 'center', size: 15 })
     for (let r = 0; r < rows; r++) {
       const id = g.members[r]
       box(X[1], y + r * RH, COLS[1], RH, S.name)
-      if (id) text(names[id] || '', X[1] + COLS[1] / 2, y + r * RH + RH / 2, { align: 'center', bold: r === 0, color: r === 0 ? S.red : S.ink })
+      if (!id) continue
+      const cy = y + r * RH + RH / 2
+      const mv = moveMark(plan, id, gname)
+      // 中途调走的人：名字上移一点，下面小字写「二阶段→三组」
+      if (mv) {
+        text(names[id] || '', X[1] + COLS[1] / 2, cy - 7, { align: 'center', bold: r === 0, color: r === 0 ? S.red : S.ink, size: 13 })
+        let fs = 10
+        x.font = font(400, fs); while (fs > 7 && x.measureText(mv).width > COLS[1] - 8) { fs -= 0.5; x.font = font(400, fs) }
+        text(mv, X[1] + COLS[1] / 2, cy + 8, { align: 'center', color: '#b45309', size: fs })
+      } else text(names[id] || '', X[1] + COLS[1] / 2, cy, { align: 'center', bold: r === 0, color: r === 0 ? S.red : S.ink })
     }
-    PHASES.forEach((p, i) => {
+    cells.forEach((lines, i) => {
       box(X[2 + i], y, COLS[2 + i], h, S.cell)
-      const a = plan.assign[i][g.id], tk = plan.tasks[i][g.id] || {}
-      const lines = [[`1队：${a ? fullName(a) : '待命'}`, a ? S.red : '#8a94a6'], tk.t23 ? [`2/3队：${fullName(tk.t23)}`, S.red] : null, tk.t456 ? [`4/5/6队：${tk.t456}`, S.ink] : null].filter(Boolean)
       const top = y + h / 2 - (lines.length - 1) * 12
-      lines.forEach(([s, col], j) => text(s, X[2 + i] + 12, top + j * 24, { color: col, size: 14 }))
+      lines.forEach(([s, kind], j) => text(s, X[2 + i] + 12, top + j * 24, { color: { hot: S.red, idle: '#8a94a6', move: '#b45309' }[kind] || S.ink, size: kind === 'move' ? 13 : 14 }))
     })
     box(X[5], y, COLS[5], h, S.cell)
     const note = wrap(notes[g.id] || '', COLS[5] - 24, 13)
@@ -164,6 +264,7 @@ export function drawSheet(opts) {
 export function buildSheetXlsx(opts) {
   const { alliance, legion, battleText, plan, names, subs, notes, channel, commander } = opts
   const legionName = Number(legion) === 1 ? '一团' : '二团'
+  const gname = (gid) => { const g = plan.groups.find((x) => x.id === gid); return g ? g.name : '' }
   const W = 6
   const ST = [
     { fill: 'dbe5f7', color: '2f5597', bold: true, size: 14, line: '8eaadb' }, // 0 标题
@@ -191,16 +292,15 @@ export function buildSheetXlsx(opts) {
   push(['分组', `昵称\n主力 ${mainN} · 替补 ${subs.length}`].concat(PHASES.map((p, i) => `${p.name} ${phaseTime(legion, i)}\n${p.desc}`), ['官渡要点']), Array(W).fill(1), 36)
 
   plan.groups.forEach((g) => {
-    const n = Math.max(3, g.members.length)
+    const cells = PHASES.map((_p, i) => phaseLines(plan, g, i, names, gname))
+    const n = Math.max(3, g.members.length, Math.ceil(Math.max(...cells.map((c) => c.length)) * 0.8))
     const top = aoa.length
-    const phaseText = PHASES.map((_p, i) => {
-      const a = plan.assign[i][g.id], tk = plan.tasks[i][g.id] || {}
-      return [`1队：${a ? fullName(a) : '待命'}`, tk.t23 ? `2/3队：${fullName(tk.t23)}` : '', tk.t456 ? `4/5/6队：${tk.t456}` : ''].filter(Boolean).join('\n')
-    })
+    const phaseText = cells.map((c) => c.map(([t]) => t).join('\n'))
     for (let r = 0; r < n; r++) {
       const id = g.members[r]
       const first = r === 0
-      push([first ? g.name : '', id ? names[id] || '' : ''].concat(first ? phaseText : ['', '', ''], [first ? notes[g.id] || '' : '']), [2, r === 0 && id ? 3 : 4, 5, 5, 5, 5], 22)
+      const mv = id ? moveMark(plan, id, gname) : ''
+      push([first ? g.name : '', id ? (names[id] || '') + (mv ? `（${mv}）` : '') : ''].concat(first ? phaseText : ['', '', ''], [first ? notes[g.id] || '' : '']), [2, r === 0 && id ? 3 : 4, 5, 5, 5, 5], 22)
     }
     if (n > 1) [0, 2, 3, 4, 5].forEach((c) => merges.push({ s: { r: top, c }, e: { r: top + n - 1, c } }))
   })
