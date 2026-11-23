@@ -14,32 +14,24 @@ const OPTS = [
   { label: '没填出征数量', value: 'march' }
 ]
 
-const rows = computed(() => members.value.filter((m) =>
-  (picked.value.includes('bonus') && m.maxBonus == null) ||
-  (picked.value.includes('troops') && !m.troopsComplete) ||
-  (picked.value.includes('attrs') && !m.profileComplete) ||
-  (picked.value.includes('march') && m.maxMarch == null)
-))
+// 「缺什么」只列勾上的条件：没勾的那项就算缺也不显示，免得和筛选对不上
+const LACKS = [
+  { key: 'bonus', text: '没填集结', type: 'warning', test: (r) => r.maxBonus == null },
+  { key: 'troops', text: '没填兵力', type: 'warning', test: (r) => !r.troopsComplete },
+  { key: 'attrs', text: '没传属性', type: 'error', test: (r) => !r.profileComplete },
+  { key: 'march', text: '没填出征', type: 'default', test: (r) => r.maxMarch == null }
+]
+const lacksOf = (r) => LACKS.filter((l) => picked.value.includes(l.key) && l.test(r))
+
+const rows = computed(() => members.value.filter((m) => lacksOf(m).length))
 
 const lackCol = {
   title: '缺什么',
   key: 'lack',
   width: 260,
-  render: (r) => {
-    const tags = []
-    if (r.maxBonus == null) tags.push(['没填集结', 'warning'])
-    if (!r.troopsComplete) tags.push(['没填兵力', 'warning'])
-    if (!r.profileComplete) tags.push(['没传属性', 'error'])
-    if (r.maxMarch == null) tags.push(['没填出征', 'default'])
-    return h('div', tags.map((t) =>
-      h(NTag, { size: 'small', type: t[1], bordered: false, style: 'margin-right:4px' }, () => t[0])))
-  },
-  xls: (r) => [
-    r.maxBonus == null ? '没填集结' : '',
-    !r.troopsComplete ? '没填兵力' : '',
-    !r.profileComplete ? '没传属性' : '',
-    r.maxMarch == null ? '没填出征' : ''
-  ].filter(Boolean).join(' ')
+  render: (r) => h('div', lacksOf(r).map((l) =>
+    h(NTag, { size: 'small', type: l.type, bordered: false, style: 'margin-right:4px' }, () => l.text))),
+  xls: (r) => lacksOf(r).map((l) => l.text).join(' ')
 }
 
 const columns = [nameCol, lackCol, boundCol, bigCol('战力', 'power'), timeCol('资料更新', 'attrsUpdatedAt')]
