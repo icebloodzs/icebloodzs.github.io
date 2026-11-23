@@ -7,7 +7,7 @@ import { sorter } from '../fmt'
 const { members, season } = inject('app')
 
 /**
- * 展示本赛季最高和次高两档兵营：S1-S2 到 10 级、S3 宫1、S4 宫2、S5-S8 宫3、S9 往后宫4。
+ * 展示本赛季最高和次高两档兵营：S1-S2 到 10 级、S3 宫1、S4 宫2、S5-S8 宫3、S9-S12 宫4、S13-S16 宫5。
  * 档位是服务端按赛季给的（season.tiers），这里不写死。
  */
 const FALLBACK = [{ key: '2', label: '宫2' }, { key: '3', label: '宫3' }]
