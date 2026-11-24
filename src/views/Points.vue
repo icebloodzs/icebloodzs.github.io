@@ -124,6 +124,16 @@ const ovRows = computed(() => {
   const rows = ov.value.rows.filter((r) => !ovGroup.value || r.groupId === ovGroup.value)
   const { key, dir } = ovSort.value
   if (!key) return rows
+  // 某一场的列（key = 'c' + 列序号）：按这场得分排，没填的算最低，那场不在队的永远垫底
+  if (key[0] === 'c') {
+    const i = Number(key.slice(1))
+    const v = (r) => { const c = r.cells[i]; return !c ? null : !c.by ? -1e6 : c.total }
+    return rows.slice().sort((a, b) => {
+      const x = v(a), y = v(b)
+      if (x === null || y === null) return (x === null) - (y === null) || a.rank - b.rank
+      return dir * (x - y) || a.rank - b.rank
+    })
+  }
   const f = OV_KEY[key]
   return rows.slice().sort((a, b) => dir * (f(a) - f(b)) || a.rank - b.rank)
 })
@@ -213,7 +223,7 @@ function back() {
                   <th class="sortable" :class="{ on: ovSort.key === 'total' }" @click="sortOv('total')">{{ ov.season }} 合计 <i>{{ sortMark(ovSort, 'total') }}</i></th>
                   <th class="sortable" :class="{ on: ovSort.key === 'unfilled' }" @click="sortOv('unfilled')">没填 <i>{{ sortMark(ovSort, 'unfilled') }}</i></th>
                   <th class="sortable" :class="{ on: ovSort.key === 'away' }" @click="sortOv('away')">缺 / 假 <i>{{ sortMark(ovSort, 'away') }}</i></th>
-                  <th v-for="c in ov.cols" :key="c.id" class="col">{{ c.date.slice(5) }}<small>{{ c.title }}</small></th>
+                  <th v-for="(c, i) in ov.cols" :key="c.id" class="col sortable" :class="{ on: ovSort.key === 'c' + i }" @click="sortOv('c' + i)">{{ c.date.slice(5) }} <i>{{ sortMark(ovSort, 'c' + i) }}</i><small>{{ c.title }}</small></th>
                 </tr>
               </thead>
               <tbody>
