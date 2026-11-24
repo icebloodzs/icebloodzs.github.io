@@ -174,6 +174,15 @@ const history = ref([])
 const CUSTOM_N = 6
 const custom = ref(Array.from({ length: CUSTOM_N }, () => []))
 const customCount = computed(() => custom.value.reduce((a, b) => a + b.length, 0))
+/*
+ * 颜色：自定义块（特例）第 k 块固定用第 k 种颜色 —— 特例就是按颜色存的，加载回来、再填字都不能变（11-24 修，
+ * 原来是填字的块排前面、自定义块接在后面，多填一块字特例就整体换色）。
+ * 填字的块从没被自定义块占用的颜色里依次挑；6 种都占满了才只好跟某块撞色。
+ */
+const textColors = computed(() => {
+  const freeCi = Array.from({ length: CUSTOM_N }, (_v, i) => i).filter((i) => !custom.value[i].length)
+  return auto.value.blocks.map((_b, bi) => (freeCi.length ? freeCi[bi % freeCi.length] : bi % CUSTOM_N))
+})
 watch(texts, () => { erased.value = new Set(); added.value = new Map(); history.value = []; reserved.value = new Set(custom.value.flat()) }, { deep: true })
 
 const ORDER = {
@@ -185,9 +194,9 @@ const ORDER = {
 
 const result = computed(() => {
   const base = auto.value
-  const nAuto = base.blocks.length
-  // ci：块的颜色下标（自定义块排在填字的块后面）
-  if (!erased.value.size && !added.value.size && !customCount.value) return { ...base, blocks: base.blocks.map((b, bi) => ({ ...b, ci: bi })) }
+  // ci：块的颜色下标（见 textColors：自定义块固定用自己那一色，填字的块挑剩下的）
+  const tc = textColors.value
+  if (!erased.value.size && !added.value.size && !customCount.value) return { ...base, blocks: base.blocks.map((b, bi) => ({ ...b, ci: tc[bi] })) }
   const o = origin.value || { x: 0, y: 0 }
   const byId = new Map(board.value.cells.map((c) => [c.id, c]))
   let seq = 0
@@ -200,7 +209,7 @@ const result = computed(() => {
       const xy = S.coordOf(c.r, c.c, o)
       return { ...c, seq, x: xy.x, y: xy.y }
     })
-    return { ...b, cells, total: cells.length, ci: bi }
+    return { ...b, cells, total: cells.length, ci: tc[bi] }
   })
   const free = new Set(board.value.free.map((c) => c.id))
   custom.value.forEach((ids, k) => {
@@ -210,7 +219,7 @@ const result = computed(() => {
       const xy = S.coordOf(c.r, c.c, o)
       return { id, r: c.r, c: c.c, seq, x: xy.x, y: xy.y }
     })
-    if (cells.length) blocks.push({ area: 'custom', label: `自定义${k + 1}`, text: '', ok: true, reason: '', cells, total: cells.length, ci: nAuto + k })
+    if (cells.length) blocks.push({ area: 'custom', label: `自定义${k + 1}`, text: '', ok: true, reason: '', cells, total: cells.length, ci: k })
   })
   const all = []
   blocks.forEach((b) => all.push(...b.cells))
@@ -220,9 +229,9 @@ const edited = computed(() => erased.value.size + added.value.size + customCount
 
 /** 画笔可选：擦除 + 每个摆成功的块 */
 const brushes = computed(() => [{ key: 'erase', label: '橡皮擦', color: '#6b7280' }, { key: 'select', label: '选区', color: '#0ea5e9' }].concat(
-  auto.value.blocks.map((b, bi) => ({ key: bi, ok: b.ok, label: `补到${(S.AREAS.find((a) => a.key === b.area) || {}).label || b.area}「${b.text}」`, color: BLOCK_COLORS[bi % BLOCK_COLORS.length].fill }))
+  auto.value.blocks.map((b, bi) => ({ key: bi, ok: b.ok, label: `补到${(S.AREAS.find((a) => a.key === b.area) || {}).label || b.area}「${b.text}」`, color: BLOCK_COLORS[textColors.value[bi] % BLOCK_COLORS.length].fill }))
     .filter((x) => x.ok))
-  .concat(custom.value.map((_ids, k) => ({ key: 'c' + k, label: `画到自定义${k + 1}`, color: BLOCK_COLORS[(auto.value.blocks.length + k) % BLOCK_COLORS.length].fill }))))
+  .concat(custom.value.map((_ids, k) => ({ key: 'c' + k, label: `画到自定义${k + 1}`, color: BLOCK_COLORS[k % BLOCK_COLORS.length].fill }))))
 
 /** 点一格（或按住拖过去）：橡皮擦掉、画笔补进选中的那块 */
 let painting = false
