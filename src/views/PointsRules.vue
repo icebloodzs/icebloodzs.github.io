@@ -29,7 +29,7 @@ watch(() => props.data, reset, { immediate: true })
 const dirty = computed(() => Boolean(r.value) && JSON.stringify(r.value) !== base.value)
 
 const it = computed(() => r.value && r.value.items.find((x) => x.id === curId.value))
-const TYPE_TIP = { check: '勾上就加/扣固定分，例如空城参与 +1、未听安排 −1', rank: '成员照游戏排行直接填第几名，按名次分档给分', choice: '多选一的状态，例如到场 / 请假 / 缺席', manual: '直接填分，填几分算几分' }
+const TYPE_TIP = { check: '勾上就加/扣固定分，例如空城参与 +1、车头 +1', rank: '成员照游戏排行直接填第几名，按名次分档给分', choice: '多选一的状态，例如到场 / 请假 / 缺席', manual: '直接填分，填几分算几分' }
 
 function setType(t) {
   const x = it.value
