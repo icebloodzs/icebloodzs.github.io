@@ -110,7 +110,23 @@ watch(tab, (t) => {
   if (t === 'overview') loadOverview()
   if (t === 'sessions') loadList()
 })
-const ovRows = computed(() => (ov.value ? ov.value.rows.filter((r) => !ovGroup.value || r.groupId === ovGroup.value) : []))
+/* 表头排序：点一次从高到低，再点从低到高，第三次回到默认（按排名） */
+const ovSort = ref({ key: '', dir: -1 })
+const unfilledOf = (r) => r.cells.filter((c) => c && !c.by).length
+const OV_KEY = { total: (r) => r.total, away: (r) => r.absent * 1000 + r.leave, unfilled: unfilledOf }
+function sortOv(key) {
+  const s = ovSort.value
+  ovSort.value = s.key !== key ? { key, dir: -1 } : s.dir === -1 ? { key, dir: 1 } : { key: '', dir: -1 }
+}
+const sortMark = (s, key) => (s.key !== key ? '⇅' : s.dir === -1 ? '↓' : '↑')
+const ovRows = computed(() => {
+  if (!ov.value) return []
+  const rows = ov.value.rows.filter((r) => !ovGroup.value || r.groupId === ovGroup.value)
+  const { key, dir } = ovSort.value
+  if (!key) return rows
+  const f = OV_KEY[key]
+  return rows.slice().sort((a, b) => dir * (f(a) - f(b)) || a.rank - b.rank)
+})
 const groupOpts = computed(() => [{ label: '全部分组', value: null }, ...groups.value.map((g) => ({ label: g.name, value: g.id }))])
 
 /* ---------- 成员明细抽屉 ---------- */
@@ -156,7 +172,7 @@ function back() {
       <div v-if="tab === 'sessions'" key="sessions" class="pt-sec">
         <div class="pt-bar">
           <n-button type="primary" :disabled="archived || !rules" @click="openNew">＋ 新建场次</n-button>
-          <span class="pt-mute">建好后去小程序「积分考勤」里转发卡片到盟群，成员点开直接填；截止没填的自动记缺席</span>
+          <span class="pt-mute">建好后去小程序「积分考勤」里转发卡片到盟群，成员点开直接填；{{ rules && rules.rules.settings.autoAbsent === false ? '截止没填的留给组长处理' : '截止没填的自动记缺席' }}</span>
         </div>
         <n-alert v-if="archived" type="warning" :bordered="false">{{ season }} 赛季已归档，只能看不能改。</n-alert>
         <n-spin :show="loading">
@@ -193,7 +209,10 @@ function back() {
             <table>
               <thead>
                 <tr>
-                  <th class="stk">#</th><th class="stk nm">成员</th><th>小组</th><th>{{ ov.season }} 合计</th><th>缺 / 假</th>
+                  <th class="stk">#</th><th class="stk nm">成员</th><th>小组</th>
+                  <th class="sortable" :class="{ on: ovSort.key === 'total' }" @click="sortOv('total')">{{ ov.season }} 合计 <i>{{ sortMark(ovSort, 'total') }}</i></th>
+                  <th class="sortable" :class="{ on: ovSort.key === 'unfilled' }" @click="sortOv('unfilled')">没填 <i>{{ sortMark(ovSort, 'unfilled') }}</i></th>
+                  <th class="sortable" :class="{ on: ovSort.key === 'away' }" @click="sortOv('away')">缺 / 假 <i>{{ sortMark(ovSort, 'away') }}</i></th>
                   <th v-for="c in ov.cols" :key="c.id" class="col">{{ c.date.slice(5) }}<small>{{ c.title }}</small></th>
                 </tr>
               </thead>
@@ -203,6 +222,7 @@ function back() {
                   <td class="stk nm"><a @click="openMember(r.mid)">{{ r.name }}</a><n-tag v-if="!r.inRoster" size="tiny" :bordered="false">已离队</n-tag></td>
                   <td class="pt-mute">{{ gname(r.groupId) }}</td>
                   <td><b :style="{ color: ptsColor(r.total) }">{{ fmtPts(r.total) }}</b></td>
+                  <td :class="unfilledOf(r) ? 'lvc' : 'pt-mute'">{{ unfilledOf(r) || '—' }}</td>
                   <td class="pt-mute">{{ r.absent }} / {{ r.leave }}</td>
                   <td v-for="(c, i) in r.cells" :key="i" class="cell" @click="c && openMember(r.mid, ov.cols[i].id)">
                     <span v-if="!c" class="pt-mute small">不在队</span>
@@ -242,7 +262,7 @@ function back() {
       <ol class="pt-ol">
         <li>手机打开小程序 → 「积分考勤」，点这一场</li>
         <li>右上角「转发」到盟群（组长可以从「小组」页转发到小组群，卡片只显示本组进度）</li>
-        <li>成员点卡片直接进填写页，填完马上算分；截止没填的自动记缺席</li>
+        <li>成员点卡片直接进填写页，填完马上算分；{{ rules && rules.rules.settings.autoAbsent === false ? '截止没填的留给组长处理' : '截止没填的自动记缺席' }}</li>
       </ol>
       <div class="pt-mute">浏览器发不了微信卡片，转发要在小程序里做。</div>
       <template #footer><n-space justify="end"><n-button type="primary" @click="showShare = false">知道了</n-button></n-space></template>
@@ -320,4 +340,10 @@ function back() {
 .pt-hist .x > div:not(.pt-log) { display: grid; grid-template-columns: 1fr auto 48px; gap: 8px; padding: 3px 0; }
 .pt-hist .x > div > span:last-child { text-align: right; }
 .pt-log { color: #b7770c; font-size: 12px; }
+
+/* 可排序的表头 */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable i { font-style: normal; font-size: 11px; opacity: 0.35; margin-left: 2px; }
+th.sortable:hover i, th.sortable.on i { opacity: 1; color: #2563eb; }
+.lvc { color: #d97706; font-weight: 600; }
 </style>

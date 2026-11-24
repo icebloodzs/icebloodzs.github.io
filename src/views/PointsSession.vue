@@ -47,6 +47,21 @@ const rows = computed(() => {
     return true
   })
 })
+/* 表头排序：点一次从高到低（填写状态：没填的在前），再点反过来，第三次回到默认顺序 */
+const sortBy = ref({ key: '', dir: -1 })
+const SRC_ORDER = { '': 0, auto: 1, self: 2, leader: 3, admin: 4 }
+const SORT_KEY = { total: (r) => r.total, src: (r) => -SRC_ORDER[r.by || ''] }
+function sortCol(key) {
+  const s = sortBy.value
+  sortBy.value = s.key !== key ? { key, dir: -1 } : s.dir === -1 ? { key, dir: 1 } : { key: '', dir: -1 }
+}
+const sortMark = (key) => (sortBy.value.key !== key ? '⇅' : sortBy.value.dir === -1 ? '↓' : '↑')
+const sortedRows = computed(() => {
+  const { key, dir } = sortBy.value
+  if (!key) return rows.value
+  const f = SORT_KEY[key]
+  return rows.value.slice().sort((a, b) => dir * (f(a) - f(b)) || a.name.localeCompare(b.name, 'zh'))
+})
 const groupOpts = computed(() => [{ label: '全部分组', value: null }, ...props.groups.map((g) => ({ label: g.name, value: g.id }))])
 const SRC_TABS = [['', '全部'], ['none', '未填/自动缺席'], ['self', '本人填'], ['leader', '组长填'], ['admin', '管理员填']]
 const away = (r) => r.vals && (r.vals.att === 1 || r.vals.att === 2)
@@ -197,13 +212,13 @@ const SRC_CLS = { self: 'self', leader: 'leader', admin: 'admin', auto: 'auto' }
         <table>
           <thead>
             <tr>
-              <th class="stk">#</th><th class="stk nm">成员</th><th>来源</th>
+              <th class="stk">#</th><th class="stk nm">成员</th><th class="sortable" :class="{ on: sortBy.key === 'src' }" @click="sortCol('src')">来源 <i>{{ sortMark('src') }}</i></th>
               <th v-for="it in d.items" :key="it.id">{{ it.name }}<small>{{ ruleText(it) }}</small><small>{{ BY[it.by] }}</small></th>
-              <th>本场得分</th>
+              <th class="sortable" :class="{ on: sortBy.key === 'total' }" @click="sortCol('total')">本场得分 <i>{{ sortMark('total') }}</i></th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(r, i) in rows" :key="r.mid" :class="{ un: !r.by, busy: saving[r.mid] }">
+            <tr v-for="(r, i) in sortedRows" :key="r.mid" :class="{ un: !r.by, busy: saving[r.mid] }">
               <td class="stk">{{ i + 1 }}</td>
               <td class="stk nm"><a @click="emit('member', r.mid, id)">{{ r.name }}</a><n-tag v-if="r.leader" size="tiny" type="info" :bordered="false">组长</n-tag><span class="ps-g">{{ gname(r.groupId) }}</span></td>
               <td><span class="ps-src" :class="SRC_CLS[r.by] || 'none'">{{ r.by ? SRC[r.by] : '未填' }}</span><small v-if="r.at && r.by !== 'auto'" class="ps-mute">{{ dlText(r.at).split(' ')[1] }}</small></td>
@@ -296,4 +311,9 @@ const SRC_CLS = { self: 'self', leader: 'leader', admin: 'admin', auto: 'auto' }
 .ps-mrow { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #efeff5; }
 .ps-ch.a1 :deep(.n-base-selection-label) { color: #d97706; }
 .ps-ch.a2 :deep(.n-base-selection-label) { color: #e0203a; }
+
+/* 可排序的表头 */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable i { font-style: normal; font-size: 11px; opacity: 0.35; margin-left: 2px; }
+th.sortable:hover i, th.sortable.on i { opacity: 1; color: #2563eb; }
 </style>
