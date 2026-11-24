@@ -113,10 +113,15 @@ const origin = computed(() => {
   return { x: Math.round(x), y: Math.round(y) }
 })
 
+/*
+ * 填字时图上已有的格子（加载的特例、手画的自定义块）：字绕开它们摆，不再直接压上去（11-24 修）。
+ * 只在改字那一刻取一次：之后再手画自定义块，字不会跟着跳来跳去。
+ */
+const reserved = ref(new Set())
 /** 按填的字算出来的原样（还没手动改过） */
 const auto = computed(() => {
   const items = S.AREAS.map((a) => ({ area: a.key, text: texts.value[a.key] })).filter((x) => x.text)
-  return S.placeAll(board.value, items, origin.value || { x: 0, y: 0 })
+  return S.placeAll(board.value, items, origin.value || { x: 0, y: 0 }, reserved.value)
 })
 
 /*
@@ -169,7 +174,7 @@ const history = ref([])
 const CUSTOM_N = 6
 const custom = ref(Array.from({ length: CUSTOM_N }, () => []))
 const customCount = computed(() => custom.value.reduce((a, b) => a + b.length, 0))
-watch(texts, () => { erased.value = new Set(); added.value = new Map(); history.value = [] }, { deep: true })
+watch(texts, () => { erased.value = new Set(); added.value = new Map(); history.value = []; reserved.value = new Set(custom.value.flat()) }, { deep: true })
 
 const ORDER = {
   leftBottom: (a, b) => a.r - b.r || a.c - b.c,

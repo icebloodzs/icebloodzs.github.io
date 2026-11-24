@@ -834,9 +834,18 @@ function placeScreen(board, rows, area, occupied, target, tol) {
 // 左边、右边的图案最后摆：先让左下、右下的字贴好下边，图案再找剩下的空地
 const PLACE_ORDER = ['bottom', 'top', 'leftBottom', 'rightBottom', 'left', 'right']
 
-function placeAll(board, items, origin) {
+function placeAll(board, items, origin, occupied) {
   // 已经被占掉的格子，外加四周一圈缓冲：几块图形之间留条缝，不然会黏成一片看不出是几块
   const taken = new Set()
+  // 图上已经有的（特例 / 手画的自定义块）：字要绕开它们，同样留一圈缝。不传就是空图
+  if (occupied) {
+    occupied.forEach((id) => {
+      const [r, c] = String(id).split('_').map(Number)
+      for (let dr = -1; dr <= 1; dr += 1) {
+        for (let dc = -1; dc <= 1; dc += 1) taken.add(`${r + dr}_${c + dc}`)
+      }
+    })
+  }
   const hits = {}
   const blocks = []
   const placed = {}
