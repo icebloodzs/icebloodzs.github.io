@@ -42,12 +42,14 @@ const before = ref(null)
 
 /** 和云函数 lib/shape.js 的 CAMPS 一致 */
 const CAMPS = ['群雄', '魏国', '吴国', '蜀国']
+/** 和云函数 lib/shape.js 的 LVBU_STARS 一致；单选，再点一次取消 */
+const LVBU_STARS = ['4星', '5星', '红3', '红5']
 
 const form = ref(blank())
 function blank() {
   const t = {}
   LEVELS.value.forEach((lv) => { t[lv] = { inf: null, cav: null, arc: null } })
-  return { maxBonus: null, maxMarch: null, camps: [], troops: t }
+  return { maxBonus: null, maxMarch: null, camps: [], lvbuStar: null, troops: t }
 }
 
 function fill(m) {
@@ -60,7 +62,7 @@ function fill(m) {
       t[lv][k] = v === null || v === undefined ? null : Number(v)
     })
   })
-  form.value = { maxBonus: m.maxBonus ?? null, maxMarch: m.maxMarch ?? null, camps: (m.camps || []).slice(), troops: t }
+  form.value = { maxBonus: m.maxBonus ?? null, maxMarch: m.maxMarch ?? null, camps: (m.camps || []).slice(), lvbuStar: m.lvbuStar || null, troops: t }
 }
 // 赛季是后到的，档位一变要照着新档位重新铺一遍表格
 watch([member, LEVELS], () => fill(member.value), { immediate: true })
@@ -214,6 +216,7 @@ async function save() {
     const res = await call('profile.save', {
       troopsByLevel: form.value.troops,
       camps: form.value.camps,
+      lvbuStar: form.value.lvbuStar || '',
       maxBonus: form.value.maxBonus,
       battleReportFileId: member.value && member.value.battleReportFileId,
       maxMarch: form.value.maxMarch === null ? '' : String(form.value.maxMarch)
@@ -370,6 +373,14 @@ const dColor = (d) => (d > 0 ? '#16a34a' : d < 0 ? '#dc2626' : '#9aa0a6')
               <n-checkbox-group v-model:value="form.camps">
                 <n-space><n-checkbox v-for="c in CAMPS" :key="c" :value="c" :label="c" /></n-space>
               </n-checkbox-group>
+            </n-form-item>
+          </n-gi>
+          <n-gi span="1 s:2">
+            <n-form-item label="吕布星级">
+              <n-space>
+                <n-button v-for="c in LVBU_STARS" :key="c" size="small" :type="form.lvbuStar === c ? 'primary' : 'default'"
+                  @click="form.lvbuStar = form.lvbuStar === c ? null : c">{{ c }}</n-button>
+              </n-space>
             </n-form-item>
           </n-gi>
         </n-grid>

@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 全员数据：一张表把每个人的名单数据、自填资料、六维都摆出来，列和导入导出的 Excel 一一对应
- * （账号名称、六维更新时间、关联状态、阶位、主玩阵营、最高加成、战力、实力、步 / 骑 / 弓兵等级、四维、六维、六项属性）。
+ * （账号名称、六维更新时间、关联状态、阶位、主玩阵营、吕布星级、最高加成、战力、实力、步 / 骑 / 弓兵等级、四维、六维、六项属性）。
  * 表头老写法（步兵营等级、步兵防御力、步兵生命值、骑兵破坏力……）导入时也认。
  *
  * 导出：就是表格右上角的「导出 Excel」，表头即导入用的表头，导出的文件改完可以原样导回来。
@@ -76,6 +76,7 @@ const columns = computed(() => [
   },
   textCol('阶位', 'rank', rankText, 70),
   textCol('主玩阵营', 'camps', (r) => (r.camps || []).join('、'), 150),
+  textCol('吕布星级', 'lvbuStar', (r) => r.lvbuStar || '', 90),
   numberCol('最高加成', 'maxBonus', (r) => r.maxBonus, 2, 90),
   bigNumCol('战力', 'power'),
   bigNumCol('实力', 'strength'),
@@ -92,10 +93,12 @@ const columns = computed(() => [
 const RANKS = Array.from({ length: 10 }, (_, i) => ({ label: CN[i + 1] + '阶', value: i + 1 }))
 const TIER_OPTIONS = TIERS.map(([value, label]) => ({ label, value })).reverse()
 const CAMPS = ['群雄', '魏国', '吴国', '蜀国']
+/** 和云函数 lib/shape.js 的 LVBU_STARS 一致；单选，可不选 */
+const LVBU_STARS = ['4星', '5星', '红3', '红5']
 
 const editing = ref(null) // 正在改的那一行
 const saving = ref(false)
-const form = reactive({ rank: null, power: null, strength: null, camps: [], maxBonus: null, tiers: {}, attrs: {} })
+const form = reactive({ rank: null, power: null, strength: null, camps: [], lvbuStar: null, maxBonus: null, tiers: {}, attrs: {} })
 let origin = ''
 
 /** 填了兵力的兵种，档位按兵力算，不让手改 */
@@ -110,7 +113,7 @@ const troopTier = (r, arm) => {
 /** 当前表单里各组的值，用来比有没有改过 */
 const snapshot = () => JSON.stringify({
   roster: [form.rank, form.power, form.strength],
-  profile: [[...form.camps].sort(), form.maxBonus],
+  profile: [[...form.camps].sort(), form.lvbuStar, form.maxBonus],
   tiers: form.tiers,
   attrs: form.attrs
 })
@@ -121,6 +124,7 @@ function openEdit(r) {
   form.power = r.power ?? null
   form.strength = r.strength ?? null
   form.camps = (r.camps || []).slice()
+  form.lvbuStar = r.lvbuStar || null
   form.maxBonus = r.maxBonus ?? null
   form.tiers = Object.fromEntries(ARMS.map(([arm]) => [arm, (r.barracksLv && r.barracksLv[arm]) || null]))
   form.attrs = Object.fromEntries(ATTRS.map(([k]) => [k, r.attrs && r.attrs[k] !== undefined && r.attrs[k] !== null ? Number(r.attrs[k]) : null]))
@@ -142,7 +146,7 @@ async function saveEdit() {
     Object.assign(payload, { rank: blankOr(form.rank), power: blankOr(form.power), strength: blankOr(form.strength) })
   }
   if (JSON.stringify(before.profile) !== JSON.stringify(now.profile)) {
-    Object.assign(payload, { camps: form.camps, maxBonus: blankOr(form.maxBonus) })
+    Object.assign(payload, { camps: form.camps, lvbuStar: blankOr(form.lvbuStar), maxBonus: blankOr(form.maxBonus) })
   }
   if (JSON.stringify(before.tiers) !== JSON.stringify(now.tiers)) {
     payload.barracksLv = Object.fromEntries(ARMS.map(([arm]) => [arm, blankOr(form.tiers[arm])]))
@@ -171,6 +175,7 @@ const HEAD = {
   attrsAt: ['六维更新时间', '属性更新时间', '资料更新'],
   rank: ['阶位', '阶级'],
   camps: ['主玩阵营', '阵营'],
+  lvbuStar: ['吕布星级', '吕布'],
   maxBonus: ['最高加成', '最高集结值', '集结值'],
   power: ['战力'],
   strength: ['实力'],
@@ -319,6 +324,13 @@ const snapText = computed(() => (pending.value ? stamp(pending.value.snapshotAt)
           <div class="ed-camps">
             <button v-for="c in CAMPS" :key="c" type="button" :class="['ed-camp', { on: form.camps.includes(c) }]"
               @click="form.camps = form.camps.includes(c) ? form.camps.filter((x) => x !== c) : [...form.camps, c]">{{ c }}</button>
+          </div>
+        </div>
+        <div class="ed-field">
+          <label>吕布星级</label>
+          <div class="ed-camps">
+            <button v-for="c in LVBU_STARS" :key="c" type="button" :class="['ed-camp', { on: form.lvbuStar === c }]"
+              @click="form.lvbuStar = form.lvbuStar === c ? null : c">{{ c }}</button>
           </div>
         </div>
         <div class="ed-grid4">
