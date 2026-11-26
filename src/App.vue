@@ -28,6 +28,7 @@ import GuanDu from './views/GuanDu.vue'
 import Welfare from './views/Welfare.vue'
 import Groups from './views/Groups.vue'
 import Points from './views/Points.vue'
+import Nanman from './views/Nanman.vue'
 import SideNav from './views/SideNav.vue'
 
 const VIEWS = {
@@ -43,6 +44,7 @@ const VIEWS = {
   points: { label: '积分考勤', icon: '🎯', comp: Points },
   groups: { label: '同盟分组', icon: '🧩', comp: Groups },
   rally: { label: '集结分配', icon: '🚩', comp: Rally },
+  nanman: { label: '南蛮分组', icon: '🐘', comp: Nanman },
   guandu: { label: '官渡之战', icon: '⚔️', comp: GuanDu },
   welfare: { label: '同盟福利', icon: '🎁', comp: Welfare },
   placement: { label: '黑土落位', icon: '🗺️', comp: Placement },
@@ -117,7 +119,7 @@ const can = (key) => {
   return !f || f[key] !== false
 }
 /** 菜单项对应的付费功能：等级不够（或者老客户单独没开）的就不摆出来 */
-const VIEW_FEATURE = { attendance: 'attendance', points: 'points', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', notice: 'notice', welfare: 'collect' }
+const VIEW_FEATURE = { attendance: 'attendance', points: 'points', season: 'season', placement: 'placement', shape: 'shape', board: 'forum', rally: 'rally', nanman: 'nanman', notice: 'notice', welfare: 'collect' }
 const shown = (k) => {
   if (!VIEW_FEATURE[k]) return true
   // 同盟福利（采集）只给正式开发版：服务端明确给了 collect: true 才显示，没给（老版本云函数）也不显示
@@ -164,7 +166,7 @@ const menuOptions = computed(() => selfOnly.value
     type: 'group',
     label: '指挥工具',
     key: 'g2',
-    children: ['rally', 'guandu', 'welfare', 'placement', 'shape', 'notice', 'board']
+    children: ['rally', 'nanman', 'guandu', 'welfare', 'placement', 'shape', 'notice', 'board']
       .filter(shown)
       .map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
   },
