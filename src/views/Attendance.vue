@@ -177,6 +177,7 @@ function tagMenu(col, row) {
 }
 
 async function onTag(col, row, key) {
+  if (key === '__label') return editDay(col)
   const cell = row.cells[col.id]
   if (key === '__custom') {
     const t = window.prompt(`给「${cell.name}」${md(col.at)}${col.label ? '（' + col.label + '）' : ''} 标个标签（8 个字以内）`, cell.tag || '')
@@ -196,13 +197,26 @@ async function saveTag(col, cell, body) {
   }
 }
 
+/*
+ * 改某一天的描述：点格子菜单最下面「改这天的描述」，或者点表头上的描述。
+ * 往期赛季也能改描述 / 时间（删记录、开关隐藏、标签还是只在本赛季）。
+ */
+const LABEL_OPTS = [{ type: 'divider', key: 'dl' }, { label: '改这天的描述…', key: '__label' }]
+const recOf = (col) => ((data.value && data.value.records) || []).find((r) => r._id === col.id)
+function editDay(col) {
+  const rec = recOf(col)
+  if (rec) openEdit(rec)
+}
+/** 往期赛季的格子：只给一个「改这天的描述」 */
+const labelOnly = (col, body) => h(NDropdown, { trigger: 'click', options: LABEL_OPTS.slice(1), onSelect: () => editDay(col) }, () => h('span', [body]))
+
 /** 手动记的那几天：没有功勋，只有出勤（绿）/ 缺勤（红），点一下改 */
 function manualCell(col, row) {
   const cell = row.cells[col.id]
   const body = h('div', { class: ['att-cell', cell.ok ? 'att-ok' : 'att-no'] }, cell.ok ? '出勤' : '缺勤')
-  if (!isCurrent.value) return body
-  const options = [{ label: cell.ok ? '改成缺勤' : '改成出勤', key: cell.ok ? 'no' : 'yes' }]
-  return h(NDropdown, { trigger: 'click', options, onSelect: (k) => saveMark(col, row, k === 'yes') }, () => h('span', [body]))
+  if (!isCurrent.value) return labelOnly(col, body)
+  const options = [{ label: cell.ok ? '改成缺勤' : '改成出勤', key: cell.ok ? 'no' : 'yes' }].concat(LABEL_OPTS)
+  return h(NDropdown, { trigger: 'click', options, onSelect: (k) => (k === '__label' ? editDay(col) : saveMark(col, row, k === 'yes')) }, () => h('span', [body]))
 }
 
 async function saveMark(col, row, ok) {
@@ -223,8 +237,8 @@ function dayCell(col, row) {
   const body = h('div', { class: ['att-cell', cell.ok ? 'att-ok' : 'att-no'] }, [h('span', text), tag])
   const tip = `${cell.name}　当天功勋 ${Number(cell.merit).toLocaleString('zh-CN')}　${cell.ok ? '达标' : '未达标'}${cell.tag ? '　标签：' + cell.tag : ''}`
   const withTip = h(NTooltip, { placement: 'top' }, { trigger: () => body, default: () => tip })
-  if (!isCurrent.value) return withTip
-  return h(NDropdown, { trigger: 'click', options: tagMenu(col, row), onSelect: (k) => onTag(col, row, k) }, () => h('span', [withTip]))
+  if (!isCurrent.value) return labelOnly(col, withTip)
+  return h(NDropdown, { trigger: 'click', options: tagMenu(col, row).concat(LABEL_OPTS), onSelect: (k) => onTag(col, row, k) }, () => h('span', [withTip]))
 }
 
 /**
@@ -234,15 +248,15 @@ function dayCell(col, row) {
 function dayChip(col, row) {
   const cell = row.cells[col.id]
   const head = h('div', { class: 'chip-h' }, [mdShort(col.at), h('span', { class: 'chip-l' }, col.label || '')])
-  if (!cell) return h('div', { class: 'chip chip-blank' }, [head, h('div', { class: 'chip-v' }, '—')])
+  if (!cell) return labelOnly(col, h('div', { class: 'chip chip-blank' }, [head, h('div', { class: 'chip-v' }, '—')]))
   const value = cell.manual ? (cell.ok ? '出勤' : '缺勤') : cell.tag || (showMerit.value ? big(cell.merit) : cell.ok ? '✓' : '✗')
   const body = h('div', { class: ['chip', cell.ok ? 'chip-ok' : 'chip-no'] }, [head, h('div', { class: 'chip-v' }, value)])
-  if (!isCurrent.value) return body
+  if (!isCurrent.value) return labelOnly(col, body)
   if (cell.manual) {
-    const options = [{ label: cell.ok ? '改成缺勤' : '改成出勤', key: cell.ok ? 'no' : 'yes' }]
-    return h(NDropdown, { trigger: 'click', options, onSelect: (k) => saveMark(col, row, k === 'yes') }, () => body)
+    const options = [{ label: cell.ok ? '改成缺勤' : '改成出勤', key: cell.ok ? 'no' : 'yes' }].concat(LABEL_OPTS)
+    return h(NDropdown, { trigger: 'click', options, onSelect: (k) => (k === '__label' ? editDay(col) : saveMark(col, row, k === 'yes')) }, () => body)
   }
-  const options = [{ label: `当天功勋 ${Number(cell.merit).toLocaleString('zh-CN')}`, key: '__info', disabled: true }, { type: 'divider', key: 'd0' }].concat(tagMenu(col, row))
+  const options = [{ label: `当天功勋 ${Number(cell.merit).toLocaleString('zh-CN')}`, key: '__info', disabled: true }, { type: 'divider', key: 'd0' }].concat(tagMenu(col, row), LABEL_OPTS)
   return h(NDropdown, { trigger: 'click', options, onSelect: (k) => onTag(col, row, k) }, () => body)
 }
 
@@ -308,7 +322,11 @@ const columns = computed(() => {
       // 表头是渲染函数现造的，scoped 样式挂不上，直接写内联
       trigger: () => h('span', { style: `white-space:nowrap;font-weight:600;${narrow.value ? 'font-size:12px' : ''}` }, [
         h('span', mdShort(c.at)),
-        h('span', { style: 'color:#8b4513;margin-left:5px' }, c.label || '—'),
+        // 点描述改描述（stopPropagation：别顺带触发表头排序）
+        h('span', {
+          style: 'color:#8b4513;margin-left:5px;cursor:pointer;border-bottom:1px dashed #c8a27a',
+          onClick: (e) => { e.stopPropagation(); editDay(c) }
+        }, c.label || '—'),
         h('span', { style: 'color:#1f3864;font-size:12px;font-weight:400;margin-left:5px' }, pct(c.rate)),
         c.partial ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '残') : null,
         c.reset ? h('span', { style: 'color:#d97706;font-size:11px;margin-left:3px' }, '重') : null,
@@ -318,6 +336,7 @@ const columns = computed(() => {
         + (c.partial ? '　残缺名单：没有总功勋，按周功勋算' : '')
         + (c.reset ? '　跨了赛季重置，功勋直接取总功勋' : '')
         + (c.kind === 'manual' ? `　手动记的（勾的是${c.mode === 'absent' ? '缺勤' : '出勤'}的人），点格子能改` : '')
+        + '　点描述可以修改'
         + (c.unmatched && c.unmatched.length ? `　有 ${c.unmatched.length} 个名字没对上：${c.unmatched.join('、')}` : '')
     }),
     render: (r) => dayCell(c, r)
@@ -655,15 +674,16 @@ const recColumns = [
     title: '',
     key: 'op',
     width: 110,
-    render: (r) => (isCurrent.value
-      ? [
-          h(NButton, { size: 'tiny', quaternary: true, onClick: () => openEdit(r) }, () => '改'),
-          h(NPopconfirm, { onPositiveClick: () => removeRecord(r) }, {
+    // 改时间 / 描述往期赛季也能改；删除只在本赛季
+    render: (r) => [
+      h(NButton, { size: 'tiny', quaternary: true, onClick: () => openEdit(r) }, () => '改'),
+      isCurrent.value
+        ? h(NPopconfirm, { onPositiveClick: () => removeRecord(r) }, {
             trigger: () => h(NButton, { size: 'tiny', quaternary: true, type: 'error' }, () => '删'),
             default: () => '删掉这条，出勤表会按剩下的重算'
           })
-        ]
-      : null)
+        : null
+    ]
   }
 ]
 
@@ -689,7 +709,7 @@ function help() {
       <div class="att-top">
         <n-space align="center" :size="10">
           <n-select v-model:value="season" :options="((data && data.seasons) || []).map((s) => ({ label: s, value: s }))" style="width: 100px" @update:value="load" />
-          <n-tag v-if="data && !isCurrent" type="warning" :bordered="false">往期赛季，只能看</n-tag>
+          <n-tag v-if="data && !isCurrent" type="warning" :bordered="false">往期赛季，只能改描述</n-tag>
           <n-button text type="primary" @click="help">怎么算的？</n-button>
         </n-space>
         <n-space :size="10">
