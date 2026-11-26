@@ -14,7 +14,22 @@ import { big, when, sorter } from '../fmt'
 import { buildStyledExcel } from '../xlsx'
 import { readWorkbook } from '../sheet'
 
-const { me, narrow = ref(false) } = inject('app')
+const { me, members, narrow = ref(false) } = inject('app')
+
+/*
+ * 吕布星级是成员自己填的资料，考勤行是按名单快照算的（没有成员资料），
+ * 这里按名字（含曾用名）对到成员上取；对不上就空着。
+ */
+const lvbuByName = computed(() => {
+  const map = new Map()
+  ;((members && members.value) || []).forEach((m) => {
+    if (!m.lvbuStar) return
+    ;(m.formerNames || []).forEach((n) => { if (!map.has(n)) map.set(n, m.lvbuStar) })
+    map.set(m.name, m.lvbuStar)
+  })
+  return map
+})
+const lvbuOf = (r) => lvbuByName.value.get(r.name) || ''
 const message = useMessage()
 const dialog = useDialog()
 
@@ -233,7 +248,7 @@ function dayChip(col, row) {
 
 /** 每天一列的宽度：日期 / 描述 / 出勤率挤在一行，格子里「12.60亿 摸鱼」也是一行 */
 const DAY_W = 136
-const FIXED_W = { idx: 46, name: 112, power: 74, strength: 74, rate: 66, days: 74, total: 80 }
+const FIXED_W = { idx: 46, name: 112, power: 74, strength: 74, lvbu: 72, rate: 66, days: 74, total: 80 }
 /*
  * 手机：只留 序号 / 名字 / 出勤率 三列固定在左边（战力实力总功勋点名字看不到也不要紧），
  * 每天一列收窄，剩下的横着滑。
@@ -260,6 +275,19 @@ const columns = computed(() => {
     },
     { title: '战力', key: 'power', width: FIXED_W.power, sorter: sorter((r) => r.power), render: (r) => big(r.power) },
     { title: '实力', key: 'strength', width: FIXED_W.strength, sorter: sorter((r) => r.strength), render: (r) => big(r.strength) },
+    {
+      title: '吕布星级',
+      key: 'lvbu',
+      width: FIXED_W.lvbu,
+      align: 'center',
+      // 红5 > 红3 > 5星 > 4星 > 没填
+      sorter: sorter((r) => ['4星', '5星', '红3', '红5'].indexOf(lvbuOf(r))),
+      render: (r) => {
+        const v = lvbuOf(r)
+        if (!v) return h('span', { style: 'color:#c0c4cc' }, '—')
+        return h('span', { style: `font-weight:600;color:${v[0] === '红' ? '#dc2626' : '#d97706'}` }, v)
+      }
+    },
     {
       title: '出勤率',
       key: 'viewRate',
@@ -334,8 +362,8 @@ async function exportExcel() {
   exporting.value = true
   try {
     const cols = shownCols.value
-    const head = ['成员名称', '战力', '实力', '出勤率', '出勤天数', '总功勋'].concat(cols.map((c) => `${md(c.at)}(${c.label || '—'})`))
-    const rateRow = ['每日出勤率', '', '', '', '', ''].concat(cols.map((c) => pct(c.rate)))
+    const head = ['成员名称', '战力', '实力', '吕布星级', '出勤率', '出勤天数', '总功勋'].concat(cols.map((c) => `${md(c.at)}(${c.label || '—'})`))
+    const rateRow = ['每日出勤率', '', '', '', '', '', ''].concat(cols.map((c) => pct(c.rate)))
     const aoa = [head, rateRow]
     // 0 表头 / 1 普通 / 2 达标 / 3 不达标 / 4 不在队 / 5 有标签
     const styles = [
@@ -348,7 +376,7 @@ async function exportExcel() {
     ]
     const cellStyles = [head.map(() => 0), rateRow.map(() => 0)]
     rows.value.forEach((r) => {
-      const line = [r.name, r.power ?? '', r.strength ?? '', pct(r.viewRate), r.viewDays, r.total ?? '']
+      const line = [r.name, r.power ?? '', r.strength ?? '', lvbuOf(r), pct(r.viewRate), r.viewDays, r.total ?? '']
       const st = line.map(() => 1)
       cols.forEach((c) => {
         const cell = r.cells[c.id]
@@ -365,7 +393,7 @@ async function exportExcel() {
     })
     const ally = (me.value && me.value.alliance && me.value.alliance.name) || ''
     await buildStyledExcel(
-      { aoa, styles, cellStyles, cols: head.map((t, i) => ({ wch: i === 0 ? 18 : i < 6 ? 14 : 16 })) },
+      { aoa, styles, cellStyles, cols: head.map((t, i) => ({ wch: i === 0 ? 18 : i < 7 ? 14 : 16 })) },
       '出勤表',
       `${ally}${data.value.season}_出勤表_${new Date().toISOString().slice(0, 10)}.xlsx`
     )
