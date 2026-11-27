@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 南蛮分组（云函数 handlers/nanman.js，和小程序 pages/nanman 同一份数据）。
- * 每组 5 / 6 人（含组长）：
+ * 每组 7 / 6 人（含组长，默认 7）：
  *   按六维一键排 —— 全部在队成员六维从高到低，蛇形分到各组，每组第一名当组长；
  *   选大车头当组长 —— 一人一组，成员在小程序里通过转发自己选组（浏览器版没有微信转发，只能开关自选）。
  * 未分组的人在最上面；点任何人可以挪组 / 设组长 / 移出；导出图片（排版同小程序 nanman-lib.js）。
@@ -17,7 +17,7 @@ const dialog = useDialog()
 const view = ref(null)
 const loading = ref(false)
 const busy = ref(false)
-const size = ref(5)
+const size = ref(7)
 
 const byId = computed(() => Object.fromEntries(((view.value && view.value.members) || []).map((m) => [m._id, m])))
 const plan = computed(() => view.value && view.value.plan)
@@ -192,7 +192,7 @@ function exportImage() {
         <n-space align="center" :size="12" :wrap="true">
           <span>每组人数（含组长）</span>
           <n-radio-group :value="size" size="small" @update:value="setSize">
-            <n-radio-button :value="5">5 人</n-radio-button>
+            <n-radio-button :value="7">7 人</n-radio-button>
             <n-radio-button :value="6">6 人</n-radio-button>
           </n-radio-group>
           <n-tag v-if="plan" :type="plan.mode === 'auto' ? 'info' : plan.open ? 'success' : 'default'" :bordered="false">
