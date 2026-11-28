@@ -131,10 +131,10 @@ const shown = (k) => {
  * full = 开发版的管理员扫码进来，全部菜单；self = 其余情况，只有「我的」两页。
  */
 const selfOnly = computed(() => !me.value || me.value.webScope !== 'full')
-/** lite = 免费版的管理员：「我的」两页之外多一页「全员数据」 */
+/** lite = 免费版的管理员：「我的」两页之外多「导入名单」「全员数据」（导入导出都能用） */
 const liteAdmin = computed(() => Boolean(me.value && me.value.webScope === 'lite'))
 /** 非 full 档位能打开的页 */
-const limitedViews = (scope) => (scope === 'lite' ? ['mine', 'myattrs', 'fulldata'] : ['mine', 'myattrs'])
+const limitedViews = (scope) => (scope === 'lite' ? ['mine', 'myattrs', 'import', 'fulldata'] : ['mine', 'myattrs'])
 const menuOptions = computed(() => selfOnly.value
   ? [{
       type: 'group',
@@ -145,7 +145,7 @@ const menuOptions = computed(() => selfOnly.value
       type: 'group',
       label: '成员数据',
       key: 'g1',
-      children: [{ label: VIEWS.fulldata.label, key: 'fulldata', icon: icon(VIEWS.fulldata.icon) }]
+      children: ['import', 'fulldata'].map((k) => ({ label: VIEWS[k].label, key: k, icon: icon(VIEWS[k].icon) }))
     }] : [])
   : [
   {
@@ -293,8 +293,8 @@ const title = computed(() => VIEWS[view.value].label)
 const selfTip = computed(() => {
   const who = me.value || {}
   const free = who.alliance && who.alliance.level !== 'ultra'
-  if (free && who.alliance.trial) return `${who.alliance.name} 的开发版试用已结束，现在是免费版：浏览器版只开放「我的信息」「我的属性」${who.webScope === 'lite' ? '，管理员另有「全员数据」' : ''}，管理员在小程序「管理 → 版本」输入兑换码可继续使用全部管理功能，数据都还在。`
-  if (free && who.webScope === 'lite') return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：管理员在浏览器版能用「我的信息」「我的属性」「全员数据」，名单、集结、考勤这些管理功能要开发版。`
+  if (free && who.alliance.trial) return `${who.alliance.name} 的开发版试用已结束，现在是免费版：浏览器版只开放「我的信息」「我的属性」${who.webScope === 'lite' ? '，管理员另有「导入名单」「全员数据」' : ''}，管理员在小程序「管理 → 版本」输入兑换码可继续使用全部管理功能，数据都还在。`
+  if (free && who.webScope === 'lite') return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：管理员在浏览器版能用「我的信息」「我的属性」「导入名单」「全员数据」（导入导出都可以），集结、考勤这些管理功能要开发版。`
   if (free) return `${who.alliance.name} 现在是${who.alliance.levelName || '免费版'}：浏览器版先开放「我的信息」「我的属性」，名单、集结、考勤这些管理功能要开发版。`
   return '普通成员在浏览器版里可以用「我的信息」「我的属性」，管理功能只对开发版的管理员开放。'
 })
