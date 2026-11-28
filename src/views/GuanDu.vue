@@ -1,7 +1,7 @@
 <script setup>
 /**
  * 官渡之战（浏览器版）：本周报名概况 + 报名名单 + 进入全屏沙盘排表。
- * 报名在小程序里（周四 15:00 ~ 周日 10:00，每团主力 30 / 替补 10），这里只看和排。
+ * 报名在小程序里（周四 15:00 ~ 周日 10:00）；名额按盟设、一团二团分开（默认每团主力 30 / 替补 10），这页能改。
  * 数据一次拉齐：admin.guanduOverview({ withPlans })，进沙盘直接用，不再请求。
  */
 import { ref, computed, inject, h, onMounted } from 'vue'
@@ -98,6 +98,8 @@ const legions = computed(() => {
       time: l === 1 ? '周日 21:00' : '周日 14:00',
       color: l === 1 ? '#4472c4' : '#8b5cf6',
       main, sub,
+      mainCap: GD.capOf(r.caps, l, 'main'),
+      subCap: GD.capOf(r.caps, l, 'sub'),
       groups: plan.groups.map((g) => `${g.name} ${g.members.length}`).join(' · '),
       ungrouped: rows.filter((x) => !plan.groups.some((g) => g.members.includes(x.memberId))).length,
       prog,
@@ -175,6 +177,38 @@ async function savePreviewXlsx() {
   }
 }
 
+/*
+ * 报名名额：一团二团的主力 / 替补，存在同盟上，每周都按这个。
+ * 不能改得比这周已经报的人少（云函数会拦），要改小先在小程序「官渡管理」里把多的人移掉。
+ */
+const capsForm = ref(null) // null = 没在改
+function openCaps() {
+  const c = res.value && res.value.caps
+  capsForm.value = { 1: { main: GD.capOf(c, 1, 'main'), sub: GD.capOf(c, 1, 'sub') }, 2: { main: GD.capOf(c, 2, 'main'), sub: GD.capOf(c, 2, 'sub') } }
+}
+const capsBusy = ref(false)
+async function saveCaps(reset) {
+  if (capsBusy.value) return
+  capsBusy.value = true
+  try {
+    const payload = reset ? { reset: true } : { caps: capsForm.value }
+    if (simOn.value) payload.sim = true
+    await call('admin.guanduSetCaps', payload)
+    capsForm.value = null
+    message.success(reset ? '已恢复每团主力 30 / 替补 10' : '名额已保存')
+    await load()
+  } catch (e) {
+    message.error(e.message)
+  } finally {
+    capsBusy.value = false
+  }
+}
+const capsLine = computed(() => {
+  const c = res.value && res.value.caps
+  const one = (l) => `主力 ${GD.capOf(c, l, 'main')} / 替补 ${GD.capOf(c, l, 'sub')}`
+  return `一团 ${one(1)} · 二团 ${one(2)}`
+})
+
 function closeBoard() {
   boardLegion.value = 0
   load()
@@ -184,7 +218,7 @@ function closeBoard() {
 <template>
   <n-space vertical :size="16">
     <n-alert type="info" :bordered="false">
-      成员在小程序首页人物卡片上点「官渡报名」，选一团或二团、主力或替补（每团主力 30、替补 10，满了就报不上）。
+      成员在小程序首页人物卡片上点「官渡报名」，选一团或二团、主力或替补（名额在下面「报名名额」里设，满了就报不上）。
       报名截止后在这里进沙盘排表，排完点「发布给成员」，成员在小程序里就能看到自己的任务；也可以导出排表图发群。催报、代报、游戏勾选清单在小程序「管理 → 官渡管理」。
     </n-alert>
     <n-alert v-if="narrow" type="warning" :bordered="false">沙盘排表需要电脑的大屏幕，手机上只能看报名情况。</n-alert>
@@ -195,6 +229,28 @@ function closeBoard() {
         <n-button size="small" :disabled="simBusy" @click="simFill(true)">清空模拟报名</n-button>
       </n-space>
     </n-alert>
+
+    <n-card v-if="res" size="small" :bordered="false" title="报名名额">
+      <template #header-extra>
+        <n-button v-if="!capsForm" size="small" @click="openCaps">修改</n-button>
+      </template>
+      <div v-if="!capsForm" class="gd-sub" style="margin:0">{{ capsLine }}（每周都按这个，成员报满了就报不上）</div>
+      <template v-else>
+        <n-space vertical :size="10">
+          <n-space v-for="l in [1, 2]" :key="l" align="center" :size="12" :wrap="true">
+            <b style="width: 36px; display: inline-block">{{ l === 1 ? '一团' : '二团' }}</b>
+            <span>主力</span><n-input-number v-model:value="capsForm[l].main" :min="1" :max="100" :precision="0" size="small" style="width: 110px" />
+            <span>替补</span><n-input-number v-model:value="capsForm[l].sub" :min="0" :max="50" :precision="0" size="small" style="width: 110px" />
+          </n-space>
+          <div class="gd-k">主力 1~100、替补 0~50（0 就是不收替补）。不能改得比这周已报的人少，要改小先在小程序「官渡管理」里把多的人移掉。</div>
+          <n-space>
+            <n-button type="primary" size="small" :loading="capsBusy" @click="saveCaps(false)">保存</n-button>
+            <n-button size="small" :disabled="capsBusy" @click="capsForm = null">取消</n-button>
+            <n-button size="small" quaternary :disabled="capsBusy" @click="saveCaps(true)">恢复默认 30 / 10</n-button>
+          </n-space>
+        </n-space>
+      </template>
+    </n-card>
 
     <n-spin :show="loading && !res">
       <n-grid v-if="res" cols="1 l:2" responsive="screen" :x-gap="16" :y-gap="16">
@@ -210,15 +266,15 @@ function closeBoard() {
             <div class="gd-nums">
               <div>
                 <div class="gd-k">主力</div>
-                <div class="gd-v">{{ lg.main }}<small> / {{ res.caps.main }}</small></div>
-                <n-progress type="line" :percentage="Math.round(lg.main / res.caps.main * 100)" :show-indicator="false" :color="lg.color" :height="6" />
-                <div class="gd-k">剩 {{ Math.max(0, res.caps.main - lg.main) }} 个</div>
+                <div class="gd-v">{{ lg.main }}<small> / {{ lg.mainCap }}</small></div>
+                <n-progress type="line" :percentage="GD.pctOf(lg.main, lg.mainCap)" :show-indicator="false" :color="lg.color" :height="6" />
+                <div class="gd-k">剩 {{ Math.max(0, lg.mainCap - lg.main) }} 个</div>
               </div>
               <div>
                 <div class="gd-k">替补</div>
-                <div class="gd-v">{{ lg.sub }}<small> / {{ res.caps.sub }}</small></div>
-                <n-progress type="line" :percentage="Math.round(lg.sub / res.caps.sub * 100)" :show-indicator="false" color="#f59e0b" :height="6" />
-                <div class="gd-k">剩 {{ Math.max(0, res.caps.sub - lg.sub) }} 个</div>
+                <div class="gd-v">{{ lg.sub }}<small> / {{ lg.subCap }}</small></div>
+                <n-progress type="line" :percentage="GD.pctOf(lg.sub, lg.subCap)" :show-indicator="false" color="#f59e0b" :height="6" />
+                <div class="gd-k">{{ lg.subCap ? `剩 ${Math.max(0, lg.subCap - lg.sub)} 个` : '不设替补' }}</div>
               </div>
               <div>
                 <div class="gd-k">排表</div>

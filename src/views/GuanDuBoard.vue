@@ -507,7 +507,7 @@ function renderLeftInner() {
   const l = Number(S.legion)
   const mainN = res.rows.filter((r) => r.legion === l && r.role === 'main').length
   const subN = res.rows.filter((r) => r.legion === l && r.role === 'sub').length
-  const q = (label, n, max, color) => `<div class="q"><small>${label}</small><div><b>${n}</b> / ${max}　<small>剩 ${Math.max(0, max - n)} 个</small></div><div class="bar"><i style="width:${Math.min(100, n / max * 100)}%;background:${color}"></i></div></div>`
+  const q = (label, n, max, color) => `<div class="q"><small>${label}</small><div><b>${n}</b> / ${max}　<small>剩 ${Math.max(0, max - n)} 个</small></div><div class="bar"><i style="width:${GD.pctOf(n, max)}%;background:${color}"></i></div></div>`
   const sortSeg = `<span class="seg">${[['attrs', '按属性'], ['rally', '按集结值']].map(([k, t]) => `<button data-sort="${k}" class="${sortBy === k ? 'on' : ''}">${t}</button>`).join('')}</span>`
   const allFolded = D.groups.length && D.groups.every((g) => folded.has(g.id))
   const R = GD.rosterAt(D, S.phase)
@@ -517,7 +517,7 @@ function renderLeftInner() {
       <div class="field"><label>频道</label><input id="gdChannel" placeholder="如 xx频道：xxx" value="${esc(INFO.channel)}" /></div>
       <div class="field"><label>指挥</label><input id="gdCommander" placeholder="如 指挥：xxx" value="${esc(INFO.commander[S.legion])}" /></div>
       <p class="hint">写进导出的排表图；频道两个团共用，指挥按团分开，下周自动带上</p></div>
-    <div class="sec"><h3>报名情况</h3><div class="quota">${q('主力', mainN, res.caps.main, '#3b82f6')}${q('替补', subN, res.caps.sub, '#f59e0b')}</div>
+    <div class="sec"><h3>报名情况</h3><div class="quota">${q('主力', mainN, GD.capOf(res.caps, l, 'main'), '#3b82f6')}${q('替补', subN, GD.capOf(res.caps, l, 'sub'), '#f59e0b')}</div>
       ${D.fromLastWeek ? '<p class="hint" style="margin-top:6px;color:#fbbf24">本周还没排过：分组和任务照上周起了个头，组里只留了这周报名的人</p>' : ''}</div>
     <div class="sec"><h3>分组 <span class="phtag${S.phase ? ' on' : ''}">${GD.PH_CN[S.phase]}阶段${nMoves ? ` · 调动 ${nMoves}` : ''}</span><button class="mini" id="gdFoldAll">${allFolded ? '全部展开' : '全部收起'}</button><button class="mini" id="gdAddGroup" style="margin-left:6px">＋ 新建</button></h3>
       <p class="hint" id="gdPickHint" style="margin:-4px 0 8px">${S.pick ? pickHint() : pickIdle()}</p>

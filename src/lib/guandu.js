@@ -5,6 +5,19 @@
  */
 
 /** 建筑：x / y 是菱形战场里的相对位置（0~1），open 是第几阶段开放 */
+/**
+ * 某团某身份的报名名额。云函数按盟设、一团二团分开：caps = { 1: { main, sub }, 2: { main, sub }, main, sub }；
+ * 老数据只有 { main, sub } 就用它，都没有按 30 / 10。
+ */
+export const DEFAULT_CAPS = { main: 30, sub: 10 }
+export function capOf(caps, legion, role) {
+  const one = caps && caps[legion]
+  if (one && one[role] != null) return Number(one[role])
+  if (caps && caps[role] != null) return Number(caps[role])
+  return DEFAULT_CAPS[role]
+}
+export const pctOf = (n, cap) => (cap > 0 ? Math.min(100, Math.round(n / cap * 100)) : 100)
+
 export const BUILDINGS = [
   { id: 'wuchao', name: '乌巢', kind: 'nest', x: 0.5, y: 0.1, open: 2 },
   { id: 'bqf', name: '兵器坊', kind: 'forge', x: 0.5, y: 0.235, open: 1 },
